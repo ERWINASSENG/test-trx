@@ -1544,10 +1544,10 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
   }
 };
 
-// Déclaration des routes de caisse sécurisées par RBAC strict
-app.get('/api/cahier/operations', requireAuth, getOperationsHandler);
-app.get('/api/cashier/transactions', requireAuth, getOperationsHandler);
-app.get('/api/system/operations', requireAuth, getOperationsHandler);
+// Déclaration des routes de caisse sécurisées par RBAC strict (lecture réservée aux rôles financiers et encadrement)
+app.get('/api/cahier/operations', requireAuth, requireRole(['admin', 'manager', 'caissiere', 'comptable', 'tresorier']), getOperationsHandler);
+app.get('/api/cashier/transactions', requireAuth, requireRole(['admin', 'manager', 'caissiere', 'comptable', 'tresorier']), getOperationsHandler);
+app.get('/api/system/operations', requireAuth, requireRole(['admin', 'manager', 'caissiere', 'comptable', 'tresorier']), getOperationsHandler);
 
 // Actions en masse (Duplication & Changement de statut)
 app.post('/api/cahier/operations/duplicate', requireAuth, requireRole(['admin', 'caissiere', 'manager', 'comptable']), duplicateOperationsHandler);
