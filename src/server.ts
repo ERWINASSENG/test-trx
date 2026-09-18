@@ -364,8 +364,8 @@ const getCollaboratorsHandler = async (_req: express.Request, res: express.Respo
   }
 
   try {
-    // 1. Récupérer tous les utilisateurs depuis Supabase Auth
-    let authUsers: {
+    // 1. Récupérer TOUS les utilisateurs depuis Supabase Auth avec pagination itérative (perPage: 1000)
+    interface AuthUserRecord {
       id: string;
       email?: string;
       phone?: string;
@@ -374,22 +374,86 @@ const getCollaboratorsHandler = async (_req: express.Request, res: express.Respo
       updated_at?: string;
       user_metadata?: Record<string, unknown>;
       app_metadata?: Record<string, unknown>;
-    }[] = [];
-    try {
-      const { data: authData, error: authErr } = await adminClient.auth.admin.listUsers();
-      if (!authErr && authData?.users) {
-        authUsers = authData.users as typeof authUsers;
-      }
-    } catch {
-      // Si la liste d'auth échoue, on continue avec profiles
     }
 
-    // 2. Récupérer tous les profils de la table public.profiles
-    const { data: profiles } = await adminClient
-      .from('profiles')
-      .select('*');
+    const authUsers: AuthUserRecord[] = [];
+    const perPage = 1000;
+    let currentPage = 1;
+    let hasMoreAuth = true;
+    const MAX_AUTH_PAGES = 50; // Garde-fou sécurité : jusqu'à 50 000 collaborateurs
 
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+    while (hasMoreAuth && currentPage <= MAX_AUTH_PAGES) {
+      try {
+        const { data: authData, error: authErr } = await adminClient.auth.admin.listUsers({
+          page: currentPage,
+          perPage,
+        });
+
+        if (authErr || !authData?.users || authData.users.length === 0) {
+          hasMoreAuth = false;
+          break;
+        }
+
+        authUsers.push(...(authData.users as AuthUserRecord[]));
+
+        if (authData.nextPage && authData.nextPage > currentPage) {
+          currentPage = authData.nextPage;
+        } else if (authData.users.length === perPage) {
+          currentPage += 1;
+        } else {
+          hasMoreAuth = false;
+        }
+      } catch (authFetchError) {
+        console.warn(`Erreur lors de la pagination listUsers page ${currentPage}:`, authFetchError);
+        hasMoreAuth = false;
+      }
+    }
+
+    // 2. Récupérer tous les profils de la table public.profiles avec pagination itérative
+    interface ProfileDbRecord {
+      id: string;
+      email?: string;
+      first_name?: string;
+      last_name?: string;
+      role?: string;
+      department?: string;
+      phone?: string;
+      is_active?: boolean;
+      avatar_url?: string;
+      created_at?: string;
+      last_login_at?: string;
+      updated_at?: string;
+      [key: string]: unknown;
+    }
+
+    const allProfiles: ProfileDbRecord[] = [];
+    let profileOffset = 0;
+    const profilePageSize = 1000;
+    let profilesHasMore = true;
+    const MAX_PROFILE_PAGES = 50;
+    let profilePageCount = 0;
+
+    while (profilesHasMore && profilePageCount < MAX_PROFILE_PAGES) {
+      profilePageCount++;
+      const { data: pageProfiles, error: profileErr } = await adminClient
+        .from('profiles')
+        .select('*')
+        .range(profileOffset, profileOffset + profilePageSize - 1);
+
+      if (profileErr || !pageProfiles || pageProfiles.length === 0) {
+        profilesHasMore = false;
+        break;
+      }
+
+      allProfiles.push(...(pageProfiles as ProfileDbRecord[]));
+      if (pageProfiles.length < profilePageSize) {
+        profilesHasMore = false;
+      } else {
+        profileOffset += profilePageSize;
+      }
+    }
+
+    const profileMap = new Map(allProfiles.map((p) => [p.id, p]));
     const processedIds = new Set<string>();
 
     const users: Record<string, unknown>[] = [];
@@ -424,7 +488,7 @@ const getCollaboratorsHandler = async (_req: express.Request, res: express.Respo
     }
 
     // Ajouter les profils qui ne seraient pas dans authUsers
-    for (const p of (profiles || [])) {
+    for (const p of allProfiles) {
       if (!processedIds.has(p.id)) {
         processedIds.add(p.id);
         users.push({
@@ -444,7 +508,7 @@ const getCollaboratorsHandler = async (_req: express.Request, res: express.Respo
       }
     }
 
-    res.json({ users });
+    res.json({ users, total: users.length });
   } catch (err: unknown) {
     console.error('Erreur getCollaboratorsHandler:', err);
     res.status(500).json({ error: 'Erreur interne lors de la récupération des collaborateurs.' });
