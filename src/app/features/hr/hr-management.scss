@@ -1,0 +1,158 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+// Animation d'apparition de la modale
+#hr-user-modal-backdrop {
+  animation: fadeIn 0.15s ease-out;
+}
+
+#hr-user-modal-card {
+  animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+// Accessibilité : focus visible renforcé
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid #059669;
+  outline-offset: 2px;
+}
+
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  #hr-management-container {
+    color: var(--app-text, #f1f5f9);
+
+    .bg-white {
+      background-color: var(--app-surface, #2b2f33) !important;
+      border-color: var(--app-border, #343a40) !important;
+      color: var(--app-text, #f1f5f9);
+    }
+
+    h1, h2, h3 {
+      color: var(--app-text, #f1f5f9) !important;
+    }
+
+    p {
+      color: var(--app-text-muted, #94a3b8);
+    }
+
+    .border-slate-100,
+    .border-slate-200 {
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    // Champs de recherche et filtres
+    #hr-search-input,
+    #hr-dept-filter {
+      background-color: var(--odoo-bg-search, #1a1d20);
+      border-color: var(--app-border, #343a40);
+      color: var(--app-text, #ffffff);
+
+      &::placeholder {
+        color: var(--app-text-muted, #94a3b8);
+      }
+
+      option {
+        background-color: var(--app-surface, #2b2f33);
+        color: var(--app-text, #ffffff);
+      }
+    }
+
+    // Fiches collaborateurs
+    [id^="hr-card-"] {
+      &:hover {
+        border-color: var(--odoo-text-teal, #00a09d) !important;
+        background-color: var(--app-surface-hover, #343a40) !important;
+      }
+
+      .text-slate-800 {
+        color: var(--app-text, #f1f5f9) !important;
+      }
+
+      .text-slate-600,
+      .text-slate-500 {
+        color: var(--app-text-muted, #94a3b8) !important;
+      }
+
+      .text-slate-400 {
+        color: var(--app-text-subtle, #64748b) !important;
+      }
+
+      .bg-slate-100 {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        color: var(--app-text, #f1f5f9) !important;
+        border-color: var(--app-border, #343a40) !important;
+      }
+
+      .bg-slate-200 {
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        color: #ffffff !important;
+      }
+    }
+
+    // Modale et formulaires en mode sombre
+    #hr-user-modal-card {
+      background-color: var(--app-surface, #2b2f33) !important;
+      border-color: var(--app-border, #343a40) !important;
+
+      label {
+        color: var(--app-text, #f1f5f9);
+      }
+
+      input,
+      select {
+        background-color: var(--odoo-bg-search, #1a1d20) !important;
+        border-color: var(--app-border, #343a40) !important;
+        color: var(--app-text, #ffffff) !important;
+
+        &::placeholder {
+          color: var(--app-text-muted, #94a3b8);
+        }
+
+        option {
+          background-color: var(--app-surface, #2b2f33);
+          color: var(--app-text, #ffffff);
+        }
+      }
+
+      .bg-slate-50 {
+        background-color: rgba(255, 255, 255, 0.04) !important;
+        border-color: var(--app-border, #343a40) !important;
+      }
+
+      #btn-cancel-hr-modal {
+        border-color: var(--app-border, #343a40);
+        color: var(--app-text-muted, #94a3b8);
+
+        &:hover {
+          background-color: rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+        }
+      }
+    }
+  }
+}
+

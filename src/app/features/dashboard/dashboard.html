@@ -1,0 +1,13 @@
+<div class="w-full" id="root-dashboard-container">
+  @switch (dashboardView()) {
+    @case ('admin') {
+      <app-dashboard-admin id="admin-dashboard-section" />
+    }
+    @case ('manager') {
+      <app-dashboard-manager id="manager-dashboard-section" />
+    }
+    @default {
+      <app-dashboard-employee id="employee-dashboard-section" />
+    }
+  }
+</div>

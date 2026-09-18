@@ -1,0 +1,50 @@
+<div class="space-y-6" id="dashboard-manager-view">
+  <!-- Grille des cartes du tableau de bord (2 cartes par ligne sur desktop) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="dashboard-manager-grid">
+    <!-- Carte Caisse -->
+    <div class="bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
+      
+      <!-- En-tête de la carte Caisse -->
+      <div>
+        <!-- Ligne 1 : Caisse -->
+        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50" id="caisse-title">
+          Caisse
+        </h2>
+
+        <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
+        <div class="flex items-center justify-between gap-3 mt-1.5 pb-2.5 border-b border-slate-100 dark:border-white/10" id="caisse-subline">
+          <!-- Transactions à gauche -->
+          <a
+            routerLink="/caisse"
+            class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00a09d] dark:hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1"
+            id="caisse-transactions-link"
+            title="Consulter les transactions">
+            <span>Transactions</span>
+            <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
+          </a>
+
+          <!-- Solde à droite -->
+          <div class="flex items-baseline gap-1.5" id="caisse-balance-container">
+            <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
+            <span class="text-sm sm:text-base font-bold tracking-tight" [class]="currentBalance() >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'" id="caisse-balance-value">
+              {{ formatCurrency(currentBalance()) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ligne 3 : Courbe Chart.js native compacte -->
+      <div class="relative w-full h-48 sm:h-52 mt-2" id="caisse-chart-wrapper">
+        <canvas
+          #caisseChartCanvas
+          id="caisse-chart-canvas"
+          class="w-full h-full block"
+          aria-label="Courbe d'évolution du solde de caisse"
+          role="img">
+        </canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+

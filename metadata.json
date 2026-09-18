@@ -1,0 +1,6 @@
+{
+  "name": "TRANSIMEX - Système de Gestion",
+  "description": "TRANSIMEX - Global Logistics Provider - Système de gestion et d'administration interne.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

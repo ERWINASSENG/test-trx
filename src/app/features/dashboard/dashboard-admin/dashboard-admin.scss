@@ -1,0 +1,17 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+// Animations fluides pour les graphiques de flux
+.chart-bar-transition {
+  transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+}
+
+// Accessibilité et focus visible
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #059669;
+  outline-offset: 2px;
+}
+

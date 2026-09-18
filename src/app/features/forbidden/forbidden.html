@@ -1,0 +1,19 @@
+<div class="min-h-[70vh] flex items-center justify-center p-4" id="forbidden-container">
+  <div class="max-w-md w-full bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+    <div class="inline-block px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-bold uppercase tracking-wider mb-4 border border-rose-200">
+      Accès Refusé (403)
+    </div>
+    
+    <h1 class="text-xl font-bold text-slate-900 mb-2">Privilèges Insuffisants</h1>
+    <p class="text-xs text-slate-600 mb-6 leading-relaxed">
+      Votre rôle actuel ne vous permet pas d'accéder à ce module. Veuillez contacter l'administrateur système si vous pensez qu'il s'agit d'une erreur.
+    </p>
+
+    <a
+      routerLink="/dashboard"
+      class="inline-block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all text-center"
+      id="forbidden-back-btn">
+      Retourner au Tableau de Bord
+    </a>
+  </div>
+</div>

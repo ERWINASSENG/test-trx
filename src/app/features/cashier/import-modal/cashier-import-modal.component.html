@@ -1,0 +1,228 @@
+<div
+  class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+  id="cashier-import-modal-overlay"
+  (click)="onBackdropClick($event)"
+  (keydown.escape)="onCancel()"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="import-modal-title"
+  tabindex="-1"
+>
+  <div
+    class="bg-white dark:bg-[#1e2227] rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+    id="cashier-import-modal-container"
+  >
+    <!-- En-tête de la modale -->
+    <header class="px-5 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-white/5">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-[#00A09D]/15 text-[#00A09D] flex items-center justify-center">
+          <mat-icon class="!text-[20px] !w-5 !h-5 leading-none">upload_file</mat-icon>
+        </div>
+        <div>
+          <h2 id="import-modal-title" class="text-sm font-semibold text-slate-900 dark:text-white leading-tight">
+            Importer des écritures de caisse
+          </h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Fichier Excel (.xlsx, .xls) ou CSV préparé hors-ligne
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        id="btn-close-import-modal"
+        (click)="onCancel()"
+        class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        aria-label="Fermer la boîte de dialogue"
+      >
+        <mat-icon class="!text-[18px] !w-4.5 !h-4.5 leading-none">close</mat-icon>
+      </button>
+    </header>
+
+    <!-- Corps principal -->
+    <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+      <!-- Zone de téléchargement du modèle -->
+      <div class="flex items-center justify-between p-3 rounded-lg bg-[#00A09D]/10 border border-[#00A09D]/20 text-slate-700 dark:text-slate-200">
+        <div class="flex items-center gap-2">
+          <mat-icon class="text-[#00A09D] !text-[18px] !w-4.5 !h-4.5">description</mat-icon>
+          <span>Besoin du format standard ? Téléchargez le modèle vierge :</span>
+        </div>
+        <button
+          type="button"
+          id="btn-download-import-template"
+          (click)="downloadTemplate()"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#00A09D] text-white font-medium hover:bg-[#008986] transition-colors cursor-pointer shadow-xs active:scale-95"
+        >
+          <mat-icon class="!text-[15px] !w-4 !h-4">file_download</mat-icon>
+          <span>Modèle Excel (.xlsx)</span>
+        </button>
+      </div>
+
+      <!-- Input de fichier caché -->
+      <input
+        #fileInput
+        type="file"
+        id="import-file-input"
+        accept=".xlsx,.xls,.csv"
+        class="hidden"
+        (change)="onFileSelected($event)"
+      />
+
+      <!-- Zone Drag & Drop -->
+      @if (!selectedFileName()) {
+        <button
+          type="button"
+          id="dropzone-area"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+          (click)="triggerFileInput()"
+          class="w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-[#00A09D]"
+          [class.border-[#00A09D]]="isDragging()"
+          [class.bg-[#00A09D]/5]="isDragging()"
+          [class.border-slate-300]="!isDragging()"
+          [class.dark:border-white/15]="!isDragging()"
+          [class.hover:border-[#00A09D]]="!isDragging()"
+          [class.hover:bg-slate-50]="!isDragging()"
+          [class.dark:hover:bg-white/5]="!isDragging()"
+        >
+          <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-[#00A09D]">
+            <mat-icon class="!text-[26px] !w-6.5 !h-6.5">cloud_upload</mat-icon>
+          </div>
+          <div>
+            <p class="font-medium text-slate-800 dark:text-slate-200 text-sm">
+              Glissez-déposez votre fichier ici, ou <span class="text-[#00A09D] underline">parcourez vos dossiers</span>
+            </p>
+            <p class="text-slate-400 text-xs mt-0.5">Formats pris en charge : Excel (.xlsx, .xls) ou CSV</p>
+          </div>
+        </button>
+      } @else {
+        <!-- Fichier sélectionné et analyse en cours / terminée -->
+        <div class="p-3.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-md bg-[#00A09D]/15 text-[#00A09D] flex items-center justify-center shrink-0">
+              <mat-icon class="!text-[22px] !w-5.5 !h-5.5">table_view</mat-icon>
+            </div>
+            <div class="truncate">
+              <p class="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                {{ selectedFileName() }}
+              </p>
+              @if (isParsing()) {
+                <p class="text-slate-400 text-xs flex items-center gap-1.5 mt-0.5">
+                  <span class="inline-block w-2.5 h-2.5 border-2 border-[#00A09D] border-t-transparent rounded-full animate-spin"></span>
+                  Analyse du fichier en cours...
+                </p>
+              } @else if (hasParsed()) {
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <span class="font-medium text-emerald-600 dark:text-emerald-400">{{ validRows().length }} écriture(s) valide(s)</span>
+                  @if (errors().length > 0) {
+                    <span class="text-rose-500 font-medium ml-2">• {{ errors().length }} erreur(s)</span>
+                  }
+                </p>
+              }
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn-remove-selected-file"
+            (click)="resetSelection()"
+            class="px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 font-medium transition-colors cursor-pointer"
+          >
+            Changer de fichier
+          </button>
+        </div>
+      }
+
+      <!-- Liste des erreurs éventuelles détectées -->
+      @if (errors().length > 0) {
+        <div class="p-3.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-1.5 text-xs text-rose-700 dark:text-rose-300">
+          <div class="flex items-center gap-1.5 font-semibold text-rose-800 dark:text-rose-200">
+            <mat-icon class="!text-[16px] !w-4 !h-4 text-rose-600">error_outline</mat-icon>
+            <span>Anomalies détectées dans le fichier :</span>
+          </div>
+          <ul class="list-disc list-inside space-y-0.5 pl-1 max-h-28 overflow-y-auto">
+            @for (err of errors(); track $index) {
+              <li>
+                @if (err.row > 0) {
+                  Ligne {{ err.row }} :
+                }
+                {{ err.message }}
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <!-- Tableau de prévisualisation des lignes valides prêtes à être importées -->
+      @if (validRows().length > 0) {
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-200 px-1">
+            <span>Aperçu des écritures prêtes à être injectées ({{ validRows().length }})</span>
+            <span class="text-emerald-600 dark:text-emerald-400 font-normal">Prêtes pour la caisse</span>
+          </div>
+
+          <div class="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 dark:bg-white/5 sticky top-0 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-white/10">
+                <tr>
+                  <th class="py-1.5 px-2.5 font-semibold">Date</th>
+                  <th class="py-1.5 px-2.5 font-semibold">Libellé</th>
+                  <th class="py-1.5 px-2.5 font-semibold">Service</th>
+                  <th class="py-1.5 px-2.5 font-semibold">Partenaire</th>
+                  <th class="py-1.5 px-2.5 font-semibold text-right">Montant</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 dark:divide-white/5 text-slate-700 dark:text-slate-300">
+                @for (item of validRows(); track $index) {
+                  <tr class="hover:bg-slate-50 dark:hover:bg-white/5">
+                    <td class="py-1.5 px-2.5 whitespace-nowrap">{{ item.date }}</td>
+                    <td class="py-1.5 px-2.5 max-w-[180px] truncate font-medium">{{ item.libelle }}</td>
+                    <td class="py-1.5 px-2.5 whitespace-nowrap">
+                      <span class="px-1.5 py-0.5 rounded text-[11px] bg-slate-200/70 dark:bg-white/10">
+                        {{ item.service || '-' }}
+                      </span>
+                    </td>
+                    <td class="py-1.5 px-2.5 truncate max-w-[130px]">{{ item.partenaire || item.employee || '-' }}</td>
+                    <td
+                      class="py-1.5 px-2.5 text-right font-medium whitespace-nowrap"
+                      [class.text-emerald-600]="item.category === 'entree'"
+                      [class.dark:text-emerald-400]="item.category === 'entree'"
+                      [class.text-rose-600]="item.category === 'sortie'"
+                      [class.dark:text-rose-400]="item.category === 'sortie'"
+                    >
+                      {{ formatCurrency(item.montant) }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Pied de modale : Actions -->
+    <footer class="px-5 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-white/5">
+      <button
+        type="button"
+        id="btn-cancel-import"
+        (click)="onCancel()"
+        class="px-4 py-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors cursor-pointer"
+      >
+        Annuler
+      </button>
+
+      <button
+        type="button"
+        id="btn-confirm-import-data"
+        (click)="confirmImport()"
+        [disabled]="validRows().length === 0 || isParsing()"
+        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-[#00A09D] text-white hover:bg-[#008986] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer active:scale-95"
+      >
+        <mat-icon class="!text-[16px] !w-4 !h-4 leading-none">check</mat-icon>
+        <span>Enregistrer dans la caisse ({{ validRows().length }})</span>
+      </button>
+    </footer>
+  </div>
+</div>

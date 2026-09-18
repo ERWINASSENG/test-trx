@@ -1,0 +1,78 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  ::ng-deep {
+    // Cartes principales et blocs statistiques
+    .bg-white {
+      background-color: var(--app-surface, #2b2f33) !important;
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    // Bordures douces
+    .border-slate-200,
+    .border-slate-200\/80,
+    .border-slate-200\/60,
+    .border-slate-100 {
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    // Textes principaux
+    .text-slate-900,
+    .text-slate-800,
+    .text-slate-700 {
+      color: var(--app-text, #f1f5f9) !important;
+    }
+
+    // Textes secondaires et libellés
+    .text-slate-600,
+    .text-slate-500 {
+      color: var(--app-text-muted, #94a3b8) !important;
+    }
+
+    .text-slate-400 {
+      color: var(--app-text-subtle, #64748b) !important;
+    }
+
+    // Sélecteurs de période et conteneurs d'onglets
+    .bg-slate-100,
+    .bg-slate-100\/80,
+    .bg-slate-50 {
+      background-color: rgba(255, 255, 255, 0.05) !important;
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    // Lignes de tableau et listes
+    .divide-slate-100 > * + *,
+    .divide-slate-200 > * + * {
+      border-color: var(--app-border-subtle, #343a40) !important;
+    }
+
+    tr:hover,
+    .hover\:bg-slate-50:hover,
+    .hover\:bg-slate-50\/80:hover {
+      background-color: var(--app-surface-hover, #343a40) !important;
+    }
+
+    // Fonds neutres d'icônes
+    .bg-slate-100 {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    // Badges neutres
+    .bg-slate-50 {
+      background-color: rgba(255, 255, 255, 0.06) !important;
+      color: var(--app-text) !important;
+    }
+
+    // Boutons actifs dans les filtres
+    [class*="bg-white"][class*="text-slate-900"] {
+      background-color: var(--odoo-primary-purple, #714b67) !important;
+      color: #ffffff !important;
+    }
+  }
+}
+

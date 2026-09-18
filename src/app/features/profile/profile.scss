@@ -1,0 +1,64 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  #profile-container {
+    color: var(--app-text, #f1f5f9);
+
+    .bg-white {
+      background-color: var(--app-surface, #2b2f33) !important;
+      border-color: var(--app-border, #343a40) !important;
+      color: var(--app-text, #f1f5f9);
+    }
+
+    h1, h2 {
+      color: var(--app-text, #f1f5f9) !important;
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    label {
+      color: var(--app-text, #f1f5f9) !important;
+    }
+
+    p.text-slate-900 {
+      color: var(--app-text, #f1f5f9) !important;
+    }
+
+    p.text-slate-600,
+    p.text-slate-500 {
+      color: var(--app-text-muted, #94a3b8) !important;
+    }
+
+    p.text-slate-400 {
+      color: var(--app-text-subtle, #64748b) !important;
+    }
+
+    .border-slate-100,
+    .border-slate-200 {
+      border-color: var(--app-border, #343a40) !important;
+    }
+
+    input {
+      background-color: var(--odoo-bg-search, #1a1d20);
+      border-color: var(--app-border, #343a40);
+      color: var(--app-text, #ffffff);
+
+      &::placeholder {
+        color: var(--app-text-muted, #94a3b8);
+      }
+    }
+
+    #submit-new-pwd-btn {
+      background-color: var(--odoo-primary-purple, #714b67);
+      color: #ffffff;
+
+      &:hover:not(:disabled) {
+        background-color: var(--odoo-primary-purple-hover, #865a7c);
+      }
+    }
+  }
+}
+

@@ -1,0 +1,52 @@
+<div class="odoo-datepicker-popover">
+  <!-- Flèche triangulaire d'ancrage en haut Odoo -->
+  <div class="odoo-popover-arrow"></div>
+
+  <!-- En-tête : Flèches de navigation et mois/année (ex: sept. 2026) -->
+  <div class="odoo-dp-header">
+    <button type="button" class="odoo-dp-nav-btn" (click)="prevMonth($event)" aria-label="Mois précédent">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path>
+      </svg>
+    </button>
+    <button type="button" class="odoo-dp-nav-btn" (click)="nextMonth($event)" aria-label="Mois suivant">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path>
+      </svg>
+    </button>
+    <div class="odoo-dp-title">{{ monthYearLabel() }}</div>
+  </div>
+
+  <!-- Tableau du calendrier -->
+  <div class="odoo-dp-grid">
+    <!-- En-têtes des colonnes : vide pour la semaine + L M M J V S D -->
+    <div class="odoo-dp-row odoo-dp-weekdays">
+      <span class="odoo-dp-week-num-header"></span>
+      @for (dayHeader of dayHeaders; track $index) {
+        <span class="odoo-dp-weekday-label">{{ dayHeader }}</span>
+      }
+    </div>
+
+    <!-- Lignes de semaines avec numéro de semaine ISO à gauche -->
+    @for (week of calendarWeeks(); track week.weekNumber) {
+      <div class="odoo-dp-row">
+        <!-- Numéro de semaine ISO (ex: 36, 37, 38...) -->
+        <span class="odoo-dp-week-num">{{ week.weekNumber }}</span>
+
+        <!-- 7 jours de la semaine -->
+        @for (day of week.days; track day.date.getTime()) {
+          <button
+            type="button"
+            class="odoo-dp-day-cell"
+            [class.is-other-month]="!day.isCurrentMonth"
+            [class.is-selected]="day.isSelected"
+            [class.is-today]="day.isToday && !day.isSelected"
+            (click)="selectDay(day, $event)"
+          >
+            {{ day.dayNumber }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+</div>

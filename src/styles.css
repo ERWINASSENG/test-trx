@@ -1,0 +1,277 @@
+/* Styles globaux de l'application TRANSIMEX */
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import "tailwindcss";
+
+/* Configuration officielle Tailwind CSS v4 pour le mode sombre via classe .dark */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* ========================================================================= */
+  /* PALETTE THÈME CLAIR (Luminosité d'entreprise, contraste net WCAG AA/AAA)   */
+  /* ========================================================================= */
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-surface-hover: #f1f5f9;
+  --app-surface-active: #e2e8f0;
+  --app-border: #cbd5e1;
+  --app-border-subtle: #e2e8f0;
+  --app-text: #090d16;
+  --app-text-muted: #334155;
+  --app-text-subtle: #475569;
+
+  --odoo-primary-purple: #714b67;
+  --odoo-primary-purple-hover: #5d3d54;
+  --odoo-text-teal: #008f8c;
+  --odoo-text-teal-hover: #007976;
+  --odoo-status-green: #15803d;
+  --odoo-avatar-gold: #b45309;
+
+  --odoo-topbar-bg: #ffffff;
+  --odoo-topbar-text: #090d16;
+  --odoo-topbar-border: #e2e8f0;
+
+  --odoo-panel-bg: #f8fafc;
+  --odoo-panel-text: #090d16;
+  --odoo-panel-border: #e2e8f0;
+}
+
+html.dark, :root[data-theme="dark"], .dark {
+  /* ========================================================================= */
+  /* PALETTE THÈME SOMBRE (Odoo Enterprise ERP Sombre - Haute lisibilité)      */
+  /* ========================================================================= */
+  --app-bg: #1e2227;
+  --app-surface: #2b2f33;
+  --app-surface-hover: #343a40;
+  --app-surface-active: #3e444a;
+  --app-border: #383f45;
+  --app-border-subtle: #2b2f33;
+  --app-text: #f8fafc;
+  --app-text-muted: #cbd5e1;
+  --app-text-subtle: #94a3b8;
+
+  --odoo-primary-purple: #714b67;
+  --odoo-primary-purple-hover: #865a7c;
+  --odoo-text-teal: #00c4c0;
+  --odoo-text-teal-hover: #38bdf8;
+  --odoo-status-green: #22c55e;
+  --odoo-avatar-gold: #fbbf24;
+
+  --odoo-topbar-bg: #212529;
+  --odoo-topbar-text: #f8fafc;
+  --odoo-topbar-border: rgba(255, 255, 255, 0.12);
+
+  --odoo-panel-bg: #2b2f33;
+  --odoo-panel-text: #f8fafc;
+  --odoo-panel-border: rgba(255, 255, 255, 0.12);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ========================================================================= */
+/* RÈGLES D'ADAPTATION UNIVERSELLES POUR TOUS LES COMPOSANTS DU PROJET       */
+/* ========================================================================= */
+
+/* 1. COMPOSANTS EN MODE SOMBRE (DASHBOARDS, CAISSE, RH, UTILISATEURS) */
+html.dark .bg-white,
+:root[data-theme="dark"] .bg-white {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text) !important;
+  border-color: var(--app-border) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-slate-100\/80,
+:root[data-theme="dark"] .bg-slate-50,
+:root[data-theme="dark"] .bg-slate-100,
+:root[data-theme="dark"] .bg-slate-100\/80 {
+  background-color: var(--app-surface-hover) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* Contrastes textuels stricts en mode sombre */
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+:root[data-theme="dark"] .text-slate-950,
+:root[data-theme="dark"] .text-slate-900,
+:root[data-theme="dark"] .text-slate-800,
+:root[data-theme="dark"] .text-slate-700 {
+  color: var(--app-text) !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-500,
+:root[data-theme="dark"] .text-slate-600,
+:root[data-theme="dark"] .text-slate-500 {
+  color: var(--app-text-muted) !important;
+}
+
+html.dark .text-slate-400,
+:root[data-theme="dark"] .text-slate-400 {
+  color: var(--app-text-subtle) !important;
+}
+
+/* Couleurs statiques sombres inversées automatiquement en mode sombre */
+html.dark .text-\[\#1e3a8a\],
+html.dark .text-blue-900,
+html.dark .text-blue-800 {
+  color: #93c5fd !important; /* Blue 300 ultra-lisible sur fond sombre */
+}
+
+html.dark .text-emerald-900,
+html.dark .text-emerald-800,
+html.dark .text-emerald-700 {
+  color: #6ee7b7 !important; /* Emerald 300 lumineux */
+}
+
+html.dark .text-rose-900,
+html.dark .text-rose-800 {
+  color: #fca5a5 !important; /* Rose 300 lumineux */
+}
+
+html.dark .text-amber-900,
+html.dark .text-amber-800 {
+  color: #fde047 !important; /* Amber 300 */
+}
+
+/* Badges colorés réadaptés en mode sombre */
+html.dark .bg-blue-50,
+html.dark .bg-blue-50\/80 {
+  background-color: rgba(30, 58, 138, 0.25) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/80 {
+  background-color: rgba(6, 78, 59, 0.25) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark .bg-rose-50,
+html.dark .bg-rose-50\/80 {
+  background-color: rgba(136, 19, 55, 0.25) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/80 {
+  background-color: rgba(120, 53, 15, 0.25) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+/* Rehaussement des textes gris en mode clair pour passer le test WCAG AA */
+html:not(.dark) .text-slate-400 {
+  color: #64748b; /* Rehaussé de slate-400 (#94a3b8) vers slate-500 (#64748b) pour lisibilité AA */
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/60,
+html.dark .border-slate-100,
+html.dark .border-slate-300,
+:root[data-theme="dark"] .border-slate-200,
+:root[data-theme="dark"] .border-slate-200\/80,
+:root[data-theme="dark"] .border-slate-200\/60,
+:root[data-theme="dark"] .border-slate-100,
+:root[data-theme="dark"] .border-slate-300 {
+  border-color: var(--app-border) !important;
+}
+
+/* 2. FORMULAIRES, CHAMPS INPUT, SELECT ET TEXTAREA (HORS TABLEAUX ODOO) */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not(.odoo-field-input):not(.odoo-inline-input),
+html.dark select:not(.odoo-field-input),
+html.dark textarea:not(.odoo-field-input) {
+  background-color: #1a1d20 !important;
+  color: #f8fafc !important;
+  border-color: var(--app-border) !important;
+}
+
+html.dark input.odoo-field-input,
+html.dark input.odoo-inline-input,
+html.dark .odoo-table input {
+  background-color: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not(.odoo-field-input):not(.odoo-inline-input),
+html:not(.dark) select:not(.odoo-field-input),
+html:not(.dark) textarea:not(.odoo-field-input) {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* 3. ADAPTATION STRUCTURELLE DE L'ERP (TOPBAR & CONTROL PANEL) EN MODE CLAIR */
+html:not(.dark) #enterprise-topbar {
+  background-color: var(--odoo-topbar-bg) !important;
+  border-color: var(--odoo-topbar-border) !important;
+}
+
+html:not(.dark) #enterprise-topbar a,
+html:not(.dark) #enterprise-topbar button,
+html:not(.dark) #enterprise-topbar span:not(.text-\[\#00a09d\]) {
+  color: var(--odoo-topbar-text);
+}
+
+html:not(.dark) #enterprise-control-panel {
+  background-color: var(--odoo-panel-bg) !important;
+  border-color: var(--odoo-panel-border) !important;
+}
+
+html:not(.dark) #enterprise-control-panel span,
+html:not(.dark) #enterprise-control-panel button:not(.bg-\[\#714b67\]),
+html:not(.dark) #enterprise-control-panel div {
+  color: var(--odoo-panel-text);
+}
+
+/* 4. ALIGNEMENT ET RENDU DES ICÔNES MATERIAL ICONS */
+.material-icons,
+mat-icon {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  vertical-align: middle;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 5. ANIMATIONS ET STYLES DES NOTIFICATIONS TOAST GLOBALES */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-item {
+  animation: toastSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
