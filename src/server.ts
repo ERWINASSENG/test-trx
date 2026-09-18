@@ -9,6 +9,7 @@ import {join} from 'node:path';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { rateLimit } from 'express-rate-limit';
+import helmet from 'helmet';
 import { normalizeUserRole } from './app/core/utils/role.utils';
 import { UserRole } from './app/core/models/auth.model';
 
@@ -22,6 +23,36 @@ const angularApp = new AngularNodeAppEngine();
 
 // Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
 app.set('trust proxy', 1);
+
+// En-têtes de sécurité HTTP via Helmet durcis pour Angular SSR et compatibilité iFrame AI Studio
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        connectSrc: ["'self'", 'https:', 'wss:'],
+        frameAncestors: ["'self'", 'https://ai.studio', 'https://*.google.com', 'https://*.run.app'],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: process.env['NODE_ENV'] === 'production' ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    frameguard: false, // Délégué à CSP frameAncestors pour autoriser l'iFrame de prévisualisation AI Studio
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    strictTransportSecurity: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    xContentTypeOptions: true,
+    xXssProtection: true,
+  })
+);
 
 // Parsing JSON pour les requêtes d'API avec limite explicite de payload
 app.use(express.json({ limit: '256kb' }));
