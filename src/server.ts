@@ -8,6 +8,7 @@ import express from 'express';
 import {join} from 'node:path';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { rateLimit } from 'express-rate-limit';
 import { normalizeUserRole } from './app/core/utils/role.utils';
 import { UserRole } from './app/core/models/auth.model';
 
@@ -19,8 +20,75 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
-// Parsing JSON pour les requêtes d'API avec limite explicite
+// Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
+app.set('trust proxy', 1);
+
+// Parsing JSON pour les requêtes d'API avec limite explicite de payload
 app.use(express.json({ limit: '256kb' }));
+
+/**
+ * ==============================================================================
+ * RATE LIMITING STRATIFIÉ (SÉCURITÉ & PROTECTION CONTRE LE BRUTE-FORCE / ABUS)
+ * ==============================================================================
+ */
+
+// 1. Limiteur global sur toutes les routes de l'API /api/* (200 requêtes / 15 minutes par IP)
+const apiGlobalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    error: 'Trop de requêtes envoyées depuis cette adresse IP. Veuillez patienter avant de réessayer.',
+    retryAfterMinutes: 15,
+  },
+});
+app.use('/api', apiGlobalLimiter);
+
+// 2. Limiteur strict sur les endpoints de configuration et d'authentification (40 requêtes / 15 minutes)
+const authSyncLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 40,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    error: 'Trop de requêtes sur les services d’authentification. Veuillez patienter quelques instants.',
+    retryAfterMinutes: 15,
+  },
+});
+app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSyncLimiter);
+
+// 3. Limiteur renforcé sur les opérations d'écriture et de mutation (POST, PUT, PATCH, DELETE)
+// Prévient l'inondation de la base de données, la création massive de comptes ou de transactions (100 mutations / 15 minutes)
+const mutationsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    error: 'Limite de modifications ou d’enregistrements atteinte pour cette période. Veuillez patienter avant de renouveler.',
+    retryAfterMinutes: 15,
+  },
+});
+app.use(
+  [
+    '/api/system/collaborators',
+    '/api/admin/users',
+    '/api/cahier/operations',
+    '/api/cashier/transactions',
+    '/api/system/operations',
+  ],
+  (req, res, next): void => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      mutationsLimiter(req, res, next);
+      return;
+    }
+    next();
+  }
+);
 
 /**
  * Endpoint sécurisé fournissant l'URL et la clé anonyme publiques Supabase au client web.
