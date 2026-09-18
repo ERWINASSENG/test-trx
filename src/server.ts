@@ -891,6 +891,76 @@ const formatPersistedPieceComptable = (row: Record<string, unknown>): Record<str
 };
 
 /**
+ * Normalise une date textuellement en format YYYY-MM-DD
+ * Immunisé contre tout décalage horaire UTC/local.
+ */
+const normalizeDateToDay = (rawDate?: string | null): string => {
+  if (!rawDate) return '';
+  const trimmed = String(rawDate).trim();
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      return `${year}-${month}-${day}`;
+    }
+  }
+  if (trimmed.includes('-')) {
+    const datePart = trimmed.split('T')[0].split(' ')[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3) {
+      const year = parts[0].length === 2 ? `20${parts[0]}` : parts[0];
+      const month = parts[1].padStart(2, '0');
+      const day = parts[2].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+  return trimmed;
+};
+
+let datesMigrationPromise: Promise<void> | null = null;
+/**
+ * Migration transparente au premier appel :
+ * Convertit les dates stockées au format 'DD/MM/YYYY' en format standard ISO 'YYYY-MM-DD'
+ * afin de garantir un tri chronologique PostgreSQL strict via .order('date', { ascending: false }).
+ */
+async function ensureCashierDatesMigrated(adminClient: SupabaseClient): Promise<void> {
+  if (!datesMigrationPromise) {
+    datesMigrationPromise = (async () => {
+      try {
+        const { data: slashRows, error } = await adminClient
+          .from('cashier_transactions')
+          .select('id, date')
+          .like('date', '%/%')
+          .limit(2000);
+
+        if (error || !slashRows || slashRows.length === 0) {
+          return;
+        }
+
+        console.log(`[MIGRATION DATES] Détection de ${slashRows.length} opération(s) au format DD/MM/YYYY. Normalisation en cours vers YYYY-MM-DD...`);
+
+        for (const row of slashRows) {
+          const normalized = normalizeDateToDay(row.date);
+          if (normalized && normalized !== row.date) {
+            await adminClient
+              .from('cashier_transactions')
+              .update({ date: normalized })
+              .eq('id', row.id);
+          }
+        }
+
+        console.log(`[MIGRATION DATES] Migration terminée avec succès : ${slashRows.length} opération(s) converties en ISO YYYY-MM-DD.`);
+      } catch (migErr) {
+        console.warn('[MIGRATION DATES] Erreur lors de la normalisation des dates en ISO:', migErr);
+      }
+    })();
+  }
+  return datesMigrationPromise;
+}
+
+/**
  * Récupération des opérations de caisse (GET /api/cahier/operations & /api/cashier/transactions)
  * Supporte la pagination optionnelle via limit/offset (défaut limit: 100, max: 1000) pour préserver les ressources.
  */
@@ -902,6 +972,9 @@ const getOperationsHandler = async (req: express.Request, res: express.Response)
   }
 
   try {
+    // S'assurer que les dates en base sont converties en ISO YYYY-MM-DD pour un tri SQL chronologique strict
+    await ensureCashierDatesMigrated(adminClient);
+
     const rawLimit = req.query['limit'];
     const rawOffset = req.query['offset'];
 
@@ -955,35 +1028,6 @@ interface DuplicateCandidateRow {
   service?: string | null;
   no_dossier?: string | null;
 }
-
-/**
- * Normalise une date textuellement en format YYYY-MM-DD
- * Immunisé contre tout décalage horaire UTC/local.
- */
-const normalizeDateToDay = (rawDate?: string | null): string => {
-  if (!rawDate) return '';
-  const trimmed = String(rawDate).trim();
-  if (trimmed.includes('/')) {
-    const parts = trimmed.split('/');
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0');
-      const month = parts[1].padStart(2, '0');
-      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-      return `${year}-${month}-${day}`;
-    }
-  }
-  if (trimmed.includes('-')) {
-    const datePart = trimmed.split('T')[0].split(' ')[0];
-    const parts = datePart.split('-');
-    if (parts.length === 3) {
-      const year = parts[0].length === 2 ? `20${parts[0]}` : parts[0];
-      const month = parts[1].padStart(2, '0');
-      const day = parts[2].padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-  }
-  return trimmed;
-};
 
 /**
  * Vérifie si une transaction de caisse identique existe déjà en base de données.
@@ -1110,7 +1154,7 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       montant = Math.abs(montant);
     }
 
-    const dateToStore = payload.date ? (typeof payload.date === 'string' ? payload.date : new Date(payload.date).toISOString()) : new Date().toISOString();
+    const dateToStore = normalizeDateToDay(payload.date) || new Date().toISOString().slice(0, 10);
 
     // Contrôle d'unicité strict côté serveur : Date + Montant + Libellé + N° de dossier/matricule + Service
     const duplicateCheck = await checkDuplicateCashierTransaction(adminClient, {
@@ -1164,7 +1208,7 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       created_by: callerId,
       quantity,
       montant,
-      date: payload.date ? (typeof payload.date === 'string' ? payload.date : new Date(payload.date).toISOString()) : new Date().toISOString(),
+      date: dateToStore,
     };
 
     console.log(`[AUDIT CASHIER] Création opération par [${authenticatedUser?.email || callerId || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) : Montant=${montant}, Libellé="${libelle}", Pièce="${candidatePiece || 'auto'}"`);
@@ -1342,7 +1386,7 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
     }
 
     if (payload.date !== undefined && payload.date) {
-      updateData['date'] = typeof payload.date === 'string' ? payload.date : new Date(payload.date).toISOString();
+      updateData['date'] = normalizeDateToDay(payload.date) || new Date().toISOString().slice(0, 10);
     }
 
     if (payload.pieceComptable !== undefined || payload.piece_comptable !== undefined) {

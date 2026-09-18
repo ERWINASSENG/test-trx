@@ -17,6 +17,7 @@ export interface ImportError {
 export interface ParsedImportRow {
   pieceComptable?: string;
   date: string;
+  isoDate?: string;
   libelle: string;
   partenaire?: string;
   employee?: string;
@@ -202,6 +203,7 @@ export class ImportService {
     // 4. Date (Normalisation tolérante et sans décalage de fuseau horaire)
     const rawDateValue = findRawValue(['date', 'jour', 'période', 'periode']);
     const dateFormatted = this.normalizeDate(rawDateValue);
+    const dateIso = this.normalizeDateToIso(rawDateValue);
 
     // 5. Service
     const rawService = findValue(['service', 'departement', 'département']).toUpperCase();
@@ -227,6 +229,7 @@ export class ImportService {
     return {
       data: {
         date: dateFormatted,
+        isoDate: dateIso,
         libelle,
         partenaire: partenaire || undefined,
         employee: partenaire || undefined,
@@ -357,6 +360,23 @@ export class ImportService {
     }
 
     return dateStr;
+  }
+
+  /**
+   * Normalise une valeur de date (Date, nombre sériel Excel, chaîne) en format standard ISO AAAA-MM-JJ (YYYY-MM-DD).
+   * Assure la conformité pour la persistance en base de données PostgreSQL afin de garantir un tri chronologique strict.
+   */
+  public normalizeDateToIso(rawDate: unknown): string {
+    const dmy = this.normalizeDate(rawDate);
+    if (!dmy) return '';
+    const parts = dmy.split('/');
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    return dmy;
   }
 
   /**

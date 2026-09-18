@@ -317,7 +317,7 @@ CREATE POLICY "dossiers_delete_admin_only"
 CREATE TABLE IF NOT EXISTS public.cashier_transactions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     piece_comptable text UNIQUE,                                -- Numéro de pièce comptable unique (ex: CSH1/2026/00001)
-    date text NOT NULL,                                        -- Format DD/MM/YYYY (texte libre, voir NOTES)
+    date text NOT NULL,                                        -- Format standard ISO YYYY-MM-DD (tri chronologique strict, voir NOTES)
     libelle text NOT NULL,
     service text,                                              -- "Opérations", "Administration", etc.
     type_description text,
@@ -354,7 +354,7 @@ COMMENT ON COLUMN public.cashier_transactions.created_by IS 'Référence vers pr
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cashier_transactions_piece_comptable ON public.cashier_transactions (piece_comptable) WHERE piece_comptable IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cashier_piece_comptable ON public.cashier_transactions (piece_comptable);
-CREATE INDEX IF NOT EXISTS idx_cashier_transactions_date ON public.cashier_transactions (date);
+CREATE INDEX IF NOT EXISTS idx_cashier_transactions_date ON public.cashier_transactions (date DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cashier_transactions_category ON public.cashier_transactions (category);
 CREATE INDEX IF NOT EXISTS idx_cashier_transactions_status ON public.cashier_transactions (status);
 CREATE INDEX IF NOT EXISTS idx_cashier_transactions_service ON public.cashier_transactions (service);
@@ -487,9 +487,11 @@ CREATE POLICY "audit_logs_insert_authenticated"
 -- ==============================================================================
 -- NOTES (à lire avant toute modification de ce fichier)
 -- ==============================================================================
--- 1. `date` est stockée en TEXT au format DD/MM/YYYY, pas en TIMESTAMP/DATE.
---    Choix délibéré pour matcher l'interface TypeScript
---    `CashierTransaction.date: string` côté app.
+-- 1. `date` est stockée en TEXT au format standard ISO YYYY-MM-DD.
+--    Ce format garantit que l'ordre lexicographique PostgreSQL (.order('date', { ascending: false }))
+--    est strictement identique à l'ordre chronologique temporel, sans inversion lors
+--    de la pagination serveur ou des changements de mois/années. Côté UI client,
+--    l'affichage en JJ/MM/AAAA est assuré de manière transparente par formatIsoToDisplayDate().
 --
 -- 2. `no_dossier` (text) et `employee` (text) restent en plus de `dossier_id`
 --    et `employee_id` (uuid, FK) pour la rétrocompatibilité avec l'app existante.
@@ -504,4 +506,15 @@ CREATE POLICY "audit_logs_insert_authenticated"
 --    policy contre `information_schema` et `pg_policies` de la base réelle.
 --    Pour toute future dérive, préférer `supabase db dump --schema public`
 --    directement depuis la CLI pour garder ce fichier synchronisé automatiquement.
+-- ==============================================================================
+
+-- ==============================================================================
+-- SCRIPT DE MIGRATION MANUELLE (Optionnel - le serveur auto-migre au démarrage)
+-- ==============================================================================
+-- UPDATE public.cashier_transactions
+-- SET date = substring(date from 7 for 4) || '-' || substring(date from 4 for 2) || '-' || substring(date from 1 for 2)
+-- WHERE date LIKE '__/__/____';
+--
+-- CREATE INDEX IF NOT EXISTS idx_cashier_transactions_date
+-- ON public.cashier_transactions (date DESC, created_at DESC);
 -- ==============================================================================

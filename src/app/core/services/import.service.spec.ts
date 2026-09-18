@@ -178,4 +178,22 @@ describe('ImportService', () => {
       expect(service.normalizeDate(undefined)).toBe(expected);
     });
   });
+
+  describe('normalizeDateToIso', () => {
+    it('devrait convertir une date JJ/MM/AAAA en format ISO AAAA-MM-JJ (Cas nominal)', () => {
+      expect(service.normalizeDateToIso('15/09/2026')).toBe('2026-09-15');
+      expect(service.normalizeDateToIso('01/01/2026')).toBe('2026-01-01');
+    });
+
+    it('devrait convertir une date textuelle française ou objet Date en ISO (Cas étendu)', () => {
+      expect(service.normalizeDateToIso('15 sept. 2026')).toBe('2026-09-15');
+      const utcMidnight = new Date(Date.UTC(2026, 8, 15, 0, 0, 0));
+      expect(service.normalizeDateToIso(utcMidnight)).toBe('2026-09-15');
+    });
+
+    it('devrait gérer les valeurs vides sans planter (Cas limite)', () => {
+      const result = service.normalizeDateToIso('');
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+  });
 });
