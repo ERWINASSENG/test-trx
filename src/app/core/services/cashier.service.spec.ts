@@ -1,7 +1,11 @@
+import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CashierService } from './cashier.service';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { ExportService } from './export.service';
+import { NotificationService } from './notification.service';
 
 describe('CashierService - Architecture Hybride & Signals', () => {
   let service: CashierService;
@@ -13,6 +17,24 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     TestBed.configureTestingModule({
       providers: [
         CashierService,
+        { provide: PLATFORM_ID, useValue: 'browser' },
+        {
+          provide: NotificationService,
+          useValue: {
+            success: vi.fn(),
+            error: vi.fn(),
+            warning: vi.fn(),
+            info: vi.fn(),
+          },
+        },
+        {
+          provide: ExportService,
+          useValue: {
+            exportToCsv: vi.fn(),
+            exportToExcel: vi.fn(),
+            exportToPdf: vi.fn(),
+          },
+        },
         {
           provide: SupabaseService,
           useValue: {
@@ -94,7 +116,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(headers?.['Authorization']).toBe('Bearer mock-jwt-token');
 
     // 2. Vérification de la mise à jour immédiate du Signal
-    expect(result.success).toBeTrue();
+    expect(result.success).toBe(true);
     expect(service.allTransactions().length).toBe(1);
     expect(service.allTransactions()[0].id).toBe('tx-uuid-123');
     expect(service.allTransactions()[0].libelle).toBe('Plein carburant camion');
@@ -118,7 +140,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     });
 
     // Même en cas d'indisponibilité de l'API, l'état local du Signal est préservé
-    expect(result.success).toBeTrue();
+    expect(result.success).toBe(true);
     expect(service.allTransactions().length).toBe(1);
     expect(service.allTransactions()[0].libelle).toBe('Dépannage urgence');
     expect(service.currentBalance()).toBe(-20000);
@@ -173,7 +195,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     const id = service.allTransactions()[0].id;
     service.toggleSelectTransaction(id);
 
-    expect(service.allTransactions()[0].selected).toBeTrue();
+    expect(service.allTransactions()[0].selected).toBe(true);
 
     await service.deleteSelected();
     expect(service.allTransactions().length).toBe(0);
@@ -273,7 +295,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       category: 'entree',
     });
 
-    expect(result.success).toBeFalse();
+    expect(result.success).toBe(false);
     expect(result.error).toContain(existingPiece);
     expect(service.error()).toContain('déjà attribué');
   });
@@ -295,8 +317,55 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       category: 'sortie',
     });
 
-    expect(result.success).toBeFalse();
+    expect(result.success).toBe(false);
     expect(result.error).toContain('Erreur d\'unicité');
     expect(service.error()).toContain('CSH1/2026/00099');
+  });
+
+  it('devrait basculer sur le canal de secours Supabase direct avec limitation stricte si l’API Express échoue', async () => {
+    // 1. Simuler l'échec de l'API Express
+    globalThis.fetch = (async () => {
+      throw new Error('API Express indisponible');
+    }) as typeof globalThis.fetch;
+
+    let capturedLimit: number | null = null;
+    const mockDbRow = {
+      id: 'fallback-row-1',
+      date: new Date('2026-09-06T08:00:00Z').toISOString(),
+      libelle: 'Opération via Supabase direct bornée',
+      category: 'entree' as const,
+      montant: 150000,
+    };
+
+    const mockQueryBuilder: Record<string, unknown> = {};
+    mockQueryBuilder['select'] = () => mockQueryBuilder;
+    mockQueryBuilder['order'] = () => mockQueryBuilder;
+    mockQueryBuilder['limit'] = (lim: number) => {
+      capturedLimit = lim;
+      return Promise.resolve({ data: [mockDbRow], error: null });
+    };
+
+    const mockSupabaseClient = {
+      auth: {
+        getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+      },
+      from: (table: string) => {
+        expect(table).toBe('cashier_transactions');
+        return mockQueryBuilder;
+      },
+    };
+
+    const supabaseService = TestBed.inject(SupabaseService);
+    Object.defineProperty(supabaseService, 'supabase', {
+      value: mockSupabaseClient,
+      configurable: true,
+    });
+
+    // Test avec limite personnalisée (ex. 500)
+    await service.loadTransactions(500);
+
+    expect(capturedLimit).toBe(500);
+    expect(service.allTransactions().length).toBe(1);
+    expect(service.allTransactions()[0].libelle).toBe('Opération via Supabase direct bornée');
   });
 });

@@ -252,8 +252,8 @@ export async function requireAuth(req: express.Request, res: express.Response, n
 
     next();
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Échec de la validation de session';
-    res.status(401).json({ error: message });
+    console.error('Échec de la validation de session:', err);
+    res.status(401).json({ error: 'Session invalide ou expirée.' });
   }
 }
 
@@ -446,8 +446,8 @@ const getCollaboratorsHandler = async (_req: express.Request, res: express.Respo
 
     res.json({ users });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne du serveur';
-    res.status(500).json({ error: message });
+    console.error('Erreur getCollaboratorsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la récupération des collaborateurs.' });
   }
 };
 
@@ -501,8 +501,8 @@ app.post('/api/auth/sync-role', requireAuth, async (req: express.Request, res: e
       email: user.email,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur lors de la synchronisation du rôle';
-    res.status(500).json({ error: message });
+    console.error('Erreur lors de la synchronisation du rôle:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la synchronisation du rôle.' });
   }
 });
 
@@ -578,7 +578,13 @@ const createCollaboratorHandler = async (req: express.Request, res: express.Resp
     });
 
     if (adminAuthError) {
-      res.status(400).json({ error: adminAuthError.message });
+      console.error('Échec création utilisateur auth:', adminAuthError.message);
+      const isDuplicate = adminAuthError.message?.toLowerCase().includes('already') || adminAuthError.message?.toLowerCase().includes('exists');
+      if (isDuplicate) {
+        res.status(409).json({ error: 'Un compte utilisateur avec cette adresse email existe déjà.' });
+        return;
+      }
+      res.status(400).json({ error: 'Échec de la création du compte d’authentification du collaborateur.' });
       return;
     }
     const authUserId = adminAuthData.user.id;
@@ -615,7 +621,7 @@ const createCollaboratorHandler = async (req: express.Request, res: express.Resp
           isActive: isActive !== undefined ? isActive : true,
           createdAt: new Date().toISOString(),
         },
-        warning: `Compte Auth créé mais la synchronisation du profil public a rencontré une erreur: ${profileError.message}`,
+        warning: 'Compte créé mais la synchronisation du profil public a rencontré une erreur interne.',
       });
       return;
     }
@@ -636,8 +642,8 @@ const createCollaboratorHandler = async (req: express.Request, res: express.Resp
       message: 'Collaborateur créé avec succès (droits scellés dans app_metadata et synchronisés)',
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne du serveur';
-    res.status(500).json({ error: message });
+    console.error('Erreur createCollaboratorHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la création du collaborateur.' });
   }
 };
 
@@ -689,7 +695,7 @@ const updateCollaboratorHandler = async (req: express.Request, res: express.Resp
 
     if (profileUpdateError) {
       console.error('Échec de la mise à jour public.profiles:', profileUpdateError.message);
-      res.status(500).json({ error: `Erreur mise à jour profil: ${profileUpdateError.message}` });
+      res.status(500).json({ error: 'Impossible de mettre à jour le profil du collaborateur.' });
       return;
     }
 
@@ -708,15 +714,15 @@ const updateCollaboratorHandler = async (req: express.Request, res: express.Resp
       const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, authUpdates);
       if (authUpdateError) {
         console.error('Échec mise à jour auth.users:', authUpdateError.message);
-        res.status(500).json({ error: `Erreur mise à jour auth: ${authUpdateError.message}` });
+        res.status(500).json({ error: 'Impossible de synchroniser les autorisations du collaborateur.' });
         return;
       }
     }
 
     res.json({ success: true, message: 'Collaborateur mis à jour avec succès' });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur lors de la mise à jour';
-    res.status(500).json({ error: message });
+    console.error('Erreur updateCollaboratorHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la mise à jour du collaborateur.' });
   }
 };
 
@@ -751,21 +757,21 @@ const deleteCollaboratorHandler = async (req: express.Request, res: express.Resp
     const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(userId);
     if (authDeleteError) {
       console.error('Échec suppression auth.users:', authDeleteError.message);
-      res.status(500).json({ error: `Erreur suppression auth: ${authDeleteError.message}` });
+      res.status(500).json({ error: 'Impossible de supprimer le compte d’accès du collaborateur.' });
       return;
     }
 
     const { error: profileDeleteError } = await adminClient.from('profiles').delete().eq('id', userId);
     if (profileDeleteError) {
       console.error('Échec suppression public.profiles:', profileDeleteError.message);
-      res.status(500).json({ error: `Erreur suppression profil: ${profileDeleteError.message}` });
+      res.status(500).json({ error: 'Impossible de supprimer le profil du collaborateur.' });
       return;
     }
 
     res.json({ success: true, message: 'Compte collaborateur supprimé avec succès' });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur lors de la suppression';
-    res.status(500).json({ error: message });
+    console.error('Erreur deleteCollaboratorHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la suppression du collaborateur.' });
   }
 };
 
@@ -858,7 +864,7 @@ const getOperationsHandler = async (req: express.Request, res: express.Response)
 
     if (error) {
       console.error('Erreur SQL lors de la lecture des opérations:', error.message);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Erreur lors de la récupération des opérations de caisse.' });
       return;
     }
 
@@ -872,8 +878,8 @@ const getOperationsHandler = async (req: express.Request, res: express.Response)
       offset,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne lors de la récupération des opérations';
-    res.status(500).json({ error: message });
+    console.error('Erreur getOperationsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la récupération des opérations.' });
   }
 };
 
@@ -1110,11 +1116,11 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
         res.status(409).json({
-          error: `Erreur d'unicité (SQL 23505) : le numéro de pièce comptable "${candidatePiece || 'indéfini'}" existe déjà dans la base de données.`,
+          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
         });
         return;
       }
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Erreur lors de l’enregistrement de l’opération de caisse.' });
       return;
     }
 
@@ -1127,8 +1133,8 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       message: 'Opération enregistrée avec succès',
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne lors de la sauvegarde';
-    res.status(500).json({ error: message });
+    console.error('Erreur saveOperationHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la sauvegarde de l’opération.' });
   }
 };
 
@@ -1167,7 +1173,8 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
         .maybeSingle();
 
       if (fetchError) {
-        res.status(500).json({ error: `Erreur lors de la vérification des droits: ${fetchError.message}` });
+        console.error('Erreur vérification droits updateOperationHandler:', fetchError.message);
+        res.status(500).json({ error: 'Erreur lors de la vérification des autorisations sur l’opération.' });
         return;
       }
       if (!existingRow) {
@@ -1354,11 +1361,11 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
         res.status(409).json({
-          error: `Erreur d'unicité (SQL 23505) : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
+          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
         });
         return;
       }
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Erreur lors de la modification de l’opération de caisse.' });
       return;
     }
 
@@ -1371,8 +1378,8 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       message: 'Opération modifiée avec succès',
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne lors de la modification';
-    res.status(500).json({ error: message });
+    console.error('Erreur updateOperationHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la modification de l’opération.' });
   }
 };
 
@@ -1457,7 +1464,7 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
 
     if (error) {
       console.error('Erreur SQL lors de la suppression d’opérations:', error.message);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: 'Erreur lors de la suppression des opérations de caisse.' });
       return;
     }
 
@@ -1468,8 +1475,8 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       message: `${targetIds.length} opération(s) supprimée(s) avec succès`,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne lors de la suppression';
-    res.status(500).json({ error: message });
+    console.error('Erreur deleteOperationsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la suppression des opérations.' });
   }
 };
 
@@ -1550,7 +1557,7 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
 
     if (insertErr) {
       console.error('Erreur SQL lors de la duplication:', insertErr.message);
-      res.status(500).json({ error: insertErr.message });
+      res.status(500).json({ error: 'Erreur lors de la duplication des opérations de caisse.' });
       return;
     }
 
@@ -1561,8 +1568,8 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
       data: enriched,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne lors de la duplication';
-    res.status(500).json({ error: message });
+    console.error('Erreur duplicateOperationsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la duplication des opérations.' });
   }
 };
 
@@ -1628,7 +1635,7 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
 
     if (updateErr) {
       console.error('Erreur SQL mise à jour statut:', updateErr.message);
-      res.status(500).json({ error: updateErr.message });
+      res.status(500).json({ error: 'Erreur lors de la mise à jour du statut des opérations.' });
       return;
     }
 
@@ -1639,8 +1646,8 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
       data: enriched,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur interne modification de statut';
-    res.status(500).json({ error: message });
+    console.error('Erreur updateOperationsStatusHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la modification de statut des opérations.' });
   }
 };
 

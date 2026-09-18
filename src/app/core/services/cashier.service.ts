@@ -226,6 +226,8 @@ export class CashierService implements OnDestroy {
     return currentList.length > 0 && currentList.every((tx) => !!tx.selected);
   });
 
+  public static readonly DEFAULT_OPERATIONS_LIMIT = 1000;
+
   private activeLoadPromise: Promise<void> | null = null;
 
   /**
@@ -235,8 +237,10 @@ export class CashierService implements OnDestroy {
    * Tente d'abord de récupérer les opérations via l'API Express rapide (/api/cahier/operations).
    * En cas d'indisponibilité ou d'erreur réseau, bascule immédiatement sur le SDK client Supabase.
    * Gère la déduplication des appels concurrents via une Promesse unique partagée.
+   * Borne systématiquement le volume à `limit` (1000 par défaut) sur les deux canaux
+   * afin de protéger l'onglet contre toute surcharge mémoire en situation dégradée.
    */
-  public async loadTransactions(): Promise<void> {
+  public async loadTransactions(limit: number = CashierService.DEFAULT_OPERATIONS_LIMIT): Promise<void> {
     if (this.activeLoadPromise) {
       return this.activeLoadPromise;
     }
@@ -269,7 +273,7 @@ export class CashierService implements OnDestroy {
               Authorization: `Bearer ${token}`,
             };
 
-            const response = await fetch('/api/cahier/operations', {
+            const response = await fetch(`/api/cahier/operations?limit=${limit}`, {
               method: 'GET',
               headers,
             });
@@ -286,7 +290,7 @@ export class CashierService implements OnDestroy {
           }
         }
 
-        // Canal 2 (REPLI DIRECT SUPABASE CLIENT) : Interrogation directe de Supabase
+        // Canal 2 (REPLI DIRECT SUPABASE CLIENT) : Interrogation directe de Supabase avec limitation stricte
         if (!rawRows) {
           try {
             await this.supabaseService.ensureInitialized();
@@ -297,7 +301,8 @@ export class CashierService implements OnDestroy {
                 .from('cashier_transactions')
                 .select(CASHIER_SELECTED_COLUMNS)
                 .order('date', { ascending: false })
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(limit);
 
               if (!error && data && Array.isArray(data)) {
                 rawRows = data as CashierDbRow[];
