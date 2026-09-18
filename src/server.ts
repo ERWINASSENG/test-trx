@@ -1328,21 +1328,22 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
         return;
       }
 
-      // Pour tout utilisateur non-admin (caissières, managers, trésoriers, employés) :
-      // ne bloquer que si la ligne a un created_by ou employee_id défini et différent de l'utilisateur courant (par id ou email)
+      // Pour tout utilisateur non-admin (ex: caissière) :
+      // Vérification stricte de propriété : l'utilisateur ne peut supprimer QUE ses propres opérations.
+      // Règle de parité stricte avec la policy RLS : une ligne sans créateur explicite (created_by ou employee_id vide) ne peut être supprimée que par un admin
       const userEmail = (authenticatedUser?.email || '').toLowerCase().trim();
       const unauthorizedRows = rowsToCheck.filter((r) => {
         const creator = String(r.created_by || r.employee_id || '').trim();
-        // Si aucun créateur n'était renseigné sur la ligne historique, autoriser la suppression
-        if (!creator) return false;
-        const matchesId = callerId && creator === callerId;
-        const matchesEmail = userEmail && creator.toLowerCase() === userEmail;
+        // Si aucun créateur n'est défini en base, interdire la suppression à tout non-administrateur
+        if (!creator) return true;
+        const matchesId = Boolean(callerId && creator === callerId);
+        const matchesEmail = Boolean(userEmail && creator.toLowerCase() === userEmail);
         return !matchesId && !matchesEmail;
       });
 
       if (unauthorizedRows.length > 0) {
         res.status(403).json({
-          error: 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.',
+          error: 'Action refusée : vous ne pouvez supprimer que les opérations que vous avez vous-même enregistrées.',
         });
         return;
       }
@@ -1564,11 +1565,11 @@ app.put('/api/cashier/transactions/:id', requireAuth, requireRole(['admin', 'cai
 app.patch('/api/cahier/operations/:id', requireAuth, requireRole(['admin', 'caissiere', 'manager', 'comptable']), updateOperationHandler);
 app.patch('/api/cashier/transactions/:id', requireAuth, requireRole(['admin', 'caissiere', 'manager', 'comptable']), updateOperationHandler);
 
-// Suppression : autorisée pour tout utilisateur authentifié (vérification stricte de propriété dans deleteOperationsHandler)
-app.delete('/api/cahier/operations/:id', requireAuth, deleteOperationsHandler);
-app.delete('/api/cashier/transactions/:id', requireAuth, deleteOperationsHandler);
-app.delete('/api/cahier/operations', requireAuth, deleteOperationsHandler);
-app.delete('/api/cashier/transactions', requireAuth, deleteOperationsHandler);
+// Suppression : autorisée pour les Administrateurs et Caissières (vérification stricte de propriété dans deleteOperationsHandler)
+app.delete('/api/cahier/operations/:id', requireAuth, requireRole(['admin', 'caissiere']), deleteOperationsHandler);
+app.delete('/api/cashier/transactions/:id', requireAuth, requireRole(['admin', 'caissiere']), deleteOperationsHandler);
+app.delete('/api/cahier/operations', requireAuth, requireRole(['admin', 'caissiere']), deleteOperationsHandler);
+app.delete('/api/cashier/transactions', requireAuth, requireRole(['admin', 'caissiere']), deleteOperationsHandler);
 
 /**
  * Example Express Rest API endpoints can be defined here.

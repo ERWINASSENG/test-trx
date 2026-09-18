@@ -423,11 +423,13 @@ CREATE POLICY "cashier_transactions_update_own_or_admin"
     );
 
 DROP POLICY IF EXISTS "cashier_transactions_delete_admin_only" ON public.cashier_transactions;
-CREATE POLICY "cashier_transactions_delete_admin_only"
+DROP POLICY IF EXISTS "cashier_transactions_delete_own_or_admin" ON public.cashier_transactions;
+CREATE POLICY "cashier_transactions_delete_own_or_admin"
     ON public.cashier_transactions FOR DELETE
     TO authenticated
     USING (
-        EXISTS (
+        created_by = (select auth.uid())
+        OR EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = (select auth.uid())
               AND profiles.role = 'admin'
