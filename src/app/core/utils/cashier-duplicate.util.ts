@@ -277,3 +277,94 @@ export function findDuplicateTransaction<T extends {
   });
 }
 
+/**
+ * Partitionne une liste de transactions en deux ensembles :
+ * - `unique` : la première occurrence canonique de chaque transaction.
+ * - `duplicates` : toutes les répliques en doublon (par ID, par pièce comptable ou par empreinte métier).
+ *
+ * Cette fonction garantit l'élimination absolue des doublons pour l'UI et prépare la liste des IDs à supprimer.
+ */
+export function deduplicateTransactionList<T extends {
+  id?: string;
+  date?: string | null;
+  montant?: number | string | null;
+  category?: string | null;
+  libelle?: string | null;
+  noDossier?: string | null;
+  service?: string | null;
+  pieceComptable?: string | null;
+  piece_comptable?: string | null;
+}>(list: T[]): { unique: T[]; duplicates: T[] } {
+  const unique: T[] = [];
+  const duplicates: T[] = [];
+
+  const seenIds = new Set<string>();
+  const seenPieces = new Set<string>();
+  const seenFingerprints = new Set<string>();
+
+  for (const item of list) {
+    let isDup = false;
+
+    // 1. Détection de doublon par ID
+    if (item.id) {
+      if (seenIds.has(item.id)) {
+        isDup = true;
+      }
+    }
+
+    // 2. Détection de doublon par numéro de pièce comptable
+    if (!isDup) {
+      const piece = normalizePieceComptable(item.pieceComptable ?? item.piece_comptable);
+      if (piece) {
+        if (seenPieces.has(piece)) {
+          isDup = true;
+        }
+      }
+    }
+
+    // 3. Détection de doublon par empreinte métier
+    if (!isDup) {
+      const fingerprint = generateTransactionFingerprint(item);
+      if (fingerprint && fingerprint !== '||||') {
+        if (seenFingerprints.has(fingerprint)) {
+          isDup = true;
+        }
+      }
+    }
+
+    if (isDup) {
+      duplicates.push(item);
+    } else {
+      if (item.id) seenIds.add(item.id);
+      const piece = normalizePieceComptable(item.pieceComptable ?? item.piece_comptable);
+      if (piece) seenPieces.add(piece);
+      const fingerprint = generateTransactionFingerprint(item);
+      if (fingerprint && fingerprint !== '||||') seenFingerprints.add(fingerprint);
+
+      unique.push(item);
+    }
+  }
+
+  return { unique, duplicates };
+}
+
+/**
+ * Extrait uniquement la liste des IDs des doublons dans une liste donnée (à supprimer en base).
+ */
+export function extractDuplicateIds<T extends {
+  id?: string;
+  date?: string | null;
+  montant?: number | string | null;
+  category?: string | null;
+  libelle?: string | null;
+  noDossier?: string | null;
+  service?: string | null;
+  pieceComptable?: string | null;
+  piece_comptable?: string | null;
+}>(list: T[]): string[] {
+  const { duplicates } = deduplicateTransactionList(list);
+  return duplicates
+    .map((d) => d.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
