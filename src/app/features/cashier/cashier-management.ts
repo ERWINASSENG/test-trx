@@ -660,6 +660,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         if (pieceDuplicate) {
           const pieceMsg = `Le numéro de pièce comptable "${candidatePiece}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Date: ${pieceDuplicate.date}, Libellé: "${pieceDuplicate.libelle}"). Les pièces comptables doivent être strictement uniques.`;
           this.cashierService.setError(pieceMsg, false);
+          this.cancelAddInline();
           this.notificationService.warning(pieceMsg, 'Pièce comptable en double');
           return;
         }
@@ -683,6 +684,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         const serviceDisplay = duplicate.service || 'Sans service';
         const duplicateMsg = `Opération déjà enregistrée : une opération identique existe déjà en caisse (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}"). La double saisie est interdite.`;
         this.cashierService.setError(duplicateMsg, false);
+        this.cancelAddInline();
         this.notificationService.warning(duplicateMsg, 'Doublon détecté');
         return;
       }
@@ -705,6 +707,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         this.cancelAddInline();
       } else if (result.error) {
         this.cashierService.setError(result.error);
+        this.cancelAddInline();
       }
     } finally {
       this.isSubmitting.set(false);
