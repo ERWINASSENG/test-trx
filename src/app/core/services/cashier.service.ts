@@ -65,14 +65,14 @@ export class CashierService implements OnDestroy {
   private errorTimeout: ReturnType<typeof setTimeout> | null = null;
   private realtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
 
-  public setError(message: string | null): void {
+  public setError(message: string | null, notify = true): void {
     if (this.errorTimeout) {
       clearTimeout(this.errorTimeout);
       this.errorTimeout = null;
     }
     this._error.set(message);
 
-    if (message) {
+    if (message && notify) {
       const lower = message.toLowerCase();
       if (lower.includes('doublon') || lower.includes('pièce comptable') || lower.includes('identique') || lower.includes('déjà attribué') || lower.includes('déjà enregistré')) {
         this.notificationService.warning(message, 'Doublon détecté');
@@ -809,7 +809,7 @@ export class CashierService implements OnDestroy {
       ) {
         finalMsg = 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
       }
-      this.setError(finalMsg);
+      this.setError(finalMsg, false);
       return { success: false, message: finalMsg };
     }
 

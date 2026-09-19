@@ -311,6 +311,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     // Initialisation automatique du formulaire quand l'ajout est déclenché
     effect(() => {
       if (this.cashierService.isAddingRow()) {
+        if (this.editingTxId()) {
+          this.cancelInlineEdit();
+        }
         this.transactionForm.reset({
           date: this.todayIsoDate() || new Date().toISOString().split('T')[0],
           libelle: '',
@@ -656,7 +659,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         const pieceDuplicate = findDuplicatePieceComptable({ pieceComptable: candidatePiece }, this.allTransactions());
         if (pieceDuplicate) {
           const pieceMsg = `Le numéro de pièce comptable "${candidatePiece}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Date: ${pieceDuplicate.date}, Libellé: "${pieceDuplicate.libelle}"). Les pièces comptables doivent être strictement uniques.`;
-          this.cashierService.setError(pieceMsg);
+          this.cashierService.setError(pieceMsg, false);
           this.notificationService.warning(pieceMsg, 'Pièce comptable en double');
           return;
         }
@@ -679,7 +682,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         const montantDisplay = Math.abs(Number(duplicate.montant)).toLocaleString('fr-FR');
         const serviceDisplay = duplicate.service || 'Sans service';
         const duplicateMsg = `Opération déjà enregistrée : une opération identique existe déjà en caisse (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}"). La double saisie est interdite.`;
-        this.cashierService.setError(duplicateMsg);
+        this.cashierService.setError(duplicateMsg, false);
         this.notificationService.warning(duplicateMsg, 'Doublon détecté');
         return;
       }
@@ -809,7 +812,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     // Ignorer si l'élément n'est plus dans le DOM ou fait partie d'un composant flottant (popover, datepicker, dropdown)
     if (
       !document.body.contains(target) ||
-      target.closest('#cashier-new-btn') ||
+      target.closest('#cp-btn-nouveau') ||
       target.closest('app-odoo-datepicker') ||
       target.closest('.odoo-datepicker-popover') ||
       target.closest('.p-dropdown') ||
@@ -822,7 +825,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     if (this.isAddingRow()) {
       const addRowEl = this.elementRef.nativeElement.querySelector('#inline-add-row');
       // Si le clic provient de la ligne elle-même ou de ses contrôles internes, ne RIEN faire
-      if (!addRowEl || addRowEl.contains(target) || target.closest('#inline-add-row')) {
+      if (addRowEl && (addRowEl.contains(target) || target.closest('#inline-add-row'))) {
         return;
       }
 
@@ -830,15 +833,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       const libelleVal = this.transactionForm.get('libelle')?.value?.trim();
       const rawMontant = this.transactionForm.get('montant')?.value;
       const hasMontant = rawMontant !== null && rawMontant !== undefined && !Number.isNaN(Number(rawMontant));
-      const hasStartedTyping = Boolean(libelleVal) || hasMontant || this.transactionForm.dirty;
-
-      // RÈGLE MÉTIER STRICTE :
-      // - Si les champs obligatoires sont tous les deux remplis et valides -> on enregistre automatiquement.
-      // - Si l'utilisateur a commencé à taper du texte mais n'a pas fini -> NE JAMAIS FERMER LA LIGNE (garder ses saisies intactes).
-      // - Si et seulement si la ligne est totalement vierge et intacte -> on referme sans perte.
       if (libelleVal && hasMontant && Number(rawMontant) !== 0) {
         this.submitInlineTransaction();
-      } else if (!hasStartedTyping) {
+      } else {
         this.cancelAddInline();
       }
       return;
@@ -848,18 +845,16 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     const activeEditId = this.editingTxId();
     if (activeEditId) {
       const editRowEl = this.elementRef.nativeElement.querySelector(`#inline-edit-row-${activeEditId}`);
-      if (!editRowEl || editRowEl.contains(target) || target.closest(`#inline-edit-row-${activeEditId}`)) {
+      if (editRowEl && (editRowEl.contains(target) || target.closest(`#inline-edit-row-${activeEditId}`))) {
         return;
       }
 
       const libelleVal = this.editTransactionForm.get('libelle')?.value?.trim();
       const rawMontant = this.editTransactionForm.get('montant')?.value;
       const hasMontant = rawMontant !== null && rawMontant !== undefined && !Number.isNaN(Number(rawMontant));
-      const hasStartedTyping = Boolean(libelleVal) || hasMontant || this.editTransactionForm.dirty;
-
       if (libelleVal && hasMontant && Number(rawMontant) !== 0) {
         this.submitInlineEdit();
-      } else if (!hasStartedTyping) {
+      } else {
         this.cancelInlineEdit();
       }
     }
@@ -972,7 +967,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         const pieceDuplicate = findDuplicatePieceComptable({ id: activeId, pieceComptable: pieceToValidate }, this.allTransactions());
         if (pieceDuplicate) {
           const pieceMsg = `Modification refusée : le numéro de pièce comptable "${pieceToValidate}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Libellé: "${pieceDuplicate.libelle}").`;
-          this.cashierService.setError(pieceMsg);
+          this.cashierService.setError(pieceMsg, false);
+          this.cancelInlineEdit();
           this.notificationService.warning(pieceMsg, 'Pièce comptable en double');
           return;
         }
@@ -995,7 +991,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         const montantDisplay = Math.abs(Number(duplicate.montant)).toLocaleString('fr-FR');
         const serviceDisplay = duplicate.service || 'Sans service';
         const duplicateMsg = `Modification refusée : une opération identique existe déjà en caisse (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}").`;
-        this.cashierService.setError(duplicateMsg);
+        this.cashierService.setError(duplicateMsg, false);
+        this.cancelInlineEdit();
         this.notificationService.warning(duplicateMsg, 'Doublon détecté');
         return;
       }
@@ -1017,7 +1014,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       if (updateResult.success) {
         this.cancelInlineEdit();
       } else if (updateResult.message) {
-        this.cashierService.setError(updateResult.message);
+        this.cashierService.setError(updateResult.message, false);
+        this.cancelInlineEdit();
       }
     } finally {
       this.isEditingSubmitting.set(false);

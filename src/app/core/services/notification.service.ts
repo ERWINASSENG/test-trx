@@ -36,6 +36,16 @@ export class NotificationService {
    * Affiche une notification générique
    */
   public show(notification: Omit<AppNotification, 'id' | 'timestamp'>): string {
+    const existing = this._notifications().find(
+      (active) =>
+        active.type === notification.type &&
+        active.title === notification.title &&
+        active.message === notification.message,
+    );
+    if (existing) {
+      return existing.id;
+    }
+
     const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const newNotif: AppNotification = {
       ...notification,

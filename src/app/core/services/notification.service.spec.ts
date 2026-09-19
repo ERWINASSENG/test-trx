@@ -36,6 +36,14 @@ describe('NotificationService', () => {
     expect(notifs[0].type).toBe('warning');
   });
 
+  it('devrait ignorer une notification identique déjà active', () => {
+    const firstId = service.error('Accès refusé', 'Erreur');
+    const secondId = service.error('Accès refusé', 'Erreur');
+
+    expect(secondId).toBe(firstId);
+    expect(service.getNotifications().length).toBe(1);
+  });
+
   it('devrait créer une notification d erreur sticky par défaut', () => {
     service.error('Erreur de validation', 'Erreur critique');
     const notifs = service.getNotifications();

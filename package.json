@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "ng": "ng",
-    "dev": "cross-env ng serve --port=3000 --host=0.0.0.0 --allowed-hosts=true ${DISABLE_HMR:+--live-reload=false}",
-    "build": "ng build && node scripts/copy-build.js",
+    "dev": "cross-env ng serve --port=3000 --host=0.0.0.0 --allowed-hosts=true",
+    "build": "ng build ",
     "start": "node dist/server/server.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
