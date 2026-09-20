@@ -105,7 +105,13 @@ export class MainLayout {
       icon: 'badge',
       allowedRoles: ['admin'],
     },
-    
+    {
+      id: 'settings',
+      label: 'Paramètres',
+      route: '/parametres',
+      icon: 'settings',
+      allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
+    },
     {
       id: 'administration',
       label: 'Paramètres Système',

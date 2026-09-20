@@ -105,6 +105,12 @@ export const routes: Routes = [
           import('./features/profile/profile').then((m) => m.Profile),
         title: 'Transmex - Mon Profil & Sécurité',
       },
+      {
+        path: 'parametres',
+        loadComponent: () =>
+          import('./features/settings/settings').then((m) => m.Settings),
+        title: 'Transmex - Paramètres',
+      },
     ],
   },
 
