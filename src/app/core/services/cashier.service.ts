@@ -280,17 +280,16 @@ export class CashierService implements OnDestroy {
               if (Array.isArray(ops)) {
                 rawRows = ops as CashierDbRow[];
               }
+            } else {
+              console.warn(`API Express /api/cahier/operations a répondu HTTP ${response.status} pendant le chargement.`);
             }
           } catch (apiErr) {
-            console.warn('API Express /api/cahier/operations indisponible, bascule sur Supabase direct:', apiErr);
+            console.warn('API Express /api/cahier/operations indisponible pendant le chargement:', apiErr);
           }
         }
 
-        // Aucun repli direct Supabase : les règles de filtrage métier et de colonnes
-        // doivent rester centralisées dans l'API serveur.
-        if (!rawRows) {
-          this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
-        }
+        // Aucun repli direct Supabase et aucune alerte utilisateur pendant un
+        // chargement automatique : les erreurs seront visibles lors d'une action.
 
         // Traitement et injection dans le Signal Angular 19
         if (rawRows && Array.isArray(rawRows)) {

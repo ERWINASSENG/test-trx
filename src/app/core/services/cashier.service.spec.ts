@@ -337,6 +337,6 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     await service.loadTransactions(500);
 
     expect(service.allTransactions()).toEqual([]);
-    expect(service.error()).toContain('temporairement indisponible');
+    expect(service.error()).toBeNull();
   });
 });
