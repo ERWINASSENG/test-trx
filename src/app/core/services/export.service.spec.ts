@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { ExportService } from './export.service';
 import { AuthService } from './auth.service';
@@ -35,13 +36,13 @@ describe('ExportService', () => {
 
   it('should return false if transactions list is empty', () => {
     const result = service.exportCashierTransactionsCsv([]);
-    expect(result).toBeFalse();
+    expect(result).toBe(false);
   });
 
   it('should export with balance column when user is admin', () => {
     authServiceMock.currentUser.set({ role: 'admin' });
     let wasDownloaded = false;
-    spyOn<ExportService, 'downloadCsvFile'>(service, 'downloadCsvFile' as never).and.callFake(() => {
+    vi.spyOn(service, 'downloadCsvFile').mockImplementation(() => {
       wasDownloaded = true;
     });
 
@@ -57,14 +58,14 @@ describe('ExportService', () => {
     };
 
     const result = service.exportCashierTransactionsCsv([testItem]);
-    expect(result).toBeTrue();
-    expect(wasDownloaded).toBeTrue();
+    expect(result).toBe(true);
+    expect(wasDownloaded).toBe(true);
   });
 
   it('should exclude balance column when user is comptable', () => {
     authServiceMock.currentUser.set({ role: 'comptable' });
     let capturedCsv = '';
-    spyOn<ExportService, 'downloadCsvFile'>(service, 'downloadCsvFile' as never).and.callFake((csvContent: string) => {
+    vi.spyOn(service, 'downloadCsvFile').mockImplementation((csvContent: string) => {
       capturedCsv = csvContent;
     });
 
@@ -80,7 +81,7 @@ describe('ExportService', () => {
     };
 
     const result = service.exportCashierTransactionsCsv([testItem]);
-    expect(result).toBeTrue();
+    expect(result).toBe(true);
     expect(capturedCsv).toContain('Statut');
     expect(capturedCsv).not.toContain('Solde courant (FCFA)');
   });

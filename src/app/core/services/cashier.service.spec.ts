@@ -38,9 +38,51 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         {
           provide: SupabaseService,
           useValue: {
-            isConfigured: () => false,
+            isConfigured: () => true,
             ensureInitialized: () => Promise.resolve(),
-            supabase: null,
+            supabase: {
+              auth: {
+                getSession: () => Promise.resolve({ data: { session: null } }),
+              },
+              from: () => {
+                const queryBuilder = {
+                  select: () => {
+                    const selectChain = {
+                      eq: () => Promise.resolve({ data: null, error: null }),
+                      single: () => Promise.resolve({ data: null, error: null }),
+                    };
+                    return selectChain;
+                  },
+                  insert: () => {
+                    const insertChain = {
+                      select: () => {
+                        const selectChain2 = {
+                          single: () => Promise.resolve({
+                            data: {
+                              id: 'direct-uuid-456',
+                              piece_comptable: 'PC-123',
+                              date: new Date().toISOString(),
+                              libelle: 'Dépannage urgence',
+                              service: 'TRANSPORT',
+                              category: 'sortie',
+                              status: 'draft',
+                              montant: -20000,
+                              quantity: 1,
+                              no_dossier: '',
+                              employee: '',
+                            },
+                            error: null,
+                          }),
+                        };
+                        return selectChain2;
+                      },
+                    };
+                    return insertChain;
+                  },
+                };
+                return queryBuilder;
+              },
+            },
           },
         },
         {
@@ -99,10 +141,10 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     const result = await service.saveOperationViaApi({
       libelle: 'Plein carburant camion',
-      typeTransaction: 'Carburant',
+      service: 'TRANSPORT',
       typeDescription: 'Station Total',
       category: 'sortie',
-      matriculeVehicule: 'LT-5544-AA',
+      noDossier: 'LT-5544-AA',
       firstName: 'Samuel',
       employee: 'Samuel Eboa',
       quantity: 50,
@@ -134,7 +176,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     const result = await service.saveOperationViaApi({
       libelle: 'Dépannage urgence',
-      typeTransaction: 'Maintenance',
+      service: 'TRANSPORT',
       category: 'sortie',
       montant: -20000,
     });
@@ -177,12 +219,31 @@ describe('CashierService - Architecture Hybride & Signals', () => {
   });
 
   it('devrait supprimer les éléments sélectionnés et recalculer les soldes', async () => {
-    globalThis.fetch = (async () => {
-      return new Response(JSON.stringify({ success: true, deletedCount: 1 }), {
+    globalThis.fetch = vi.fn().mockImplementation((url, init) => {
+      if (init && init.method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ success: true, deletedCount: 1 }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        json: () => Promise.resolve({
+          operation: {
+            id: 'tx-to-delete',
+            piece_comptable: 'PC-123',
+            date: '2026-09-15',
+            libelle: 'Transaction à supprimer',
+            service: 'TRANSPORT',
+            category: 'sortie',
+            status: 'draft',
+            montant: -10000,
+          }
+        })
       });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     // Ajout d'une opération initiale
     await service.saveOperationViaApi({
@@ -222,7 +283,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     await service.saveOperationViaApi({
       libelle: 'Frais de péage autoroute',
-      typeTransaction: 'Péage',
+      service: 'TRANSPORT',
       category: 'sortie',
       montant: -5000,
     });

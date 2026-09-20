@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ConfirmDialogComponent } from './confirm-dialog.component';
 
@@ -52,7 +53,7 @@ describe('ConfirmDialogComponent', () => {
     const submitBtn = fixture.nativeElement.querySelector('#confirm-dialog-submit-btn');
     submitBtn?.click();
 
-    expect(emitted).toBeTrue();
+    expect(emitted).toBe(true);
   });
 
   it('devrait émettre cancelled lors du clic sur le bouton d’annulation', () => {
@@ -67,7 +68,7 @@ describe('ConfirmDialogComponent', () => {
     const cancelBtn = fixture.nativeElement.querySelector('#confirm-dialog-cancel-btn');
     cancelBtn?.click();
 
-    expect(emitted).toBeTrue();
+    expect(emitted).toBe(true);
   });
 
   it('devrait émettre cancelled lors du clic sur le backdrop direct (cas limite extérieur)', () => {
@@ -83,7 +84,7 @@ describe('ConfirmDialogComponent', () => {
     } as unknown as MouseEvent;
 
     component.onBackdropClick(mockEvent);
-    expect(emitted).toBeTrue();
+    expect(emitted).toBe(true);
   });
 
   it('ne devrait PAS émettre cancelled si le clic provient d’un élément enfant du panel (cas limite intérieur)', () => {
@@ -100,7 +101,7 @@ describe('ConfirmDialogComponent', () => {
     } as unknown as MouseEvent;
 
     component.onBackdropClick(mockEvent);
-    expect(emitted).toBeFalse();
+    expect(emitted).toBe(false);
   });
 
   it('devrait fermer la modale (émettre cancelled) sur la touche Echap (Escape)', () => {
@@ -110,7 +111,7 @@ describe('ConfirmDialogComponent', () => {
     });
 
     component.onKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(emitted).toBeTrue();
+    expect(emitted).toBe(true);
   });
 
   it('ne devrait pas fermer la modale sur une autre touche (ex: Enter ou Tab)', () => {
@@ -120,7 +121,7 @@ describe('ConfirmDialogComponent', () => {
     });
 
     component.onKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
-    expect(emitted).toBeFalse();
+    expect(emitted).toBe(false);
   });
 
   it('devrait calculer la variante prioritaire (type prend le dessus sur variant si défini)', () => {

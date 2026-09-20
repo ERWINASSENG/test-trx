@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -21,6 +22,9 @@ describe('DashboardEmployee', () => {
 
   const authServiceMock = {
     currentUser: signal<UserProfile | null>(mockEmployeeUser),
+    token: () => 'mock-jwt-token',
+    isAuthenticated: () => true,
+    waitForSession: () => Promise.resolve(),
   };
 
   beforeEach(async () => {

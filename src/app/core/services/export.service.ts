@@ -116,7 +116,7 @@ export class ExportService {
   /**
    * Télécharge une chaîne CSV sous forme de Blob avec BOM UTF-8
    */
-  private downloadCsvFile(csvContent: string, filename: string): void {
+  public downloadCsvFile(csvContent: string, filename: string): void {
     const blob = new Blob(['\uFEFF' + csvContent], {
       type: 'text/csv;charset=utf-8;',
     });

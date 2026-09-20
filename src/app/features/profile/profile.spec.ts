@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { Profile } from './profile';
 import { AuthService } from '../../core/services/auth.service';
@@ -56,7 +57,7 @@ describe('Profile Component', () => {
     });
 
     const userService = TestBed.inject(UserService);
-    spyOn(userService, 'updateCurrentUserProfile').and.resolveTo({
+    vi.spyOn(userService, 'updateCurrentUserProfile').mockResolvedValue({
       success: false,
       error: 'Mise à jour impossible',
     });

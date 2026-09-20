@@ -344,11 +344,39 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
     // Écoute dynamique du type de service
     this.transactionForm.get('service')?.valueChanges.subscribe((type) => {
-      this.isOperationsType.set(Boolean(type));
+      const isOps = type === 'TRANSPORT' || type === 'TRANSIT' || type === 'MANUT';
+      this.isOperationsType.set(isOps);
+
+      const noDossierCtrl = this.transactionForm.get('noDossier');
+      const qtyCtrl = this.transactionForm.get('quantity');
+
+      if (isOps) {
+        noDossierCtrl?.setValidators([Validators.required]);
+        qtyCtrl?.setValidators([Validators.required]);
+      } else {
+        noDossierCtrl?.clearValidators();
+        qtyCtrl?.clearValidators();
+      }
+      noDossierCtrl?.updateValueAndValidity();
+      qtyCtrl?.updateValueAndValidity();
     });
 
     this.editTransactionForm.get('service')?.valueChanges.subscribe((type) => {
-      this.isEditOperationsType.set(Boolean(type));
+      const isOps = type === 'TRANSPORT' || type === 'TRANSIT' || type === 'MANUT';
+      this.isEditOperationsType.set(isOps);
+
+      const noDossierCtrl = this.editTransactionForm.get('noDossier');
+      const qtyCtrl = this.editTransactionForm.get('quantity');
+
+      if (isOps) {
+        noDossierCtrl?.setValidators([Validators.required]);
+        qtyCtrl?.setValidators([Validators.required]);
+      } else {
+        noDossierCtrl?.clearValidators();
+        qtyCtrl?.clearValidators();
+      }
+      noDossierCtrl?.updateValueAndValidity();
+      qtyCtrl?.updateValueAndValidity();
     });
 
     // Conversion automatique si saisie directe d'un montant négatif (ex: -5000 -> catégorie sortie + 5000)
