@@ -99,10 +99,21 @@ export class DashboardAdmin implements OnInit {
     const thresholdDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     return list.filter((tx) => {
-      const txDate = new Date(tx.date);
+      const txDate = this.parseTransactionDate(tx.date);
       return !isNaN(txDate.getTime()) && txDate >= thresholdDate;
     });
   });
+
+  private parseTransactionDate(dateValue: string): Date {
+    const value = dateValue.trim();
+    const displayDateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+    if (displayDateMatch) {
+      const [, day, month, year] = displayDateMatch;
+      return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00`);
+    }
+
+    return new Date(value);
+  }
 
   // KPIs Financiers de la Caisse
   public readonly financialKPIs = computed(() => {
