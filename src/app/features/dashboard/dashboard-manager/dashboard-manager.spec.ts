@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -26,7 +27,7 @@ describe('DashboardManager', () => {
       id: 'tx-1',
       date: '2026-03-01',
       libelle: 'Approvisionnement caisse',
-      typeTransaction: 'Espèces',
+      service: 'DG',
       typeDescription: 'Dotation',
       category: 'entree',
       firstName: 'Jean',
@@ -37,7 +38,7 @@ describe('DashboardManager', () => {
       id: 'tx-2',
       date: '2026-03-02',
       libelle: 'Carburant transport',
-      typeTransaction: 'Gasoil',
+      service: 'TRANSPORT',
       typeDescription: 'Camion 01',
       category: 'sortie',
       firstName: 'Paul',
@@ -111,7 +112,7 @@ describe('DashboardManager', () => {
         id: 'tx-old',
         date: '05/03/2026',
         libelle: 'Opération 2',
-        typeTransaction: 'Espèces',
+        service: 'DG',
         typeDescription: 'Test',
         category: 'sortie',
         firstName: 'Jean',
@@ -122,7 +123,7 @@ describe('DashboardManager', () => {
         id: 'tx-first',
         date: '01/03/2026',
         libelle: 'Opération 1',
-        typeTransaction: 'Espèces',
+        service: 'DG',
         typeDescription: 'Test',
         category: 'entree',
         firstName: 'Jean',
@@ -146,7 +147,7 @@ describe('DashboardManager', () => {
         id: 'tx-depense',
         date: '13/09/2026',
         libelle: 'Carburant et frais',
-        typeTransaction: 'Espèces',
+        service: 'DG',
         typeDescription: 'Dépense',
         category: 'sortie',
         firstName: 'Paul',
@@ -157,7 +158,7 @@ describe('DashboardManager', () => {
         id: 'tx-dotation',
         date: '13/09/2026',
         libelle: 'Dotation initiale',
-        typeTransaction: 'Espèces',
+        service: 'DG',
         typeDescription: 'Approvisionnement',
         category: 'entree',
         firstName: 'Paul',

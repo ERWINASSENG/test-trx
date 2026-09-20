@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -29,7 +30,7 @@ describe('DashboardAdmin', () => {
       libelle: 'FA-2026-001',
       montant: 500000,
       category: 'entree',
-      typeTransaction: 'Encaissement Client',
+      service: 'COMMERCIAL',
       typeDescription: 'Règlement facture',
       firstName: 'Jean Dupont',
     },
@@ -39,7 +40,7 @@ describe('DashboardAdmin', () => {
       libelle: 'CARB-842',
       montant: 150000,
       category: 'sortie',
-      typeTransaction: 'Carburant Flotte',
+      service: 'TRANSPORT',
       typeDescription: 'Carburant camions',
       firstName: 'Samuel Eboa',
     },
@@ -49,7 +50,7 @@ describe('DashboardAdmin', () => {
       libelle: 'FOURN-109',
       montant: 50000,
       category: 'sortie',
-      typeTransaction: 'Fournitures Bureau',
+      service: 'DG',
       typeDescription: 'Papeterie',
       firstName: 'Samuel Eboa',
     },
@@ -115,7 +116,7 @@ describe('DashboardAdmin', () => {
   it('should compute category breakdown for expenses', () => {
     const categories = component.categoryBreakdown();
     expect(categories.length).toBe(2);
-    expect(categories[0].category).toBe('Carburant Flotte');
+    expect(categories[0].category).toBe('TRANSPORT');
     expect(categories[0].amount).toBe(150000);
     expect(categories[0].percentage).toBe(75);
   });
