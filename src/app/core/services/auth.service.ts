@@ -209,8 +209,6 @@ export class AuthService {
 
       const appRole = authUser?.app_metadata?.['role'] as UserRole | undefined;
       const profileRole = profile?.role as UserRole | undefined;
-      const userMetaRole = authUser?.user_metadata?.['role'] as UserRole | undefined;
-
       // Résolution sécurisée du rôle :
       // 1. Si app_metadata (scellé serveur par Supabase Admin) ou profile (table SQL sécurisée) spécifie 'admin' => 'admin'
       // 2. user_metadata n'est jamais utilisé pour élever les privilèges admin (modifiable côté client)
@@ -218,7 +216,7 @@ export class AuthService {
       if (appRole === 'admin' || profileRole === 'admin') {
         targetRole = 'admin';
       } else {
-        targetRole = normalizeUserRole(appRole || profileRole || userMetaRole || 'employe');
+        targetRole = normalizeUserRole(appRole || profileRole || 'employe');
       }
 
       const resolvedRole: UserRole = targetRole;
@@ -325,30 +323,19 @@ export class AuthService {
 
     try {
       if (this.checkSupabaseConfigured() && this.supabaseService.supabase) {
-        const { data, error } = await this.supabaseService.supabase.auth.signUp({
+        const { error } = await this.supabaseService.supabase.auth.signUp({
           email: email.trim().toLowerCase(),
           password,
           options: {
             data: {
               first_name: profileData.firstName,
               last_name: profileData.lastName,
-              role: profileData.role || 'employe',
             },
           },
         });
 
         if (error) throw error;
 
-        if (data.user) {
-          await this.supabaseService.supabase.from('profiles').upsert({
-            id: data.user.id,
-            email: email.trim().toLowerCase(),
-            first_name: profileData.firstName || '',
-            last_name: profileData.lastName || '',
-            role: profileData.role || 'employe',
-            is_active: true,
-          });
-        }
       }
 
       this._isLoading.set(false);

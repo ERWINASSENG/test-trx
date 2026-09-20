@@ -109,7 +109,9 @@ export class ExportService {
    */
   public escapeCsv(value: string): string {
     if (!value) return '""';
-    const clean = String(value).replace(/"/g, '""');
+    const stringValue = String(value);
+    const safeValue = /^[=+\-@]/.test(stringValue) ? `'${stringValue}` : stringValue;
+    const clean = safeValue.replace(/"/g, '""');
     return `"${clean}"`;
   }
 

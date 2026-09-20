@@ -43,10 +43,6 @@ export interface CashierDbRow {
   updated_at?: string;
 }
 
-// Colonnes sélectionnées selon le principe du moindre privilège alignées sur le schéma Supabase
-const CASHIER_SELECTED_COLUMNS =
-  'id, piece_comptable, date, libelle, service, type_description, category, status, no_dossier, first_name, partenaire, employee, employee_id, created_by, quantity, montant, solde_apres, selected, created_at, updated_at';
-
 @Injectable({
   providedIn: 'root',
 })
@@ -232,10 +228,10 @@ export class CashierService implements OnDestroy {
 
   /**
    * ───────────────────────────────────────────────────────────────────────────
-   * 1. LECTURE HAUTE DISPONIBILITÉ : DOUBLE CANAL (API EXPRESS + REPLI DIRECT SUPABASE)
+  * 1. LECTURE CENTRALISÉE VIA L'API EXPRESS
    * ───────────────────────────────────────────────────────────────────────────
    * Tente d'abord de récupérer les opérations via l'API Express rapide (/api/cahier/operations).
-   * En cas d'indisponibilité ou d'erreur réseau, bascule immédiatement sur le SDK client Supabase.
+  * En cas d'indisponibilité ou d'erreur réseau, l'opération échoue sans contourner les contrôles serveur.
    * Gère la déduplication des appels concurrents via une Promesse unique partagée.
    * Borne systématiquement le volume à `limit` (1000 par défaut) sur les deux canaux
    * afin de protéger l'onglet contre toute surcharge mémoire en situation dégradée.
@@ -290,29 +286,10 @@ export class CashierService implements OnDestroy {
           }
         }
 
-        // Canal 2 (REPLI DIRECT SUPABASE CLIENT) : Interrogation directe de Supabase avec limitation stricte
+        // Aucun repli direct Supabase : les règles de filtrage métier et de colonnes
+        // doivent rester centralisées dans l'API serveur.
         if (!rawRows) {
-          try {
-            await this.supabaseService.ensureInitialized();
-            const client = this.supabaseService.supabase;
-
-            if (client) {
-              const { data, error } = await client
-                .from('cashier_transactions')
-                .select(CASHIER_SELECTED_COLUMNS)
-                .order('date', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(limit);
-
-              if (!error && data && Array.isArray(data)) {
-                rawRows = data as CashierDbRow[];
-              } else if (error) {
-                console.warn('Requête Supabase direct cashier_transactions:', error.message);
-              }
-            }
-          } catch (supabaseErr) {
-            console.warn('Échec de la récupération Supabase direct:', supabaseErr);
-          }
+          this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
         }
 
         // Traitement et injection dans le Signal Angular 19
@@ -438,90 +415,9 @@ export class CashierService implements OnDestroy {
         return { success: false, error: errMsg };
       }
 
-      console.warn('Appel API /api/cahier/operations échoué, vérification et tentative via client Supabase direct:', apiErr);
-
-      // Étape 2 (REPLI EN CAS DE PANNE RÉSEAU EXCLUSIVEMENT) :
-      // Vérification anti-doublon en direct sur Supabase avant toute insertion
-      try {
-        await this.supabaseService.ensureInitialized();
-        const client = this.supabaseService.supabase;
-        if (client) {
-          // Contrôle préalable d'unicité de pièce comptable en direct sur la base
-          if (candidatePiece) {
-            const { data: pieceCheck } = await client
-              .from('cashier_transactions')
-              .select('id, piece_comptable, date, libelle')
-              .eq('piece_comptable', candidatePiece);
-
-            if (pieceCheck && pieceCheck.length > 0) {
-              const dupError = `Erreur d'unicité : le numéro de pièce comptable "${candidatePiece}" existe déjà en base de données.`;
-              this.setError(dupError);
-              return { success: false, error: dupError };
-            }
-          }
-
-          const { data: dbCheck } = await client
-            .from('cashier_transactions')
-            .select('id, piece_comptable, date, libelle, montant, service, no_dossier')
-            .eq('montant', op.montant);
-
-          if (dbCheck && dbCheck.length > 0) {
-            const dbDup = findDuplicateTransaction(
-              {
-                date: op.date,
-                montant: op.montant,
-                category: op.category,
-                libelle: op.libelle,
-                noDossier: op.noDossier,
-                service: op.service,
-                pieceComptable: candidatePiece,
-              },
-              dbCheck
-            );
-            if (dbDup) {
-              const dupError = `Opération déjà existante en base de données (doublon détecté). Insertion refusée.`;
-              this.setError(dupError);
-              return { success: false, error: dupError };
-            }
-          }
-
-          const { data, error } = await client
-            .from('cashier_transactions')
-            .insert([
-              {
-                piece_comptable: candidatePiece,
-                libelle: op.libelle,
-                service: op.service || null,
-                type_description: op.typeDescription || null,
-                category: op.category,
-                status: op.status || 'draft',
-                no_dossier: op.noDossier || null,
-                first_name: op.firstName || null,
-                partenaire: op.partenaire || op.employee || null,
-                employee: op.employee || op.partenaire || null,
-                employee_id: this.authService.currentUser()?.id || null,
-                created_by: this.authService.currentUser()?.id || null,
-                quantity: op.quantity || 1,
-                montant: op.montant,
-                date: this.toIsoDateString(op.date),
-              },
-            ])
-            .select()
-            .single();
-
-          if (!error && data) {
-            savedRow = data as CashierDbRow;
-          } else if (error) {
-            const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
-            const errorMsg = isUniqueViolation
-              ? `Erreur d'unicité (SQL 23505) : le numéro de pièce comptable "${candidatePiece}" existe déjà dans la base de données.`
-              : error.message;
-            this.setError(errorMsg);
-          }
-        }
-      } catch (directErr) {
-        console.warn('Échec du repli direct Supabase insert:', directErr);
-      }
+      console.warn('Appel API /api/cahier/operations échoué, aucune écriture directe Supabase autorisée:', apiErr);
+      this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
+      return { success: false, error: this._error()! };
     }
 
     // Si aucune sauvegarde réelle n'a pu être actée, NE JAMAIS injecter de ligne factice locale
@@ -758,47 +654,7 @@ export class CashierService implements OnDestroy {
       apiErrorMessage = apiErr instanceof Error ? apiErr.message : 'Erreur réseau';
     }
 
-    // 3. Repli direct Supabase si l'API Express n'a pas répondu (interdit en cas de refus explicite ou doublon 409)
-    let updatedViaSupabase = false;
-    const isBlockedError = apiErrorMessage.includes('Action refusée') || apiErrorMessage.includes('403') || apiErrorMessage.includes('doublon') || apiErrorMessage.includes('409');
-    if (!updatedViaApi && !isBlockedError) {
-      try {
-        await this.supabaseService.ensureInitialized();
-        const client = this.supabaseService.supabase;
-        if (client) {
-          const directPayload: Record<string, unknown> = {};
-          if (updatedFields.libelle !== undefined) directPayload['libelle'] = updatedFields.libelle;
-          if (updatedFields.service !== undefined) directPayload['service'] = updatedFields.service;
-          if (updatedFields.typeDescription !== undefined) directPayload['type_description'] = updatedFields.typeDescription || null;
-          if (updatedFields.category !== undefined) directPayload['category'] = updatedFields.category;
-          if (updatedFields.status !== undefined) directPayload['status'] = updatedFields.status;
-          if (updatedFields.noDossier !== undefined) directPayload['no_dossier'] = updatedFields.noDossier || null;
-          if (updatedFields.firstName !== undefined) directPayload['first_name'] = updatedFields.firstName || null;
-          if (updatedFields.partenaire !== undefined) directPayload['partenaire'] = updatedFields.partenaire || null;
-          if (updatedFields.employee !== undefined) directPayload['employee'] = updatedFields.employee || null;
-          if (updatedFields.quantity !== undefined) directPayload['quantity'] = updatedFields.quantity;
-          if (updatedFields.montant !== undefined) directPayload['montant'] = updatedFields.montant;
-          if (updatedFields.pieceComptable !== undefined) directPayload['piece_comptable'] = updatedFields.pieceComptable;
-          if (isoDate) directPayload['date'] = isoDate;
-
-          const { data, error } = await client
-            .from('cashier_transactions')
-            .update(directPayload)
-            .eq('id', id)
-            .select();
-
-          if (!error && data && data.length > 0) {
-            updatedViaSupabase = true;
-          } else if (error) {
-            apiErrorMessage = error.message;
-          }
-        }
-      } catch (directErr) {
-        console.warn('Échec du repli direct Supabase update:', directErr);
-      }
-    }
-
-    if (!updatedViaApi && !updatedViaSupabase) {
+    if (!updatedViaApi) {
       let finalMsg = apiErrorMessage || 'Échec de la sauvegarde en base de données';
       if (
         finalMsg.includes('403') ||
@@ -920,27 +776,9 @@ export class CashierService implements OnDestroy {
       console.warn('Erreur réseau appel API Express DELETE, tentative repli Supabase:', networkErr);
     }
 
-    // Étape 2 : Repli direct Supabase si l'API Express a rencontré une erreur réseau (sauf en cas de 403)
-    const isDeleteForbidden = failureReason && (failureReason.includes('Action refusée') || failureReason.includes('403'));
-    if (!deletedSuccessfully && !failureReason && !isDeleteForbidden) {
-      try {
-        await this.supabaseService.ensureInitialized();
-        const client = this.supabaseService.supabase;
-        if (client) {
-          const { error } = await client
-            .from('cashier_transactions')
-            .delete()
-            .in('id', targetIds);
-
-          if (error) {
-            failureReason = error.message;
-          } else {
-            deletedSuccessfully = true;
-          }
-        }
-      } catch (err) {
-        failureReason = err instanceof Error ? err.message : 'Échec de la suppression directe';
-      }
+    // Une panne de l'API ne doit jamais déclencher une suppression directe via Supabase.
+    if (!deletedSuccessfully && !failureReason) {
+      failureReason = 'Le service de caisse est temporairement indisponible. Veuillez réessayer.';
     }
 
     // Si la suppression a échoué en base de données, on refuse la suppression dans l'UI et on alerte l'utilisateur
@@ -1039,53 +877,7 @@ export class CashierService implements OnDestroy {
       console.warn('Erreur réseau lors de la duplication API:', netErr);
     }
 
-    // Repli direct Supabase si l'API n'a pas répondu
-    try {
-      await this.supabaseService.ensureInitialized();
-      const client = this.supabaseService.supabase;
-      if (client) {
-        const originalRows = this._transactions().filter((t) => t.selected);
-        const callerId = this.authService.currentUser()?.id || null;
-        const todayIso = new Date().toISOString();
-
-        const rowsToInsert = originalRows.map((orig) => ({
-          libelle: orig.libelle ? `${orig.libelle} (Copie)` : 'Copie opération',
-          service: orig.service,
-          type_description: orig.typeDescription,
-          category: orig.category,
-          status: 'draft',
-          no_dossier: orig.noDossier,
-          partenaire: orig.partenaire,
-          employee: orig.employee,
-          employee_id: callerId,
-          created_by: callerId,
-          quantity: orig.quantity,
-          montant: orig.montant,
-          date: todayIso,
-        }));
-
-        const { data, error } = await client
-          .from('cashier_transactions')
-          .insert(rowsToInsert)
-          .select();
-
-        if (error) {
-          this.setError(error.message);
-          return false;
-        }
-
-        if (data) {
-          const mapped = (data as CashierDbRow[]).map((r) => this.mapSingleDbRow(r));
-          this._transactions.update((currentList) => [...mapped, ...currentList]);
-          this.recalculateRunningBalances();
-          this.toggleSelectAll(false);
-          return true;
-        }
-      }
-    } catch (err) {
-      console.warn('Erreur lors de la duplication Supabase:', err);
-    }
-
+    this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
     return false;
   }
 
@@ -1133,30 +925,7 @@ export class CashierService implements OnDestroy {
       // Ignorer
     }
 
-    // Repli direct Supabase
-    try {
-      await this.supabaseService.ensureInitialized();
-      const client = this.supabaseService.supabase;
-      if (client) {
-        const { error } = await client
-          .from('cashier_transactions')
-          .update({ status: 'draft' })
-          .in('id', selectedIds);
-
-        if (error) {
-          this.setError(error.message);
-          return false;
-        }
-
-        this._transactions.update((items) =>
-          items.map((it) => (selectedIds.includes(it.id) ? { ...it, status: 'draft', selected: false } : it))
-        );
-        return true;
-      }
-    } catch (err) {
-      console.warn('Erreur lors du changement de statut Supabase:', err);
-    }
-
+    this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
     return false;
   }
 

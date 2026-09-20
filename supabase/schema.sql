@@ -133,11 +133,9 @@ DECLARE
   safe_role public.user_role_enum;
 BEGIN
   BEGIN
-    requested_role := COALESCE(
-      new.raw_app_meta_data->>'role',
-      new.raw_user_meta_data->>'role',
-      'employe'
-    );
+        -- Le rôle ne peut venir que de app_metadata, écrit par le serveur admin.
+        -- user_metadata est contrôlable par l'utilisateur et ne doit jamais accorder de droits.
+        requested_role := COALESCE(new.raw_app_meta_data->>'role', 'employe');
 
     BEGIN
       safe_role := requested_role::public.user_role_enum;
@@ -230,7 +228,13 @@ DROP POLICY IF EXISTS "profiles_insert_policy" ON public.profiles;
 CREATE POLICY "profiles_insert_policy"
     ON public.profiles FOR INSERT
     TO authenticated
-    WITH CHECK (public.is_admin() OR id = (select auth.uid()));
+    WITH CHECK (
+        public.is_admin()
+        OR (
+            id = (select auth.uid())
+            AND role = 'employe'
+        )
+    );
 
 DROP POLICY IF EXISTS "profiles_update_policy" ON public.profiles;
 CREATE POLICY "profiles_update_policy"

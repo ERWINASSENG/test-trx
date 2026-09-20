@@ -7,6 +7,7 @@ import { ROLE_DEFINITIONS, UserRole } from '../../core/models/auth.model';
 import { AuthService } from '../../core/services/auth.service';
 import { CashierService } from '../../core/services/cashier.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { NotificationService } from '../../core/services/notification.service';
 import { CashierImportModal } from '../../features/cashier/import-modal/cashier-import-modal.component';
 import { ParsedImportRow } from '../../core/services/import.service';
 
@@ -33,6 +34,7 @@ export class MainLayout {
   public readonly authService = inject(AuthService);
   public readonly cashierService = inject(CashierService);
   public readonly themeService = inject(ThemeService);
+  public readonly notificationService = inject(NotificationService);
   public readonly router = inject(Router);
 
   public readonly currentUser = this.authService.currentUser;
@@ -277,6 +279,9 @@ export class MainLayout {
     const result = await this.cashierService.importTransactions(rows);
     if (result.errors.length > 0) {
       console.warn('Importation partielle avec alertes:', result.errors);
+      const message = result.errors.join(' ');
+      const isDuplicate = result.errors.some((error) => error.toLowerCase().includes('doublon'));
+      this.notificationService.warning(message, isDuplicate ? 'Doublon détecté' : 'Importation partielle');
     }
   }
 

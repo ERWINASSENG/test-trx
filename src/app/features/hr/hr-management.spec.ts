@@ -5,6 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { UserProfile } from '../../core/models/auth.model';
 import { signal } from '@angular/core';
+import { vi } from 'vitest';
 
 describe('HrManagement Component', () => {
   let component: HrManagement;
@@ -12,8 +13,8 @@ describe('HrManagement Component', () => {
     users: () => UserProfile[];
     isLoading: () => boolean;
     error: () => string | null;
-    createUser: jasmine.Spy;
-    updateUser: jasmine.Spy;
+    createUser: ReturnType<typeof vi.fn>;
+    updateUser: ReturnType<typeof vi.fn>;
   };
   let mockAuthService: {
     isAdmin: () => boolean;
@@ -49,8 +50,8 @@ describe('HrManagement Component', () => {
       users: () => sampleUsers,
       isLoading: () => false,
       error: () => null,
-      createUser: jasmine.createSpy('createUser').and.resolveTo({ success: true, user: sampleUsers[1] }),
-      updateUser: jasmine.createSpy('updateUser').and.resolveTo({ success: true, user: sampleUsers[1] }),
+      createUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
+      updateUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
     };
 
     mockAuthService = {
@@ -129,7 +130,7 @@ describe('HrManagement Component', () => {
     await component.onSubmit();
 
     expect(mockUserService.createUser).toHaveBeenCalledWith(
-      jasmine.objectContaining({
+      expect.objectContaining({
         email: 'nouveau.collaborateur@transmex.cm',
         firstName: 'Alain',
         lastName: 'Kamga',
@@ -149,7 +150,7 @@ describe('HrManagement Component', () => {
 
     expect(mockUserService.updateUser).toHaveBeenCalledWith(
       'usr-2',
-      jasmine.objectContaining({
+      expect.objectContaining({
         role: 'manager',
       })
     );
@@ -157,14 +158,14 @@ describe('HrManagement Component', () => {
   });
 
   it('devrait gérer les erreurs et afficher un message explicite en cas d’échec', async () => {
-    mockUserService.createUser.and.rejectWith(new Error('Erreur Supabase: Email déjà utilisé'));
+    mockUserService.createUser.mockRejectedValue(new Error('Erreur Supabase: Email déjà utilisé'));
 
     component.openCreateModal();
     component.userForm.setValue({
       email: 'doublon@transmex.cm',
       firstName: 'Jean',
       lastName: 'Dupont',
-      role: 'rh',
+      role: 'employe',
       department: 'Ressources Humaines',
       phone: '+237 655 44 33 22',
       tempPassword: 'PasswordTemp123!',

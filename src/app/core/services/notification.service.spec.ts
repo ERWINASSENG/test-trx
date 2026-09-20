@@ -1,5 +1,6 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { NotificationService } from './notification.service';
+import { vi } from 'vitest';
 
 describe('NotificationService', () => {
   let service: NotificationService;
@@ -11,11 +12,10 @@ describe('NotificationService', () => {
     service = TestBed.inject(NotificationService);
   });
 
-  it('devrait être instancié avec une liste vide de notifications', (done) => {
+  it('devrait être instancié avec une liste vide de notifications', () => {
     expect(service).toBeTruthy();
     service.notifications$.subscribe((notifs) => {
       expect(notifs).toEqual([]);
-      done();
     });
   });
 
@@ -69,14 +69,16 @@ describe('NotificationService', () => {
     expect(service.getNotifications().length).toBe(0);
   });
 
-  it('devrait auto-dismiss une notification non-sticky après expiration de la durée', fakeAsync(() => {
+  it('devrait auto-dismiss une notification non-sticky après expiration de la durée', () => {
+    vi.useFakeTimers();
     service.info('Message temporaire', 'Info', 3000);
     expect(service.getNotifications().length).toBe(1);
 
-    tick(1500);
+    vi.advanceTimersByTime(1500);
     expect(service.getNotifications().length).toBe(1);
 
-    tick(1600);
+    vi.advanceTimersByTime(1600);
     expect(service.getNotifications().length).toBe(0);
-  }));
+    vi.useRealTimers();
+  });
 });

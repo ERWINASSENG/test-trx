@@ -3,6 +3,8 @@ import { Profile } from './profile';
 import { AuthService } from '../../core/services/auth.service';
 import { UserService } from '../../core/services/user.service';
 import { SupabaseService } from '../../core/services/supabase.service';
+import { UserProfile } from '../../core/models/auth.model';
+import { vi } from 'vitest';
 
 describe('Profile Component', () => {
   let component: Profile;
@@ -41,7 +43,9 @@ describe('Profile Component', () => {
   });
 
   it('ne devrait pas afficher un succès si la sauvegarde du profil échoue', async () => {
-    const authService = TestBed.inject(AuthService) as any;
+    const authService = TestBed.inject(AuthService) as unknown as {
+      _currentUser: { set: (profile: UserProfile) => void };
+    };
     authService._currentUser.set({
       id: 'user-1',
       email: 'user@test.com',
@@ -55,7 +59,7 @@ describe('Profile Component', () => {
     });
 
     const userService = TestBed.inject(UserService);
-    spyOn(userService, 'updateCurrentUserProfile').and.resolveTo({
+    vi.spyOn(userService, 'updateCurrentUserProfile').mockResolvedValue({
       success: false,
       error: 'Mise à jour impossible',
     });

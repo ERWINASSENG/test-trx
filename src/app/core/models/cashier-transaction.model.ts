@@ -16,10 +16,14 @@ export interface CashierTransaction {
   date: string; // Format DD/MM/YYYY
   libelle: string; // Ex: "Carburant", "Frais généraux"
   service?: Service | string; // "Opérations" ou "Administration"
+  /** Alias historique conservé pour les imports et anciennes intégrations. */
+  typeTransaction?: string;
   typeDescription?: string; // Sous-texte descriptif
   category: TransactionTypeCategory; // entree (+) ou sortie (-)
   status?: TransactionStatus; // 'draft' (Brouillon) ou 'posted' (Comptabilisé)
   noDossier?: string; // Requis si service === 'Opérations' (ex: Matricule véhicule / Dossier)
+  /** Alias historique du numéro de dossier/matricule. */
+  matriculeVehicule?: string;
   firstName?: string; // Optionnel pour rétrocompatibilité
   partenaire?: string; // Nom du partenaire ou de l'employé associé
   employee?: string; // Alias employé

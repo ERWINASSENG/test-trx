@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   CASHIER_SERVICES,
   Service,
@@ -46,9 +46,10 @@ export class ImportService {
    */
   public async parseExcelOrCsvFile(file: File): Promise<ParsedImportResult> {
     const dataBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(dataBuffer, { type: 'array', cellDates: true });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(dataBuffer);
 
-    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    if (workbook.worksheets.length === 0) {
       return {
         validRows: [],
         errors: [{ row: 0, message: 'Le fichier ne contient aucune feuille de calcul lisible.' }],
@@ -56,10 +57,20 @@ export class ImportService {
       };
     }
 
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(firstSheet, {
-      defval: '',
-      raw: true,
+    const firstSheet = workbook.worksheets[0];
+    const headers: string[] = [];
+    firstSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      headers[columnNumber - 1] = String(cell.value ?? '').trim();
+    });
+    const rawRows: Record<string, unknown>[] = [];
+    firstSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const values: Record<string, unknown> = {};
+      row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+        const header = headers[columnNumber - 1];
+        if (header) values[header] = this.extractExcelCellValue(cell.value);
+      });
+      rawRows.push(values);
     });
 
     const validRows: ParsedImportRow[] = [];
@@ -99,6 +110,17 @@ export class ImportService {
       errors,
       totalRows: rawRows.length,
     };
+  }
+
+  private extractExcelCellValue(value: ExcelJS.CellValue): unknown {
+    if (value instanceof Date) return value;
+    if (value && typeof value === 'object' && 'result' in value) {
+      return value.result;
+    }
+    if (value && typeof value === 'object' && 'richText' in value) {
+      return value.richText.map((part) => part.text).join('');
+    }
+    return value ?? '';
   }
 
   /**
@@ -255,7 +277,7 @@ export class ImportService {
       return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
     }
 
-    // Cas 1 : Objet Date natif (ex. produit par XLSX avec cellDates: true)
+    // Cas 1 : Objet Date natif produit par ExcelJS
     if (rawDate instanceof Date) {
       if (!isNaN(rawDate.getTime())) {
         // Si l'heure UTC est proche de minuit (ex: 23:00 ou 00:00), privilégier la date locale ou UTC sans décalage
@@ -382,7 +404,7 @@ export class ImportService {
   /**
    * Génère et télécharge le fichier modèle Excel vierge pour la caissière
    */
-  public downloadExcelTemplate(): void {
+  public async downloadExcelTemplate(): Promise<void> {
     const headers = [
       'Date (JJ/MM/AAAA)',
       'Libellé de l\'opération',
@@ -395,25 +417,22 @@ export class ImportService {
     ];
 
     // Modèle vierge sans données de démonstration (uniquement les en-têtes)
-    const worksheetData = [headers];
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-
-    // Ajustement de la largeur des colonnes
-    worksheet['!cols'] = [
-      { wch: 18 }, // Date
-      { wch: 35 }, // Libellé
-      { wch: 18 }, // Entrée
-      { wch: 18 }, // Sortie
-      { wch: 16 }, // Service
-      { wch: 26 }, // Partenaire
-      { wch: 16 }, // N° Dossier
-      { wch: 10 }, // Quantité
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Modèle Caisse');
-
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Modèle Caisse');
+    worksheet.addRow(headers);
+    [18, 35, 18, 18, 16, 26, 16, 10].forEach((width, index) => {
+      worksheet.getColumn(index + 1).width = width;
+    });
     const fileName = 'modele_import_caisse.xlsx';
-    XLSX.writeFile(workbook, fileName);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 }

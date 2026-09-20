@@ -245,7 +245,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(2)],
     }),
-    service: new FormControl<Service | ''>('', {
+    service: new FormControl<string>('', {
       nonNullable: true,
       validators: [Validators.required],
     }),
@@ -286,7 +286,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(2)],
     }),
-    service: new FormControl<Service | ''>('', {
+    service: new FormControl<string>('', {
       nonNullable: true,
       validators: [Validators.required],
     }),
@@ -344,11 +344,15 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
     // Écoute dynamique du type de service
     this.transactionForm.get('service')?.valueChanges.subscribe((type) => {
-      this.isOperationsType.set(Boolean(type));
+      const isOperations = type === 'Opérations';
+      this.isOperationsType.set(isOperations);
+      this.updateOperationsValidators(this.transactionForm, isOperations);
     });
 
     this.editTransactionForm.get('service')?.valueChanges.subscribe((type) => {
-      this.isEditOperationsType.set(Boolean(type));
+      const isOperations = type === 'Opérations';
+      this.isEditOperationsType.set(isOperations);
+      this.updateOperationsValidators(this.editTransactionForm, isOperations);
     });
 
     // Conversion automatique si saisie directe d'un montant négatif (ex: -5000 -> catégorie sortie + 5000)
@@ -375,6 +379,22 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         );
       }
     });
+  }
+
+  private updateOperationsValidators(form: FormGroup, isOperations: boolean): void {
+    const dossierControl = form.get('noDossier');
+    const quantityControl = form.get('quantity');
+    if (!dossierControl || !quantityControl) return;
+
+    if (isOperations) {
+      dossierControl.setValidators([Validators.required]);
+      quantityControl.setValidators([Validators.required, Validators.min(1)]);
+    } else {
+      dossierControl.clearValidators();
+      quantityControl.clearValidators();
+    }
+    dossierControl.updateValueAndValidity({ emitEvent: false });
+    quantityControl.updateValueAndValidity({ emitEvent: false });
   }
 
   public readonly todayFormatted = signal<string>('');

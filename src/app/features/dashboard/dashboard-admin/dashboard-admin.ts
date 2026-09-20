@@ -224,7 +224,7 @@ export class DashboardAdmin implements OnInit {
 
     const categoryMap = new Map<string, { amount: number; count: number }>();
     for (const tx of expenseTx) {
-      const cat = tx.service || 'Autre dépense';
+      const cat = tx.typeTransaction || tx.service || 'Autre dépense';
       const existing = categoryMap.get(cat) || { amount: 0, count: 0 };
       existing.amount += Math.abs(tx.montant);
       existing.count += 1;

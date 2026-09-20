@@ -4,14 +4,17 @@ import { CashierService } from '../../core/services/cashier.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { vi } from 'vitest';
 
 describe('CashierManagement', () => {
   let component: CashierManagement;
   let fixture: ComponentFixture<CashierManagement>;
   let service: CashierService;
   let notificationService: NotificationService;
+  let originalFetch: typeof globalThis.fetch;
 
   beforeEach(async () => {
+    originalFetch = globalThis.fetch;
     await TestBed.configureTestingModule({
       imports: [CashierManagement],
       providers: [
@@ -28,11 +31,50 @@ describe('CashierManagement', () => {
       ],
     }).compileComponents();
 
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/supabase-config')) {
+        return new Response(JSON.stringify({ configured: false }), { status: 200 });
+      }
+
+      const method = init?.method || 'GET';
+      if (method === 'GET') {
+        return new Response(JSON.stringify({ operations: [] }), { status: 200 });
+      }
+
+      if (method === 'POST') {
+        const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        const category = body['category'] === 'sortie' ? 'sortie' : 'entree';
+        const amount = Number(body['montant'] || 0);
+        return new Response(JSON.stringify({
+          success: true,
+          operation: {
+            id: `test-operation-${Date.now()}`,
+            date: body['date'] || '2026-09-20',
+            libelle: body['libelle'],
+            service: body['service'],
+            category,
+            status: body['status'] || 'draft',
+            no_dossier: body['noDossier'] || null,
+            employee: body['employee'] || null,
+            quantity: body['quantity'] || null,
+            montant: category === 'sortie' ? -Math.abs(amount) : Math.abs(amount),
+          },
+        }), { status: 201 });
+      }
+
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }) as typeof globalThis.fetch;
+
     fixture = TestBed.createComponent(CashierManagement);
     component = fixture.componentInstance;
     service = TestBed.inject(CashierService);
     notificationService = TestBed.inject(NotificationService);
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
   it('devrait créer le composant', () => {
@@ -196,7 +238,7 @@ describe('CashierManagement', () => {
   });
 
   it('devrait afficher une notification d’avertissement lors de la détection d’un doublon', async () => {
-    spyOn(notificationService, 'warning');
+    vi.spyOn(notificationService, 'warning');
 
     // 1. Ajouter une première transaction
     component.startAddInline();
@@ -226,7 +268,7 @@ describe('CashierManagement', () => {
     expect(service.allTransactions().length).toBe(1);
     // NotificationService.warning doit avoir été appelé avec un titre explicite
     expect(notificationService.warning).toHaveBeenCalledWith(
-      jasmine.stringMatching(/Opération déjà enregistrée/),
+      expect.stringMatching(/Opération déjà enregistrée/),
       'Doublon détecté'
     );
     expect(component.error()).toContain('Opération déjà enregistrée');
