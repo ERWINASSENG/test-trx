@@ -39,14 +39,6 @@ export interface EmployeeCashStat {
   percentage: number;
 }
 
-export interface DepartmentStat {
-  name: string;
-  head: string;
-  budget: number;
-  spent: number;
-  color: string;
-}
-
 @Component({
   selector: 'app-dashboard-admin',
   imports: [RouterLink],
@@ -136,7 +128,7 @@ export class DashboardAdmin implements OnInit {
     const netBalance = income - expense;
     const globalBalance = this.cashierService.currentBalance();
     const totalTransactions = list.length;
-    const expenseRatio = income > 0 ? Math.min(100, Math.round((expense / income) * 100)) : 0;
+    const expenseRatio = income > 0 ? Math.round((expense / income) * 100) : 0;
 
     return {
       income,
@@ -151,7 +143,7 @@ export class DashboardAdmin implements OnInit {
   // Évolution temporelle (Graphique en barres / aires comparatives)
   public readonly timelineChartData = computed<ChartTimePoint[]>(() => {
     const list = [...this.filteredTransactions()].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => this.parseTransactionDate(a.date).getTime() - this.parseTransactionDate(b.date).getTime()
     );
 
     if (list.length === 0) {
@@ -181,7 +173,22 @@ export class DashboardAdmin implements OnInit {
       if (val.expense > maxVal) maxVal = val.expense;
     });
 
-    let runningBalance = 0;
+    const period = this.selectedPeriod();
+    const now = new Date();
+    const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+    const thresholdDate = period === 'all'
+      ? null
+      : new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const openingBalance = thresholdDate
+      ? this.allTransactions()
+        .filter((tx) => {
+          const txDate = this.parseTransactionDate(tx.date);
+          return !isNaN(txDate.getTime()) && txDate < thresholdDate;
+        })
+        .reduce((balance, tx) => balance + tx.montant, 0)
+      : 0;
+
+    let runningBalance = openingBalance;
     const result: ChartTimePoint[] = [];
 
     grouped.forEach((val, dateStr) => {
@@ -291,48 +298,9 @@ export class DashboardAdmin implements OnInit {
   // Dernières transactions récentes
   public readonly recentTransactions = computed<CashierTransaction[]>(() => {
     return [...this.allTransactions()]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => this.parseTransactionDate(b.date).getTime() - this.parseTransactionDate(a.date).getTime())
       .slice(0, 5);
   });
-
-  // Statistiques globales du département (rétrocompatibilité)
-  public readonly stats = computed(() => ({
-    totalUsers: this.totalUsersCount(),
-    activeUsers: this.activeUsersCount(),
-    totalTreasury: this.cashierService.currentBalance() || 24500000,
-    monthlyBurn: 8350000,
-  }));
-
-  public readonly departments = signal<DepartmentStat[]>([
-    {
-      name: 'Direction Financière & Caisse',
-      head: 'Armand Ndoumbe',
-      budget: 15000000,
-      spent: 9800000,
-      color: '#059669',
-    },
-    {
-      name: 'Opérations Maritimes & Transit',
-      head: 'Marthe Essomba',
-      budget: 35000000,
-      spent: 28400000,
-      color: '#2563eb',
-    },
-    {
-      name: 'Ressources Humaines & Paie',
-      head: 'Gervais Mengue',
-      budget: 12000000,
-      spent: 8500000,
-      color: '#7c3aed',
-    },
-    {
-      name: 'Logistique & Flotte',
-      head: 'Samuel Eboa',
-      budget: 22000000,
-      spent: 19750000,
-      color: '#d97706',
-    },
-  ]);
 
   public setPeriod(period: '7d' | '30d' | '90d' | 'all'): void {
     this.selectedPeriod.set(period);
