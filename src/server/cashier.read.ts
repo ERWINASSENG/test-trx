@@ -72,7 +72,6 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
       if (!isComptable) return enriched;
 
       const restrictedRow = { ...enriched };
-      delete restrictedRow['montant'];
       delete restrictedRow['solde_apres'];
       return restrictedRow;
     });
