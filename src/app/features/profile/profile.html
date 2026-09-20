@@ -19,6 +19,12 @@
     }
   </div>
 
+  @if (profileError()) {
+    <div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold" id="profile-error-alert">
+      {{ profileError() }}
+    </div>
+  }
+
   @if (isSavedSuccess()) {
     <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold" id="profile-feedback-alert">
       Vos informations de profil ont été mises à jour avec succès.

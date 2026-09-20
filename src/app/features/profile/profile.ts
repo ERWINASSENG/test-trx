@@ -19,6 +19,7 @@ export class Profile {
   public readonly currentUser = this.authService.currentUser;
   public readonly isSavedSuccess = signal<boolean>(false);
   public readonly isPasswordSuccess = signal<boolean>(false);
+  public readonly profileError = signal<string | null>(null);
   public readonly passwordError = signal<string | null>(null);
 
   // Formulaire d'informations personnelles
@@ -70,27 +71,57 @@ export class Profile {
     if (!user) return;
 
     const val = this.profileForm.getRawValue();
-    await this.userService.updateUser(user.id, {
+    const result = await this.userService.updateCurrentUserProfile({
       firstName: val.firstName,
       lastName: val.lastName,
       phone: val.phone,
       department: val.department,
     });
 
+    if (!result.success) {
+      this.profileError.set(result.error || 'Impossible de mettre à jour votre profil.');
+      this.isSavedSuccess.set(false);
+      return;
+    }
+
+    const current = this.currentUser();
+    if (current) {
+      this.authService.setLocalSession(
+        {
+          ...current,
+          firstName: val.firstName,
+          lastName: val.lastName,
+          phone: val.phone,
+          department: val.department,
+        },
+        this.authService.token() ?? ''
+      );
+    }
+
+    this.profileError.set(null);
     this.isSavedSuccess.set(true);
     setTimeout(() => this.isSavedSuccess.set(false), 3000);
   }
 
-  public onSavePassword(): void {
+  public async onSavePassword(): Promise<void> {
     if (this.passwordForm.invalid) {
       this.passwordForm.markAllAsTouched();
       return;
     }
 
-    const { newPassword, confirmPassword } = this.passwordForm.getRawValue();
+    const { currentPassword, newPassword, confirmPassword } = this.passwordForm.getRawValue();
 
     if (newPassword !== confirmPassword) {
       this.passwordError.set('Les mots de passe saisis ne correspondent pas.');
+      this.isPasswordSuccess.set(false);
+      return;
+    }
+
+    const result = await this.authService.updatePassword(currentPassword, newPassword);
+
+    if (!result.success) {
+      this.passwordError.set(result.error || 'Le mot de passe n’a pas pu être modifié.');
+      this.isPasswordSuccess.set(false);
       return;
     }
 

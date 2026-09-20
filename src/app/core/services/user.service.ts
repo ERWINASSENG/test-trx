@@ -283,6 +283,45 @@ export class UserService {
   }
 
   /**
+   * Met à jour son propre profil depuis la page Mon profil.
+   * Cette route ne doit pas passer par l'API d'administration, car les utilisateurs standards
+   * n'ont pas les droits d'éditer un autre compte ni de modifier le rôle.
+   */
+  public async updateCurrentUserProfile(payload: Partial<Pick<UpdateUserPayload, 'firstName' | 'lastName' | 'department' | 'phone'>>): Promise<{ success: boolean; error?: string }> {
+    this._isLoading.set(true);
+    this._error.set(null);
+
+    try {
+      if (!this.isBrowser) {
+        return { success: false, error: 'La mise à jour du profil n’est possible que depuis le navigateur.' };
+      }
+
+      const authToken = await this.getAuthToken();
+      const res = await fetch('/api/profile/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || `Erreur serveur (${res.status})`);
+      }
+
+      this._isLoading.set(false);
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la mise à jour du profil';
+      this._error.set(msg);
+      this._isLoading.set(false);
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
    * Met à jour les informations ou le rôle d'un utilisateur existant
    */
   public async updateUser(id: string, payload: UpdateUserPayload): Promise<{ success: boolean; error?: string }> {

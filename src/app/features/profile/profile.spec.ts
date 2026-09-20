@@ -39,4 +39,38 @@ describe('Profile Component', () => {
     expect(component.passwordError()).toBeTruthy();
     expect(component.isPasswordSuccess()).toBe(false);
   });
+
+  it('ne devrait pas afficher un succès si la sauvegarde du profil échoue', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const authService = TestBed.inject(AuthService) as any;
+    authService._currentUser.set({
+      id: 'user-1',
+      email: 'user@test.com',
+      firstName: 'Jean',
+      lastName: 'Dupont',
+      role: 'employe',
+      department: 'Finance',
+      phone: '+33600000000',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    const userService = TestBed.inject(UserService);
+    spyOn(userService, 'updateCurrentUserProfile').and.resolveTo({
+      success: false,
+      error: 'Mise à jour impossible',
+    });
+
+    component.profileForm.patchValue({
+      firstName: 'Jean',
+      lastName: 'Dupont',
+      phone: '+33600000000',
+      department: 'Finance',
+    });
+
+    await component.onSaveProfile();
+
+    expect(component.isSavedSuccess()).toBe(false);
+    expect(component.profileError()).toBe('Mise à jour impossible');
+  });
 });
