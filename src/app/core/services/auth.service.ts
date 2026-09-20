@@ -364,6 +364,48 @@ export class AuthService {
     }
   }
 
+  public async updatePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.supabaseService.ensureInitialized();
+
+      if (!this.checkSupabaseConfigured() || !this.supabaseService.supabase) {
+        return { success: false, error: 'Le service Supabase n’est pas configuré.' };
+      }
+
+      const current = this._currentUser();
+      if (!current?.email) {
+        return { success: false, error: 'Utilisateur non connecté.' };
+      }
+
+      const { error: signInError } = await this.supabaseService.supabase.auth.signInWithPassword({
+        email: current.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        return {
+          success: false,
+          error: 'Le mot de passe actuel est incorrect.',
+        };
+      }
+
+      const { error: updateError } = await this.supabaseService.supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      return { success: true };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Impossible de modifier le mot de passe.',
+      };
+    }
+  }
+
   public hasRole(requiredRoles: UserRole | UserRole[]): boolean {
     const current = this._currentUser();
     if (!current || !current.isActive) return false;
