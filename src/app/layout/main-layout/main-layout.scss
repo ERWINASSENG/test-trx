@@ -1,0 +1,267 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-bg, #f8fafc);
+  color: var(--app-text, #0f172a);
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ========================================================================= */
+/* LIGNE 1 : TOPBAR NAVIGATION GLOBALE (Style ERP Odoo)                      */
+/* ========================================================================= */
+.topbar {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-surface, #ffffff);
+  border-bottom: 1px solid var(--app-border, #e2e8f0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  color: var(--app-text, #0f172a);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+
+  .topbar-left,
+  .topbar-right {
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-link {
+    color: var(--app-text-muted, #64748b);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: color 0.15s ease, background-color 0.15s ease;
+    border-radius: 4px;
+    padding: 4px 8px;
+
+    .nav-icon {
+      color: var(--app-text-subtle, #94a3b8);
+      transition: color 0.15s ease;
+    }
+
+    &:hover {
+      color: var(--app-text, #0f172a);
+      background-color: var(--app-surface-hover, rgba(0, 0, 0, 0.05));
+
+      .nav-icon {
+        color: var(--app-text, #0f172a);
+      }
+    }
+
+    &.active {
+      color: var(--odoo-text-teal, #00a09d) !important;
+      font-weight: 600;
+
+      .nav-icon {
+        color: var(--odoo-text-teal, #00a09d) !important;
+      }
+    }
+  }
+
+  .utility-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: var(--app-text-muted, #64748b);
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background-color: var(--app-surface-hover, rgba(0, 0, 0, 0.05));
+      color: var(--app-text, #0f172a);
+    }
+  }
+
+  .user-profile {
+    .avatar {
+      background-color: var(--odoo-avatar-gold, #d39e00);
+      color: #1e293b;
+      border-radius: 4px;
+      font-weight: 700;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+
+      .status-dot {
+        background-color: var(--odoo-status-green, #28a745);
+        border: 2px solid var(--app-surface, #ffffff);
+      }
+    }
+  }
+
+  /* Panneau dropdown utilisateur adapté clair / sombre */
+  .user-dropdown-panel {
+    background-color: var(--app-surface, #ffffff);
+    border: 1px solid var(--app-border, #e2e8f0);
+    animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+    .dropdown-item {
+      transition: background-color 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background-color: var(--app-surface-hover, rgba(0, 0, 0, 0.05));
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--odoo-text-teal, #00a09d);
+        outline-offset: -1px;
+      }
+
+      &:active {
+        transform: scale(0.99);
+      }
+    }
+  }
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ========================================================================= */
+/* LIGNE 2 : CONTROL PANEL ACTIONS & RECHERCHE                               */
+/* ========================================================================= */
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-surface, #ffffff);
+  border-bottom: 1px solid var(--app-border, #e2e8f0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  color: var(--app-text, #0f172a);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+
+  .cp-left,
+  .cp-right {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Bouton d'action principal (#190056) */
+  .btn-primary {
+    background-color: var(--odoo-primary-purple, #190056);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background-color 0.15s ease, transform 0.05s ease;
+
+    &:hover {
+      background-color: var(--odoo-primary-purple-hover, #130042);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--odoo-text-teal, #00a09d);
+      outline-offset: 2px;
+    }
+  }
+
+  /* Bouton secondaire */
+  .btn-secondary {
+    background-color: var(--app-surface-hover, #f1f5f9);
+    color: var(--app-text, #0f172a);
+    border: 1px solid var(--app-border, #cbd5e1);
+    border-radius: 4px;
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      background-color: var(--app-border, #e2e8f0);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--odoo-text-teal, #00a09d);
+      outline-offset: 2px;
+    }
+  }
+
+  /* Fil d'Ariane */
+  .breadcrumbs {
+    .title {
+      color: var(--odoo-text-teal, #00a09d);
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: var(--app-text-muted, #64748b);
+    }
+  }
+
+  /* Barre de recherche facettée style Odoo */
+  .search-bar {
+    background-color: var(--odoo-bg-search, #f1f5f9);
+    border: 1px solid var(--app-border, #cbd5e1);
+    border-radius: 4px;
+    width: 100%;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+
+    &:focus-within {
+      background-color: var(--app-surface, #ffffff);
+      border-color: var(--odoo-text-teal, #00a09d);
+      box-shadow: 0 0 0 1px var(--odoo-text-teal, #00a09d);
+    }
+
+    .search-tag {
+      background-color: var(--odoo-primary-purple, #714b67);
+      border-radius: 3px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+      color: #ffffff;
+      font-weight: 600;
+
+      .tag-value {
+        color: #f8fafc;
+      }
+    }
+
+    input {
+      color: var(--app-text, #0f172a);
+
+      &::placeholder {
+        color: var(--app-text-subtle, #94a3b8);
+      }
+    }
+  }
+
+  /* Boutons de pagination et commutateurs de vue */
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--app-text-muted, #64748b);
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      background-color: var(--app-surface-hover, rgba(0, 0, 0, 0.05));
+      color: var(--app-text, #0f172a);
+    }
+
+    &.active {
+      color: var(--odoo-text-teal, #00a09d) !important;
+      border: 1px solid var(--odoo-text-teal, #00a09d);
+      background-color: rgba(0, 160, 157, 0.12);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--odoo-text-teal, #00a09d);
+      outline-offset: 1px;
+    }
+  }
+}

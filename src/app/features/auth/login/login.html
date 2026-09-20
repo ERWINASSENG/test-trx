@@ -1,0 +1,110 @@
+<div class="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden" id="login-container">
+  <!-- Cercles d'ambiance en arrière-plan -->
+  <div class="absolute -top-40 -right-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+  <div class="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10">
+    <div class="inline-block px-4 py-1.5 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold tracking-widest uppercase mb-4" id="brand-tag">
+      Transimex Logistics
+    </div>
+    <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white uppercase" id="brand-title">
+      PORTAIL TRANSIMEX
+    </h1>
+  </div>
+
+  <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4 sm:px-0">
+    <div class="bg-slate-800/90 border border-slate-700/60 shadow-2xl rounded-2xl p-6 sm:p-8 backdrop-blur-xl" id="login-card">
+
+      <!-- Message d'erreur s'il y a lieu -->
+      @if (authError()) {
+        <div class="mb-5 p-3.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs" id="login-error-alert">
+          <p class="font-semibold mb-0.5">Erreur de connexion</p>
+          <p class="leading-relaxed">{{ authError() }}</p>
+        </div>
+      }
+
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-5" id="login-form" novalidate>
+        <!-- Champ Email -->
+        <div>
+          <label for="login-email-input" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            Adresse Email Professionnelle
+          </label>
+          <input
+            id="login-email-input"
+            type="email"
+            formControlName="email"
+            placeholder="nom@transmex.com"
+            class="block w-full px-4 py-2.5 text-sm bg-slate-900/80 border border-slate-700 text-white rounded-xl placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+            [class.border-rose-500]="loginForm.controls.email.invalid && loginForm.controls.email.touched"
+            autocomplete="email"
+          />
+          @if (loginForm.controls.email.invalid && loginForm.controls.email.touched) {
+            <p class="mt-1.5 text-xs text-rose-400">
+              Veuillez saisir une adresse email valide.
+            </p>
+          }
+        </div>
+
+        <!-- Champ Mot de passe -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="login-password-input" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+              Mot de Passe
+            </label>
+            <button
+              type="button"
+              (click)="togglePasswordVisibility()"
+              class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              id="toggle-pwd-btn">
+              {{ showPassword() ? 'Masquer' : 'Afficher' }}
+            </button>
+          </div>
+          <input
+            id="login-password-input"
+            [type]="showPassword() ? 'text' : 'password'"
+            formControlName="password"
+            placeholder="••••••••"
+            class="block w-full px-4 py-2.5 text-sm bg-slate-900/80 border border-slate-700 text-white rounded-xl placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+            [class.border-rose-500]="loginForm.controls.password.invalid && loginForm.controls.password.touched"
+            autocomplete="current-password"
+          />
+          @if (loginForm.controls.password.invalid && loginForm.controls.password.touched) {
+            <p class="mt-1.5 text-xs text-rose-400">
+              Le mot de passe est obligatoire.
+            </p>
+          }
+        </div>
+
+        <!-- Options de session -->
+        <div class="flex items-center justify-between">
+          <label class="flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              formControlName="rememberMe"
+              class="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900"
+              id="remember-me-checkbox"
+            />
+            <span class="ml-2 text-xs text-slate-300">Rester connecté</span>
+          </label>
+          <span class="text-xs text-emerald-400 font-medium">
+            Session chiffrée
+          </span>
+        </div>
+
+        <!-- Bouton de soumission -->
+        <button
+          type="submit"
+          [disabled]="isLoading()"
+          class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center text-center disabled:opacity-50 disabled:cursor-not-allowed"
+          id="login-submit-btn">
+          @if (isLoading()) {
+            <span>Authentification en cours...</span>
+          } @else {
+            <span>Se connecter</span>
+          }
+        </button>
+      </form>
+
+    </div>
+  </div>
+</div>

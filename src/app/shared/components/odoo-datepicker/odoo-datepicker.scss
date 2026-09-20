@@ -1,0 +1,146 @@
+.odoo-datepicker-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 99999;
+  width: 260px;
+  min-width: 260px;
+  background-color: #2b2f38;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.6), 0 10px 15px -5px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  user-select: none;
+  font-family: inherit;
+  pointer-events: auto;
+
+  // Flèche triangulaire d'ancrage en haut
+  .odoo-popover-arrow {
+    position: absolute;
+    top: -6px;
+    left: 24px;
+    width: 10px;
+    height: 10px;
+    background-color: #2b2f38;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    transform: rotate(45deg);
+  }
+
+  // En-tête mois / navigation
+  .odoo-dp-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 0 2px;
+
+    .odoo-dp-nav-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.7);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+      }
+    }
+
+    .odoo-dp-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: -0.01em;
+      margin-left: 2px;
+    }
+  }
+
+  // Grille
+  .odoo-dp-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .odoo-dp-row {
+      display: grid;
+      grid-template-columns: 28px repeat(7, 1fr);
+      align-items: center;
+      text-align: center;
+    }
+
+    // En-têtes des jours (L M M J V S D)
+    .odoo-dp-weekdays {
+      margin-bottom: 4px;
+
+      .odoo-dp-week-num-header {
+        width: 28px;
+      }
+
+      .odoo-dp-weekday-label {
+        font-size: 0.8125rem;
+        font-weight: 700;
+        color: #f8fafc;
+        text-align: center;
+      }
+    }
+
+    // Numéros de semaines ISO (36, 37, 38...)
+    .odoo-dp-week-num {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #38bdf8; // Bleu cyan lumineux Odoo
+      text-align: left;
+      padding-left: 2px;
+    }
+
+    // Cellules des jours
+    .odoo-dp-day-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin: 0 auto;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: #e2e8f0;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.1s ease;
+
+      &:hover:not(.is-selected):not(.is-today) {
+        background-color: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
+      }
+
+      // Jours du mois d'avant / d'après
+      &.is-other-month {
+        color: #64748b; // Grisé
+      }
+
+      // Jour sélectionné (pastille vert/teal Odoo de l'image d.png)
+      &.is-selected {
+        background-color: #008080 !important; // Teal foncé Odoo de l'image
+        color: #ffffff !important;
+        font-weight: 600;
+      }
+
+      // Date du jour (pastille rouge vif de l'image d.png)
+      &.is-today {
+        background-color: #dc2626 !important; // Rouge vif
+        color: #ffffff !important;
+        font-weight: 600;
+      }
+    }
+  }
+}

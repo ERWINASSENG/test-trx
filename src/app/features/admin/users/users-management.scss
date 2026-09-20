@@ -1,0 +1,120 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  #users-management-container {
+    color: var(--app-text, #f1f5f9);
+
+    #page-header,
+    #filters-bar,
+    #users-table-card,
+    #user-modal {
+      background-color: var(--app-surface, #2b2f33);
+      border-color: var(--app-border, #343a40);
+      color: var(--app-text, #f1f5f9);
+    }
+
+    h1, h2 {
+      color: var(--app-text, #f1f5f9) !important;
+    }
+
+    p {
+      color: var(--app-text-muted, #94a3b8);
+    }
+
+    // Input recherche et filtres
+    #user-search-input {
+      background-color: var(--odoo-bg-search, #1a1d20);
+      border-color: var(--app-border, #343a40);
+      color: var(--app-text, #ffffff);
+
+      &::placeholder {
+        color: var(--app-text-muted, #94a3b8);
+      }
+    }
+
+    // Boutons filtres
+    .bg-slate-100 {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+      color: var(--app-text, #f1f5f9) !important;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.14) !important;
+      }
+    }
+
+    // Tableaux
+    table {
+      thead tr {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border-color: var(--app-border, #343a40) !important;
+
+        th {
+          color: var(--app-text-muted, #94a3b8) !important;
+        }
+      }
+
+      tbody {
+        border-color: var(--app-border-subtle, #343a40) !important;
+
+        tr {
+          border-color: var(--app-border-subtle, #343a40) !important;
+
+          &:hover {
+            background-color: var(--app-surface-hover, #343a40) !important;
+          }
+
+          td {
+            color: var(--app-text, #f1f5f9);
+
+            .text-slate-900 {
+              color: var(--app-text, #f1f5f9) !important;
+            }
+
+            .text-slate-600,
+            .text-slate-500 {
+              color: var(--app-text-muted, #94a3b8) !important;
+            }
+          }
+        }
+      }
+    }
+
+    // Formulaire de modale
+    form {
+      label {
+        color: var(--app-text, #f1f5f9) !important;
+      }
+
+      input, select {
+        background-color: var(--odoo-bg-search, #1a1d20);
+        border-color: var(--app-border, #343a40);
+        color: var(--app-text, #ffffff);
+
+        &::placeholder {
+          color: var(--app-text-muted, #94a3b8);
+        }
+
+        option {
+          background-color: var(--app-surface, #2b2f33);
+          color: var(--app-text, #ffffff);
+        }
+      }
+    }
+
+    // Boutons d'action du tableau
+    button[id^="edit-user-"],
+    button#close-modal-btn {
+      border-color: var(--app-border, #343a40);
+      color: var(--app-text, #f1f5f9);
+
+      &:hover {
+        background-color: var(--app-surface-hover, #343a40);
+      }
+    }
+  }
+}
+

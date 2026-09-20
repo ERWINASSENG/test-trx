@@ -1,0 +1,41 @@
+:host {
+  display: block;
+}
+
+// Micro-animations et styles ciblés pour la boîte de dialogue
+#cashier-import-modal-overlay {
+  animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#cashier-import-modal-container {
+  animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+// Zone de glisser-déposer accessible
+#dropzone-area {
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+
+  &:active {
+    transform: scale(0.99);
+  }
+}

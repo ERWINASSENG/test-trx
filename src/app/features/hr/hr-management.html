@@ -1,0 +1,362 @@
+<div class="space-y-6" id="hr-management-container">
+
+  <!-- Messages de notification réactifs -->
+  @if (successMessage()) {
+    <div
+      class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-xs transition-all"
+      id="hr-success-alert"
+      role="alert">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="font-medium">{{ successMessage() }}</span>
+      </div>
+      <button
+        type="button"
+        (click)="successMessage.set(null)"
+        class="text-emerald-700 hover:text-emerald-900 font-bold px-2 py-1"
+        aria-label="Fermer la notification">
+        &times;
+      </button>
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <button
+      type="button"
+      (click)="errorMessage.set(null)"
+      class="w-full p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between shadow-xs transition-all cursor-pointer hover:bg-rose-100 select-none text-left"
+      id="hr-error-alert"
+      title="Cliquer n'importe où pour fermer">
+      <span class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+        <span class="font-medium">{{ errorMessage() }}</span>
+      </span>
+      <span class="text-rose-600 text-xs font-semibold">✕ Fermer</span>
+    </button>
+  }
+
+  <!-- En-tête RH -->
+  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" id="hr-header">
+    <div>
+      <div class="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-2 border border-emerald-100">
+        Ressources Humaines & Rôles
+      </div>
+      <h1 class="text-xl sm:text-2xl font-bold text-slate-900">Collaborateurs & Effectifs</h1>
+      <p class="text-xs text-slate-500 mt-1">Annuaire d'entreprise, attribution des rôles d'accès et gestion des comptes.</p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <span class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+        Total effectif : {{ users().length }}
+      </span>
+
+      @if (isAdmin()) {
+        <button
+          type="button"
+          (click)="openCreateModal()"
+          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          id="btn-open-create-hr-user">
+          <span class="text-sm leading-none">+</span>
+          <span>Nouveau collaborateur</span>
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Barre de filtres & recherche -->
+  <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center gap-3">
+    <input
+      type="text"
+      [value]="searchQuery()"
+      (input)="searchQuery.set($any($event.target).value)"
+      placeholder="Rechercher un collaborateur par nom, département ou email..."
+      class="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+      id="hr-search-input"
+    />
+
+    <select
+      [value]="selectedDepartment()"
+      (change)="selectedDepartment.set($any($event.target).value)"
+      class="w-full sm:w-60 px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+      id="hr-dept-filter">
+      @for (dept of departments(); track dept) {
+        <option [value]="dept">{{ dept === 'all' ? 'Tous les départements' : dept }}</option>
+      }
+    </select>
+  </div>
+
+  <!-- Grille des fiches collaborateurs -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="hr-cards-grid">
+    @for (user of filteredCollaborators(); track user.id) {
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all" [id]="'hr-card-' + user.id">
+        <div>
+          <!-- En-tête de la carte -->
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-sm shrink-0">
+                {{ user.firstName[0] || '?' }}{{ user.lastName[0] || '?' }}
+              </div>
+              <div class="min-w-0">
+                <h3 class="font-bold text-sm text-slate-900 truncate">{{ user.firstName }} {{ user.lastName }}</h3>
+                <p class="text-[11px] text-slate-500 truncate">{{ user.email }}</p>
+              </div>
+            </div>
+
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+              {{ getRoleLabel(user.role) }}
+            </span>
+          </div>
+
+          <!-- Informations détaillées -->
+          <div class="space-y-2 py-3 border-y border-slate-100 text-xs">
+            <div class="flex items-center justify-between text-slate-600">
+              <span class="font-medium text-slate-400">Rôle système :</span>
+              <span class="font-semibold text-slate-800">{{ getRoleDefinition(user.role).label }}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-slate-600">
+              <span class="font-medium text-slate-400">Département :</span>
+              <span class="font-semibold text-slate-800">{{ user.department || 'Services Généraux' }}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-slate-600">
+              <span class="font-medium text-slate-400">Téléphone :</span>
+              <span class="font-semibold text-slate-800">{{ user.phone || 'Non renseigné' }}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-slate-600">
+              <span class="font-medium text-slate-400">Statut :</span>
+              <span class="font-semibold" [class]="user.isActive ? 'text-emerald-600' : 'text-rose-600'">
+                {{ user.isActive ? 'En poste' : 'Inactif' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Inscrit le : {{ user.createdAt | slice:0:10 }}</span>
+          @if (isAdmin()) {
+            <button
+              type="button"
+              (click)="openEditModal(user)"
+              class="px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+              [id]="'btn-edit-user-' + user.id">
+              Modifier rôle
+            </button>
+          } @else {
+            <span class="font-semibold text-emerald-700">Dossier actif</span>
+          }
+        </div>
+      </div>
+    } @empty {
+      <div class="col-span-full bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-400">
+        <p class="text-sm font-semibold text-slate-600">Aucun collaborateur trouvé</p>
+        <p class="text-xs mt-1">Modifiez vos filtres de recherche ou enregistrez de nouveaux profils.</p>
+      </div>
+    }
+  </div>
+
+  <!-- Modale accessible de création et d'attribution de rôle -->
+  @if (isModalOpen()) {
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+      id="hr-user-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hr-modal-title">
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-5 my-8" id="hr-user-modal-card">
+        <!-- En-tête de la modale -->
+        <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900" id="hr-modal-title">
+              {{ editingUserId() ? 'Modifier le collaborateur & rôle' : 'Créer un nouveau collaborateur' }}
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              {{ editingUserId() ? 'Mettez à jour le rôle et les informations professionnelles.' : 'Le compte sera provisionné dans Supabase avec un rôle défini.' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            (click)="closeModal()"
+            class="text-slate-400 hover:text-slate-600 text-xl font-bold p-1 leading-none rounded-lg cursor-pointer"
+            aria-label="Fermer la fenêtre">
+            &times;
+          </button>
+        </div>
+
+        <!-- Alerte d'erreur interne à la modale (cliquable n'importe où pour fermer) -->
+        @if (errorMessage()) {
+          <button
+            type="button"
+            (click)="errorMessage.set(null)"
+            class="w-full p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in cursor-pointer hover:bg-rose-100 transition-colors select-none text-left"
+            id="hr-modal-error-alert"
+            title="Cliquer n'importe où pour fermer">
+            <span class="w-2 h-2 rounded-full bg-rose-500 mt-1 shrink-0"></span>
+            <span class="flex-1">
+              <span class="font-bold block">Échec de l'opération :</span>
+              <span class="mt-0.5 block">{{ errorMessage() }}</span>
+            </span>
+            <span class="text-rose-600 hover:text-rose-800 text-xs font-semibold px-1 py-0.5">✕</span>
+          </button>
+        }
+
+        <!-- Formulaire réactif -->
+        <form [formGroup]="userForm" (ngSubmit)="onSubmit()" class="space-y-4" id="hr-collaborator-form">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="hr-form-firstname" class="block text-xs font-semibold text-slate-700 mb-1">
+                Prénom <span class="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="hr-form-firstname"
+                formControlName="firstName"
+                placeholder="Ex: Amadou"
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+              @if (userForm.controls.firstName.touched && userForm.controls.firstName.invalid) {
+                <p class="text-[10px] text-rose-500 mt-1">Le prénom est requis (min 2 caractères).</p>
+              }
+            </div>
+
+            <div>
+              <label for="hr-form-lastname" class="block text-xs font-semibold text-slate-700 mb-1">
+                Nom <span class="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="hr-form-lastname"
+                formControlName="lastName"
+                placeholder="Ex: Diallo"
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+              @if (userForm.controls.lastName.touched && userForm.controls.lastName.invalid) {
+                <p class="text-[10px] text-rose-500 mt-1">Le nom est requis (min 2 caractères).</p>
+              }
+            </div>
+          </div>
+
+          <div>
+            <label for="hr-form-email" class="block text-xs font-semibold text-slate-700 mb-1">
+              Adresse email professionnelle <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="email"
+              id="hr-form-email"
+              formControlName="email"
+              placeholder="collaborateur@transmex.cm"
+              [readonly]="editingUserId() !== null"
+              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white disabled:opacity-60"
+            />
+            @if (userForm.controls.email.touched && userForm.controls.email.invalid) {
+              <p class="text-[10px] text-rose-500 mt-1">Veuillez saisir une adresse email valide.</p>
+            }
+          </div>
+
+          <!-- Attribution de Rôle (élément central) -->
+          <div>
+            <label for="hr-form-role" class="block text-xs font-semibold text-slate-700 mb-1">
+              Rôle attribué & Privilèges d'accès <span class="text-rose-500">*</span>
+            </label>
+            <select
+              id="hr-form-role"
+              formControlName="role"
+              class="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium text-slate-800">
+              @for (roleDef of roleList; track roleDef.id) {
+                <option [value]="roleDef.id">
+                  {{ roleDef.label }} ({{ roleDef.description }})
+                </option>
+              }
+            </select>
+            @if (userForm.controls.role.touched && userForm.controls.role.invalid) {
+              <p class="text-[10px] text-rose-500 mt-1">L'attribution d'un rôle est obligatoire.</p>
+            }
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="hr-form-dept" class="block text-xs font-semibold text-slate-700 mb-1">
+                Département
+              </label>
+              <input
+                type="text"
+                id="hr-form-dept"
+                formControlName="department"
+                placeholder="Ex: Opérations"
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label for="hr-form-phone" class="block text-xs font-semibold text-slate-700 mb-1">
+                Téléphone
+              </label>
+              <input
+                type="tel"
+                id="hr-form-phone"
+                formControlName="phone"
+                placeholder="+237 6XX XX XX XX"
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+            </div>
+          </div>
+
+          <!-- Mot de passe temporaire pour la création -->
+          @if (!editingUserId()) {
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div class="flex items-center justify-between">
+                <label for="hr-form-password" class="text-xs font-semibold text-slate-700">
+                  Mot de passe temporaire généré
+                </label>
+                <button
+                  type="button"
+                  (click)="regeneratePassword()"
+                  class="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                  id="btn-regenerate-password">
+                  Régénérer
+                </button>
+              </div>
+              <input
+                type="text"
+                id="hr-form-password"
+                formControlName="tempPassword"
+                class="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
+              />
+              <p class="text-[10px] text-slate-400">
+                Le collaborateur pourra modifier son mot de passe lors de sa première connexion.
+              </p>
+            </div>
+          }
+
+          <!-- Actions de la modale -->
+          <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              (click)="closeModal()"
+              [disabled]="isSubmitting()"
+              class="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              id="btn-cancel-hr-modal">
+              Annuler
+            </button>
+
+            <button
+              type="submit"
+              [disabled]="isSubmitting() || userForm.invalid"
+              class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              id="btn-submit-hr-user">
+              @if (isSubmitting()) {
+                <span class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                <span>Enregistrement...</span>
+              } @else {
+                <span>{{ editingUserId() ? 'Mettre à jour le rôle' : 'Créer et attribuer le rôle' }}</span>
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+</div>

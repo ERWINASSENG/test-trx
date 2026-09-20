@@ -1,0 +1,537 @@
+<div class="layout-container min-h-screen bg-slate-50 dark:bg-[#1e2227] flex flex-col text-slate-800 dark:text-slate-100" id="main-app-container">
+
+  <!-- ========================================================================= -->
+  <!-- LIGNE 1 : TOPBAR NAVIGATION GLOBALE (Style ERP Odoo Adaptatif)            -->
+  <!-- ========================================================================= -->
+  <header class="topbar sticky top-0 z-40 w-full bg-white dark:bg-[#212529] border-b border-slate-200 dark:border-white/10 text-slate-800 dark:text-white transition-colors" id="app-topbar">
+    <div class="w-full px-3 sm:px-5 flex items-center justify-between h-[50px] gap-3">
+
+      <!-- GAUCHE : Logo TRANSIMEX & Onglets Métier -->
+      <div class="topbar-left flex items-center gap-4 sm:gap-6 min-w-0">
+        <!-- Logo Transimex Préservé & Adaptatif -->
+        <a routerLink="/dashboard" class="flex items-center gap-2 group shrink-0" id="topbar-brand-logo" title="Transimex Global Logistics">
+          <div class="flex flex-col">
+            <span class="text-base sm:text-lg font-serif font-black tracking-wide text-slate-900 dark:text-white leading-none uppercase group-hover:text-[#00a09d] transition-colors">
+              TRANSIMEX
+            </span>
+            <div class="w-full h-[1px] bg-slate-300 dark:bg-white/70 mt-0.5 mb-0.5"></div>
+            <span class="text-[8px] font-bold tracking-wider text-[#ef4444] uppercase font-sans">
+              Global Logistics Provider
+            </span>
+          </div>
+        </a>
+
+        <!-- Séparateur vertical discret -->
+        <div class="hidden sm:block h-5 w-[1px] bg-slate-300 dark:bg-slate-700"></div>
+
+        <!-- Navigation Métier Horizontale -->
+        <nav class="hidden md:flex items-center gap-3 lg:gap-4 overflow-x-auto select-none" id="topbar-main-nav">
+          @for (item of visibleMenuItems(); track item.id) {
+            <a
+              [routerLink]="item.route"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+              class="nav-link flex items-center gap-1.5 text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer"
+              [id]="item.id">
+              <mat-icon class="!text-[16px] !w-4 !h-4 text-slate-400 nav-icon">{{ item.icon }}</mat-icon>
+              <span class="whitespace-nowrap">{{ item.label }}</span>
+            </a>
+          }
+        </nav>
+      </div>
+
+      <!-- DROITE : Utilitaires, Bascule Thème, Profil & Actions -->
+      <div class="topbar-right flex items-center gap-2 sm:gap-3.5 shrink-0" id="topbar-utilities-section">
+        
+        <!-- Bouton direct Mode Clair / Sombre (Soleil / Lune) -->
+        <button
+          type="button"
+          (click)="toggleTheme($event)"
+          class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+          [title]="isDarkMode() ? 'Passer en mode clair' : 'Passer en mode sombre'"
+          aria-label="Basculer le thème">
+          <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-amber-500 dark:text-amber-400">
+            {{ isDarkMode() ? 'dark_mode' : 'light_mode' }}
+          </mat-icon>
+        </button>
+
+        <!-- Icônes utilitaires (IA, Chat avec badge, Historique, Outils) -->
+        <div class="hidden lg:flex items-center gap-1 text-slate-600 dark:text-slate-300" id="topbar-utility-icons">
+          <!-- Icône IA Sparkles -->
+          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-amber-500 dark:text-amber-400 transition-colors" title="Assistant IA">
+            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">auto_awesome</mat-icon>
+          </button>
+
+          <!-- Icône Chat / Notifications avec badge 4 -->
+          <button type="button" class="utility-icon-btn relative p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Messages & Notifications">
+            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">chat</mat-icon>
+            <span class="notification-badge absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-bold px-1 rounded-full flex items-center justify-center min-w-[14px] h-[14px]">
+              4
+            </span>
+          </button>
+
+          <!-- Icône Horloge / Activités -->
+          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Historique & Horloge">
+            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">schedule</mat-icon>
+          </button>
+
+          <!-- Icône Outils / Configuration -->
+          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Outils système">
+            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">build</mat-icon>
+          </button>
+
+          <!-- Bouton direct Administration réservé aux administrateurs -->
+          @if (currentUser()?.role === 'admin') {
+            <a
+              routerLink="/admin/view"
+              class="utility-icon-btn p-1.5 rounded hover:bg-amber-400/20 text-amber-600 dark:text-amber-300 transition-colors flex items-center gap-1 text-xs font-semibold"
+              id="topbar-admin-shortcut"
+              title="Accès Panneau d'Administration">
+              <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-amber-500 dark:text-amber-400">admin_panel_settings</mat-icon>
+              <span class="hidden xl:inline">Admin</span>
+            </a>
+          }
+        </div>
+
+        @if (currentUser(); as user) {
+          <!-- Menu Déroulant Profil Utilisateur avec Avatar & Badges -->
+          <div class="relative" id="user-dropdown-container">
+            <button
+              type="button"
+              (click)="toggleUserDropdown($event)"
+              class="user-profile flex items-center gap-2 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#00A09D]"
+              id="topbar-user-profile-trigger"
+              [attr.aria-expanded]="isUserDropdownOpen()"
+              aria-haspopup="true"
+              title="Menu utilisateur et paramètres">
+              <!-- Avatar avec badge status vert -->
+              <div class="avatar relative w-7 h-7 rounded bg-[#d39e00] text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
+                @if (user.avatarUrl) {
+                  <img [src]="user.avatarUrl" alt="Avatar" class="w-full h-full object-cover rounded" />
+                } @else {
+                  <span>{{ user.firstName.charAt(0) || 'E' }}</span>
+                }
+                <span class="status-dot absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#28a745] rounded-full border-2 border-white dark:border-[#212529]"></span>
+              </div>
+              
+              <!-- Prénom et flèche chevron -->
+              <span class="hidden xl:inline text-xs font-medium text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white max-w-[100px] truncate">
+                {{ user.firstName }}
+              </span>
+              <mat-icon class="!text-[16px] !w-4 !h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform" [class.rotate-180]="isUserDropdownOpen()">
+                expand_more
+              </mat-icon>
+            </button>
+
+            <!-- Menu contextuel flottant -->
+            @if (isUserDropdownOpen()) {
+              <div
+                class="user-dropdown-panel absolute right-0 mt-2 w-64 rounded-lg bg-white dark:bg-[#2b2f33] border border-slate-200 dark:border-[#343a40] shadow-2xl z-50 overflow-hidden animate-fadeIn"
+                id="topbar-user-dropdown-menu"
+                role="menu"
+                aria-orientation="vertical">
+                
+                <!-- En-tête du menu : Identité & Rôle -->
+                <div class="p-3 bg-slate-50 dark:bg-[#212529] border-b border-slate-200 dark:border-[#343a40]">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-md bg-[#d39e00] text-slate-900 font-bold text-sm flex items-center justify-center shrink-0 shadow-sm">
+                      @if (user.avatarUrl) {
+                        <img [src]="user.avatarUrl" alt="Avatar" class="w-full h-full object-cover rounded-md" />
+                      } @else {
+                        <span>{{ user.firstName.charAt(0) || 'E' }}</span>
+                      }
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-xs font-semibold text-slate-900 dark:text-white truncate" id="dropdown-user-name">
+                        {{ user.firstName }} {{ user.lastName }}
+                      </p>
+                      <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate" id="dropdown-user-email">
+                        {{ user.email }}
+                      </p>
+                    </div>
+                  </div>
+                  <!-- Badge du rôle -->
+                  <div class="mt-2 flex items-center gap-1.5">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide uppercase" [class]="roleBadgeColor(user.role)" id="dropdown-user-role-badge">
+                      <mat-icon class="!text-[12px] !w-3 !h-3">verified_user</mat-icon>
+                      {{ roleLabel(user.role) }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Liste des actions du dropdown -->
+                <div class="py-1.5 px-1 space-y-0.5">
+                  <!-- Option 1 : Consulter / Modifier le profil -->
+                  <a
+                    routerLink="/profile"
+                    (click)="closeUserDropdown()"
+                    class="dropdown-item flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    id="dropdown-action-profile"
+                    role="menuitem">
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#00A09D]">person</mat-icon>
+                    <div class="flex flex-col">
+                      <span>Mon Profil</span>
+                      <span class="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Modifier mes informations</span>
+                    </div>
+                  </a>
+
+                  <!-- Option Admin -->
+                  @if (currentUser()?.role === 'admin') {
+                    <a
+                      routerLink="/admin/view"
+                      (click)="closeUserDropdown()"
+                      class="dropdown-item flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-amber-600 dark:text-amber-300 hover:text-amber-700 dark:hover:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-400/10 transition-colors cursor-pointer"
+                      id="dropdown-action-admin-view"
+                      role="menuitem">
+                      <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-amber-500 dark:text-amber-400">admin_panel_settings</mat-icon>
+                      <div class="flex flex-col">
+                        <span>Panneau d'Administration</span>
+                        <span class="text-[10px] text-amber-600/80 dark:text-amber-400/80 font-normal">Gestion des rôles & collaborateurs</span>
+                      </div>
+                    </a>
+                  }
+
+                  <!-- Option 2 : Bascule Mode Sombre / Mode Clair -->
+                  <button
+                    type="button"
+                    (click)="toggleTheme($event)"
+                    class="dropdown-item w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer text-left"
+                    id="dropdown-action-theme-toggle"
+                    role="menuitem"
+                    [title]="isDarkMode() ? 'Passer en mode clair' : 'Passer en mode sombre'">
+                    <div class="flex items-center gap-3">
+                      <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-amber-500 dark:text-amber-400">
+                        {{ isDarkMode() ? 'dark_mode' : 'light_mode' }}
+                      </mat-icon>
+                      <div class="flex flex-col">
+                        <span>Apparence</span>
+                        <span class="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                          {{ isDarkMode() ? 'Mode Sombre actif' : 'Mode Clair actif' }}
+                        </span>
+                      </div>
+                    </div>
+                    <!-- Switch visuel -->
+                    <div class="w-8 h-4.5 rounded-full p-0.5 flex items-center transition-colors" [class.bg-[#00A09D]]="isDarkMode()" [class.bg-slate-300]="!isDarkMode()">
+                      <div class="w-3.5 h-3.5 rounded-full bg-white shadow-sm transform transition-transform" [class.translate-x-3.5]="isDarkMode()" [class.translate-x-0]="!isDarkMode()"></div>
+                    </div>
+                  </button>
+                </div>
+
+                <!-- Séparateur -->
+                <div class="my-1 border-t border-slate-200 dark:border-[#343a40]"></div>
+
+                <!-- Option 3 : Déconnexion -->
+                <div class="p-1">
+                  <button
+                    type="button"
+                    (click)="logout()"
+                    class="dropdown-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors cursor-pointer text-left"
+                    id="dropdown-action-logout"
+                    role="menuitem">
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-red-500 dark:text-red-400">logout</mat-icon>
+                    <div class="flex flex-col">
+                      <span>Déconnexion</span>
+                      <span class="text-[10px] text-red-500/80 dark:text-red-400/80 font-normal">Quitter la session active</span>
+                    </div>
+                  </button>
+                </div>
+
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Bouton Menu Mobile Hamburger -->
+        <button
+          type="button"
+          (click)="toggleMenu()"
+          class="md:hidden p-1.5 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+          id="topbar-mobile-menu-toggle"
+          aria-label="Ouvrir le menu de navigation">
+          <mat-icon class="!text-[20px] !w-5 !h-5">{{ isMenuOpen() ? 'close' : 'menu' }}</mat-icon>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- MENU DÉROULANT MOBILE -->
+    @if (isMenuOpen()) {
+      <div class="md:hidden border-t border-slate-200 dark:border-[#343a40] bg-white dark:bg-[#212529] px-4 py-3 space-y-1 shadow-xl" id="topbar-mobile-dropdown">
+        @for (item of visibleMenuItems(); track item.id) {
+          <a
+            [routerLink]="item.route"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+            (click)="closeMenu()"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+            [id]="item.id + '-mobile'">
+            <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400">{{ item.icon }}</mat-icon>
+            <span>{{ item.label }}</span>
+          </a>
+        }
+      </div>
+    }
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- LIGNE 2 : CONTROL PANEL & ACTIONS (Style Odoo Actions Bar Adaptatif)      -->
+  <!-- Affiché EXCLUSIVEMENT dans le module Caisse                              -->
+  <!-- ========================================================================= -->
+  @if (isCashierRoute()) {
+    <div class="control-panel sticky top-[50px] z-30 w-full bg-slate-100 dark:bg-[#2b2f33] border-b border-slate-200 dark:border-white/10 transition-colors" id="app-control-panel">
+      <div class="w-full px-3 sm:px-5 flex flex-wrap lg:flex-nowrap items-center justify-between min-h-[48px] py-1.5 gap-3">
+
+        <!-- GAUCHE : Boutons d'Action & Fil d'Ariane -->
+        <div class="cp-left flex items-center gap-2 sm:gap-3 shrink-0" id="cp-actions-left">
+          @if (canEditCaisse()) {
+            <!-- Bouton Primaire (#190056) -->
+            <button
+              type="button"
+              (click)="onNouveau()"
+              class="btn-primary flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded transition-all cursor-pointer shadow-xs active:scale-95 bg-[#190056] hover:bg-[#130042] text-white"
+              id="cp-btn-nouveau">
+              <span>Nouveau</span>
+            </button>
+
+            <!-- Bouton Secondaire Uploader -->
+            <button
+              type="button"
+              (click)="onOpenImportModal()"
+              class="btn-secondary flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded transition-all cursor-pointer bg-white dark:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-transparent hover:bg-slate-50 dark:hover:bg-white/15"
+              id="cp-btn-uploader">
+              <span>Uploader</span>
+            </button>
+          }
+
+          <!-- Fil d'Ariane / Titre contextuel -->
+          <div class="breadcrumbs hidden sm:flex flex-col ml-1 leading-tight" id="cp-breadcrumbs">
+            <a
+              routerLink="/dashboard"
+              class="title text-xs font-bold text-[#00A09D] hover:underline hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1 focus:outline-hidden focus:ring-1 focus:ring-[#00A09D] rounded-xs"
+              id="cp-breadcrumb-dashboard-link"
+              title="Retour au Tableau de bord">
+              Tableau de bord
+            </a>
+            <span class="subtitle text-[11px] text-slate-500 dark:text-slate-400">
+              Opérations Caisse
+            </span>
+          </div>
+        </div>
+
+        <!-- CENTRE : Soit Barre d'Actions Odoo (si sélection), soit Barre de Recherche (si 0 sélection) -->
+        <div class="cp-center flex-1 max-w-[560px] min-w-[200px]" id="cp-search-center">
+          @if (selectedTransactionsCount() > 0) {
+            <!-- BARRE DE SÉLECTION ODOO STYLE (Badge sélection + Bouton Actions) -->
+            <div class="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150" id="cp-odoo-selection-bar">
+              <!-- Badge [ N sélectionné(s) ✕ ] -->
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#00A09D]/15 text-[#00A09D] border border-[#00A09D] shadow-2xs select-none" id="cp-selection-badge">
+                <span>{{ selectedTransactionsCount() }} sélectionné(s)</span>
+                <button
+                  type="button"
+                  (click)="clearSelection()"
+                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#00A09D]/30 text-[#00A09D] transition-colors cursor-pointer flex items-center justify-center font-bold"
+                  title="Annuler la sélection"
+                  aria-label="Annuler la sélection">
+                  <mat-icon class="!text-[13px] !w-3.5 !h-3.5 leading-none">close</mat-icon>
+                </button>
+              </div>
+
+              <!-- Bouton [ ⚙ Actions ] avec Dropdown Odoo -->
+              <div class="relative" id="cp-actions-dropdown-container">
+                <button
+                  type="button"
+                  (click)="toggleActionsMenu($event)"
+                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 bg-white dark:bg-[#1e2227] text-slate-800 dark:text-white border border-[#00A09D] hover:bg-slate-50 dark:hover:bg-white/5"
+                  [class.ring-2]="isActionsMenuOpen()"
+                  [class.ring-[#00A09D]/40]="isActionsMenuOpen()"
+                  id="cp-btn-odoo-actions">
+                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#00A09D]">settings</mat-icon>
+                  <span>Actions</span>
+                </button>
+
+                <!-- DROPDOWN MENU ODOO OWL -->
+                @if (isActionsMenuOpen()) {
+                  <div
+                    class="absolute top-full left-0 mt-1.5 w-56 bg-white dark:bg-[#212529] rounded-lg shadow-2xl border border-slate-200 dark:border-white/10 py-1.5 z-50 text-xs text-slate-700 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+                    id="cp-caisse-actions-menu"
+                    role="menu">
+                    
+                    <!-- 1. Exporter -->
+                    <button
+                      type="button"
+                      (click)="onExportAction()"
+                      class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 font-medium"
+                      id="cp-action-export-csv"
+                      role="menuitem">
+                      <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-slate-500 dark:text-slate-400">upload</mat-icon>
+                      <span>Exporter</span>
+                    </button>
+
+                    <!-- 2. Insérer dans la feuille de calcul -->
+                    <button
+                      type="button"
+                      (click)="onExportSpreadsheetAction()"
+                      class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 font-medium"
+                      id="cp-action-spreadsheet"
+                      role="menuitem">
+                      <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-slate-500 dark:text-slate-400">table_view</mat-icon>
+                      <span>Insérer dans la feuille de calcul</span>
+                    </button>
+
+                    <!-- 3. Dupliquer -->
+                    @if (canEditCaisse()) {
+                      <button
+                        type="button"
+                        (click)="onDuplicateAction()"
+                        class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 font-medium"
+                        id="cp-action-duplicate"
+                        role="menuitem">
+                        <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-slate-500 dark:text-slate-400">content_copy</mat-icon>
+                        <span>Dupliquer</span>
+                      </button>
+                    }
+
+                    <!-- 4. Supprimer (Style rouge Odoo) -->
+                    @if (canEditCaisse()) {
+                      <button
+                        type="button"
+                        (click)="onDeleteSelectedAction()"
+                        [disabled]="isDeleting()"
+                        class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium"
+                        id="cp-action-delete-selected"
+                        role="menuitem">
+                        <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-rose-500">delete_outline</mat-icon>
+                        <span>Supprimer</span>
+                      </button>
+                    }
+
+                    <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
+
+                    <!-- 5. Remettre en brouillon -->
+                    @if (canEditCaisse()) {
+                      <button
+                        type="button"
+                        (click)="onResetToDraftAction()"
+                        class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 font-normal"
+                        id="cp-action-reset-draft"
+                        role="menuitem">
+                        <span>Remettre en brouillon</span>
+                      </button>
+                    }
+
+                    <!-- 6. Télécharger les pièces jointes -->
+                    <button
+                      type="button"
+                      (click)="onDownloadAttachmentsAction()"
+                      class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 font-normal"
+                      id="cp-action-download-attachments"
+                      role="menuitem">
+                      <span>Télécharger les pièces jointes</span>
+                    </button>
+
+                  </div>
+                }
+              </div>
+            </div>
+          } @else {
+            <!-- BARRE DE RECHERCHE STANDARD QUAND 0 SÉLECTION -->
+            <div class="search-bar flex items-center rounded px-2.5 py-1 text-xs transition-all bg-white dark:bg-[#1e2227] border border-slate-300 dark:border-white/10 focus-within:border-[#00A09D]" id="cp-search-bar-wrapper">
+              <!-- Loupe -->
+              <mat-icon class="search-icon !text-[15px] !w-4 !h-4 text-slate-400 mr-2 shrink-0">search</mat-icon>
+
+              <!-- Input natif -->
+              <input
+                type="text"
+                [value]="searchQuery()"
+                (input)="onSearchInput($event)"
+                placeholder="Rechercher..."
+                class="bg-transparent text-slate-900 dark:text-white placeholder-slate-400 outline-none flex-grow min-w-[60px] text-xs"
+                id="cp-search-input" />
+
+              <!-- Flèche menu déroulant filtres -->
+              <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white ml-1 p-0.5 shrink-0 cursor-pointer" title="Options de recherche">
+                <mat-icon class="!text-[16px] !w-4 !h-4">arrow_drop_down</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- DROITE : Pagination & Commutateurs de Vue -->
+        <div class="cp-right flex items-center gap-3 shrink-0" id="cp-controls-right">
+          <!-- Pagination -->
+          <span class="pagination text-xs text-slate-600 dark:text-slate-300 select-none font-medium" id="cp-pagination-label">
+            {{ paginationLabel() }}
+          </span>
+
+          <!-- Groupe de boutons Flèches Pagination -->
+          <div class="btn-group flex items-center bg-white dark:bg-white/5 rounded border border-slate-300 dark:border-[#343A40] overflow-hidden" id="cp-pagination-buttons">
+            <button
+              type="button"
+              (click)="prevPage()"
+              [disabled]="!hasPrevPage()"
+              [class.opacity-40]="!hasPrevPage()"
+              [class.cursor-not-allowed]="!hasPrevPage()"
+              class="btn-icon p-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              title="Précédent">
+              <mat-icon class="!text-[15px] !w-4 !h-4 flex items-center justify-center">chevron_left</mat-icon>
+            </button>
+            <button
+              type="button"
+              (click)="nextPage()"
+              [disabled]="!hasNextPage()"
+              [class.opacity-40]="!hasNextPage()"
+              [class.cursor-not-allowed]="!hasNextPage()"
+              class="btn-icon p-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer border-l border-slate-300 dark:border-[#343A40]"
+              title="Suivant">
+              <mat-icon class="!text-[15px] !w-4 !h-4 flex items-center justify-center">chevron_right</mat-icon>
+            </button>
+          </div>
+
+          <!-- Sélecteurs de Vue (Graphique / Liste) -->
+          <div class="view-switchers flex items-center gap-1" id="cp-view-switchers">
+            <!-- Vue Graphique -->
+            <button
+              type="button"
+              (click)="activeView.set('graph')"
+              [class.active]="activeView() === 'graph'"
+              class="btn-icon p-1 rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Vue Graphique">
+              <mat-icon class="!text-[16px] !w-4 !h-4">bar_chart</mat-icon>
+            </button>
+
+            <!-- Vue Liste (Active) -->
+            <button
+              type="button"
+              (click)="activeView.set('list')"
+              [class.active]="activeView() === 'list'"
+              class="btn-icon p-1 rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Vue Liste">
+              <mat-icon class="!text-[16px] !w-4 !h-4">view_list</mat-icon>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- ========================================================================= -->
+  <!-- ZONE DE CONTENU PRINCIPAL (ROUTER-OUTLET)                                 -->
+  <!-- ========================================================================= -->
+  <main class="flex-1 w-full p-0" id="app-main-content">
+    <router-outlet></router-outlet>
+  </main>
+
+  <!-- Modale d'importation Excel / CSV de caisse -->
+  @if (cashierService.isImportModalOpen()) {
+    <app-cashier-import-modal
+      (dismissModal)="cashierService.closeImportModal()"
+      (importConfirmed)="onImportConfirmed($event)"
+    ></app-cashier-import-modal>
+  }
+
+</div>
+
+
+
+

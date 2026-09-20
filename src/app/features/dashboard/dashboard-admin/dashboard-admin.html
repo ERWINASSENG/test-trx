@@ -1,0 +1,421 @@
+<div class="space-y-6" id="dashboard-admin-view">
+  <!-- En-tête du Tableau de Bord Admin -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-[#2b2f33] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs" id="admin-header-card">
+    <div>
+      <div class="flex items-center gap-2">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-50" id="admin-header-title">
+          Tableau de bord Administrateur
+        </h1>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60" id="cashier-status-badge">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Flux Caisse Live
+        </span>
+      </div>
+      <p class="text-sm text-slate-600 dark:text-slate-300 mt-1">
+        Suivi analytique en temps réel des transactions de caisse, trésorerie et opérations financières.
+      </p>
+    </div>
+
+    <!-- Filtre temporel global -->
+    <div class="flex items-center gap-1.5 p-1 bg-slate-100/80 dark:bg-black/20 rounded-xl border border-slate-200/60 dark:border-white/10 self-start md:self-auto" id="period-selector">
+      <button
+        type="button"
+        id="period-btn-7d"
+        class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+        [class.bg-white]="selectedPeriod() === '7d'"
+        [class.dark:bg-[#2b2f33]]="selectedPeriod() === '7d'"
+        [class.text-slate-900]="selectedPeriod() === '7d'"
+        [class.dark:text-slate-100]="selectedPeriod() === '7d'"
+        [class.shadow-xs]="selectedPeriod() === '7d'"
+        [class.text-slate-600]="selectedPeriod() !== '7d'"
+        [class.dark:text-slate-300]="selectedPeriod() !== '7d'"
+        (click)="setPeriod('7d')"
+      >
+        7 Jours
+      </button>
+      <button
+        type="button"
+        id="period-btn-30d"
+        class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+        [class.bg-white]="selectedPeriod() === '30d'"
+        [class.dark:bg-[#2b2f33]]="selectedPeriod() === '30d'"
+        [class.text-slate-900]="selectedPeriod() === '30d'"
+        [class.dark:text-slate-100]="selectedPeriod() === '30d'"
+        [class.shadow-xs]="selectedPeriod() === '30d'"
+        [class.text-slate-600]="selectedPeriod() !== '30d'"
+        [class.dark:text-slate-300]="selectedPeriod() !== '30d'"
+        (click)="setPeriod('30d')"
+      >
+        30 Jours
+      </button>
+      <button
+        type="button"
+        id="period-btn-90d"
+        class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+        [class.bg-white]="selectedPeriod() === '90d'"
+        [class.dark:bg-[#2b2f33]]="selectedPeriod() === '90d'"
+        [class.text-slate-900]="selectedPeriod() === '90d'"
+        [class.dark:text-slate-100]="selectedPeriod() === '90d'"
+        [class.shadow-xs]="selectedPeriod() === '90d'"
+        [class.text-slate-600]="selectedPeriod() !== '90d'"
+        [class.dark:text-slate-300]="selectedPeriod() !== '90d'"
+        (click)="setPeriod('90d')"
+      >
+        3 Mois
+      </button>
+      <button
+        type="button"
+        id="period-btn-all"
+        class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+        [class.bg-white]="selectedPeriod() === 'all'"
+        [class.dark:bg-[#2b2f33]]="selectedPeriod() === 'all'"
+        [class.text-slate-900]="selectedPeriod() === 'all'"
+        [class.dark:text-slate-100]="selectedPeriod() === 'all'"
+        [class.shadow-xs]="selectedPeriod() === 'all'"
+        [class.text-slate-600]="selectedPeriod() !== 'all'"
+        [class.dark:text-slate-300]="selectedPeriod() !== 'all'"
+        (click)="setPeriod('all')"
+      >
+        Tout
+      </button>
+    </div>
+  </div>
+
+  <!-- Cartes d'indicateurs financiers (KPIs Caisse) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="kpi-financial-grid">
+    <!-- Solde Global Caisse -->
+    <div class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="kpi-card-global-balance">
+      <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+        <span class="text-xs font-medium uppercase tracking-wider">Solde Trésorerie Caisse</span>
+        <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60">Global</span>
+      </div>
+      <div>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-val-global-balance">
+          {{ formatCurrency(financialKPIs().globalBalance) }}
+        </div>
+        <p class="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1.5">
+          Position consolidée en direct
+        </p>
+      </div>
+    </div>
+
+    <!-- Total Entrées (Recettes) -->
+    <div class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="kpi-card-incomes">
+      <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+        <span class="text-xs font-medium uppercase tracking-wider">Total Recettes / Entrées</span>
+        <span class="text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800/60">Entrées</span>
+      </div>
+      <div>
+        <div class="text-2xl font-extrabold text-blue-600 dark:text-blue-400 tracking-tight" id="kpi-val-income">
+          +{{ formatCurrency(financialKPIs().income) }}
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
+          Sur la période sélectionnée
+        </p>
+      </div>
+    </div>
+
+    <!-- Total Sorties (Décaissements) -->
+    <div class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="kpi-card-expenses">
+      <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+        <span class="text-xs font-medium uppercase tracking-wider">Total Décaissements</span>
+        <span class="text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800/60">Sorties</span>
+      </div>
+      <div>
+        <div class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight" id="kpi-val-expense">
+          -{{ formatCurrency(financialKPIs().expense) }}
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
+          Taux d'absorption : {{ financialKPIs().expenseRatio }}%
+        </p>
+      </div>
+    </div>
+
+    <!-- Volume & Solde Net Période -->
+    <div class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="kpi-card-net">
+      <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+        <span class="text-xs font-medium uppercase tracking-wider">Volume & Flux Net</span>
+        <span class="text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/60">Bilan</span>
+      </div>
+      <div>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-val-net">
+          {{ formatCurrency(financialKPIs().netBalance) }}
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
+          {{ financialKPIs().totalTransactions }} transaction(s) enregistrée(s)
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 1 : Graphique Principal Temporel (Flux & Tendance) -->
+  <div class="bg-white dark:bg-[#2b2f33] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs" id="chart-timeline-card">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 dark:border-white/10 gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-50" id="timeline-chart-title">
+            Évolution Temporelle des Flux de Caisse (Entrées vs Sorties)
+          </h2>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+          Comparatif journalier des encaissements et décaissements opérationnels
+        </p>
+      </div>
+
+      <!-- Légende graphique -->
+      <div class="flex items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300">
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-sm bg-emerald-500"></span>
+          <span>Entrées (Recettes)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-sm bg-rose-500"></span>
+          <span>Sorties (Dépenses)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conteneur Graphique Barres Interactives -->
+    <div class="mt-6">
+      @if (timelineChartData().length === 0) {
+        <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-black/20 rounded-xl border border-dashed border-slate-200 dark:border-white/10" id="no-timeline-data">
+          <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Aucune transaction de caisse sur cette période</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Créez des entrées ou sorties dans le module Caisse pour générer le graphique.</p>
+        </div>
+      } @else {
+        <!-- Zone SVG / Barres de données -->
+        <div class="relative pt-6 pb-2" id="chart-bars-viewport">
+          <!-- Infobulle dynamique au survol -->
+          @if (hoveredChartPoint(); as hover) {
+            <div class="mb-3 p-2.5 bg-slate-900 dark:bg-slate-800 text-white text-xs rounded-xl shadow-lg border border-slate-700 flex items-center justify-between gap-4 transition-all" id="chart-tooltip-bar">
+              <span class="font-bold text-slate-100">{{ hover.formattedDate }} ({{ hover.date }})</span>
+              <div class="flex items-center gap-3">
+                <span class="text-emerald-400 font-semibold">+{{ formatCurrency(hover.income) }}</span>
+                <span class="text-rose-400 font-semibold">-{{ formatCurrency(hover.expense) }}</span>
+                <span class="text-slate-200 font-medium">Solde net : {{ formatCurrency(hover.income - hover.expense) }}</span>
+              </div>
+            </div>
+          }
+
+          <!-- Barres alignées -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-14 gap-2 items-end h-56 border-b border-slate-200 dark:border-white/10 pb-2">
+            @for (point of timelineChartData(); track point.date) {
+              <div
+                class="flex flex-col items-center h-full justify-end group cursor-pointer"
+                (mouseenter)="setHoveredPoint(point)"
+                (mouseleave)="setHoveredPoint(null)"
+              >
+                <!-- Colonne double barres -->
+                <div class="w-full flex items-end justify-center gap-1 h-44">
+                  <!-- Barre Entrée (Vert) -->
+                  <div class="w-1/2 max-w-[14px] bg-slate-100 dark:bg-white/10 rounded-t-sm relative flex items-end h-full">
+                    <div
+                      class="w-full bg-emerald-500 hover:bg-emerald-600 rounded-t-sm transition-all duration-300"
+                      [style.height.%]="point.incomeHeightPct"
+                      [title]="'Entrée: ' + formatCurrency(point.income)"
+                    ></div>
+                  </div>
+
+                  <!-- Barre Sortie (Rouge) -->
+                  <div class="w-1/2 max-w-[14px] bg-slate-100 dark:bg-white/10 rounded-t-sm relative flex items-end h-full">
+                    <div
+                      class="w-full bg-rose-500 hover:bg-rose-600 rounded-t-sm transition-all duration-300"
+                      [style.height.%]="point.expenseHeightPct"
+                      [title]="'Sortie: ' + formatCurrency(point.expense)"
+                    ></div>
+                  </div>
+                </div>
+
+                <!-- Date sous la barre -->
+                <span class="text-[10px] text-slate-600 dark:text-slate-400 mt-2 truncate w-full text-center group-hover:text-slate-900 dark:group-hover:text-white font-medium">
+                  {{ point.formattedDate }}
+                </span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- SECTION 2 : Deux Graphiques Métier (Répartition des dépenses & Analyse par employé) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- GRAPHIQUE 2 : Répartition des dépenses par catégorie / type (Donut & Liste) -->
+    <div class="bg-white dark:bg-[#2b2f33] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="chart-category-card">
+      <div>
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50" id="category-chart-title">
+              Répartition des Dépenses par Type
+            </h2>
+            <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+              Ventilation analytique des postes de coûts décaissés
+            </p>
+          </div>
+          <span class="text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-800/60">
+            Dépenses
+          </span>
+        </div>
+
+        <div class="mt-6">
+          @if (categoryBreakdown().length === 0) {
+            <div class="flex flex-col items-center justify-center py-10 text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-black/20 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+              <p class="text-xs text-slate-600 dark:text-slate-300">Aucune dépense enregistrée sur cette période</p>
+            </div>
+          } @else {
+            <div class="space-y-3.5">
+              @for (cat of categoryBreakdown(); track cat.category) {
+                <div class="space-y-1.5" [id]="'category-stat-' + cat.category">
+                  <div class="flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-2">
+                      <span class="w-2.5 h-2.5 rounded-full" [style.background-color]="cat.color"></span>
+                      <span class="font-medium text-slate-800 dark:text-slate-200">{{ cat.category }}</span>
+                      <span class="text-[11px] text-slate-500 dark:text-slate-400">({{ cat.count }} op.)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold text-slate-900 dark:text-slate-100">{{ formatCurrency(cat.amount) }}</span>
+                      <span class="text-xs font-bold text-slate-600 dark:text-slate-400 min-w-[32px] text-right">{{ cat.percentage }}%</span>
+                    </div>
+                  </div>
+                  <!-- Barre de progression proportionnelle -->
+                  <div class="w-full h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      class="h-full rounded-full transition-all duration-500"
+                      [style.width.%]="cat.percentage"
+                      [style.background-color]="cat.color"
+                    ></div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+        <span>Catégories actives : <strong class="text-slate-900 dark:text-white">{{ categoryBreakdown().length }}</strong></span>
+        <span class="text-emerald-600 dark:text-emerald-400 font-medium">Contrôle budgétaire actif</span>
+      </div>
+    </div>
+
+    <!-- GRAPHIQUE 3 : Ventilation des flux par intervenant / collaborateur -->
+    <div class="bg-white dark:bg-[#2b2f33] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="chart-employee-card">
+      <div>
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50" id="employee-chart-title">
+              Top Décaissements par Intervenant
+            </h2>
+            <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+              Volumes engagés par employé ou bénéficiaire direct
+            </p>
+          </div>
+          <span class="text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800/60">
+            Équipe
+          </span>
+        </div>
+
+        <div class="mt-6">
+          @if (employeeBreakdown().length === 0) {
+            <div class="flex flex-col items-center justify-center py-10 text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-black/20 rounded-xl border border-dashed border-slate-200 dark:border-white/10">
+              <p class="text-xs text-slate-600 dark:text-slate-300">Aucun intervenant identifié</p>
+            </div>
+          } @else {
+            <div class="space-y-4">
+              @for (emp of employeeBreakdown(); track emp.name) {
+                <div class="p-3 bg-slate-50/70 dark:bg-black/20 rounded-xl border border-slate-200/60 dark:border-white/10 flex items-center justify-between gap-3 hover:bg-slate-100/60 dark:hover:bg-white/5 transition-colors">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-white dark:bg-[#1e2227] border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-800 dark:text-slate-100 font-bold text-xs shadow-xs">
+                      {{ emp.name.substring(0, 2).toUpperCase() }}
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-bold text-slate-900 dark:text-slate-100">{{ emp.name }}</h4>
+                      <p class="text-[11px] text-slate-600 dark:text-slate-300">{{ emp.transactionCount }} écriture(s) en caisse</p>
+                    </div>
+                  </div>
+
+                  <div class="text-right">
+                    <div class="text-xs font-bold text-rose-600 dark:text-rose-400">
+                      -{{ formatCurrency(emp.totalExpense) }}
+                    </div>
+                    <span class="text-[10px] text-slate-500 dark:text-slate-400">
+                      {{ emp.percentage }}% du total sorti
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs">
+        <a routerLink="/cashier" class="text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-semibold inline-flex items-center gap-1" id="link-to-cashier">
+          Ouvrir le module Caisse &rarr;
+        </a>
+        <span class="text-slate-500 dark:text-slate-400 text-xs">Mise à jour instantanée</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3 : Dernières Transactions de Caisse -->
+  <div class="bg-white dark:bg-[#2b2f33] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs" id="recent-cashier-card">
+    <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/10 mb-4">
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-slate-50">
+          Dernières Écritures de Caisse
+        </h2>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+          Flux financiers récents passés en revue
+        </p>
+      </div>
+      <a routerLink="/cashier" class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+        Voir tout
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs" id="recent-transactions-table">
+        <thead>
+          <tr class="text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-white/10 font-semibold">
+            <th class="pb-2 font-semibold">Date & Réf</th>
+            <th class="pb-2 font-semibold">Libellé & Détail</th>
+            <th class="pb-2 font-semibold">Intervenant</th>
+            <th class="pb-2 font-semibold text-right">Montant</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-white/5">
+          @for (tx of recentTransactions(); track tx.id) {
+            <tr class="hover:bg-slate-50/60 dark:hover:bg-white/5 transition-colors">
+              <td class="py-3">
+                <div class="font-medium text-slate-800 dark:text-slate-200">{{ tx.date }}</div>
+                <div class="text-[10px] text-slate-500 dark:text-slate-400">{{ tx.libelle }}</div>
+              </td>
+              <td class="py-3 text-slate-800 dark:text-slate-200">
+                <span class="font-medium">{{ tx.service || 'Opération' }}</span>
+                @if (tx.typeDescription) {
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[320px]">{{ tx.typeDescription }}</p>
+                }
+              </td>
+              <td class="py-3 text-slate-700 dark:text-slate-300 font-medium">
+                {{ tx.noDossier || tx.employee || tx.firstName || 'Non spécifié' }}
+              </td>
+              <td class="py-3 text-right font-bold" [class.text-emerald-600]="tx.category === 'entree' || tx.montant > 0" [class.dark:text-emerald-400]="tx.category === 'entree' || tx.montant > 0" [class.text-rose-600]="tx.category === 'sortie' || tx.montant < 0" [class.dark:text-rose-400]="tx.category === 'sortie' || tx.montant < 0">
+                {{ (tx.category === 'entree' || tx.montant > 0) ? '+' : '-' }}{{ formatCurrency(tx.montant) }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="py-6 text-center text-slate-500 dark:text-slate-400">
+                Aucune transaction récente disponible.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+

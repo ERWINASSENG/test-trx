@@ -1,0 +1,190 @@
+<div class="max-w-4xl mx-auto space-y-6" id="profile-container">
+
+  <!-- En-tête -->
+  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" id="profile-header">
+    <div>
+      <div class="inline-block px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold mb-2 border border-slate-200">
+        Mon Compte
+      </div>
+      <h1 class="text-xl sm:text-2xl font-bold text-slate-900">Profil & Paramètres de Sécurité</h1>
+      <p class="text-xs text-slate-500 mt-1">Gérez vos informations personnelles et mettez à jour vos identifiants.</p>
+    </div>
+
+    @if (currentUser(); as user) {
+      <div class="flex items-center gap-3">
+        <span class="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl capitalize">
+          Rôle : {{ getRoleLabel(user.role) }}
+        </span>
+      </div>
+    }
+  </div>
+
+  @if (isSavedSuccess()) {
+    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold" id="profile-feedback-alert">
+      Vos informations de profil ont été mises à jour avec succès.
+    </div>
+  }
+
+  @if (isPasswordSuccess()) {
+    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold" id="profile-pwd-success-alert">
+      Votre mot de passe a été modifié avec succès.
+    </div>
+  }
+
+  @if (passwordError()) {
+    <div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold" id="profile-error-alert">
+      {{ passwordError() }}
+    </div>
+  }
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+    <!-- Colonne 1 : Résumé du compte -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+      <div>
+        <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">Informations Système</h2>
+        @if (currentUser(); as user) {
+          <div class="space-y-3 text-xs">
+            <div>
+              <p class="text-slate-400 font-medium">Nom complet</p>
+              <p class="text-slate-900 font-bold text-sm">{{ user.firstName }} {{ user.lastName }}</p>
+            </div>
+            <div>
+              <p class="text-slate-400 font-medium">Adresse email</p>
+              <p class="text-slate-900 font-semibold">{{ user.email }}</p>
+            </div>
+            <div>
+              <p class="text-slate-400 font-medium">Département</p>
+              <p class="text-slate-900 font-semibold">{{ user.department || 'Services Transmex' }}</p>
+            </div>
+            <div>
+              <p class="text-slate-400 font-medium">Statut</p>
+              <p class="font-bold text-emerald-600">Actif & Autorisé</p>
+            </div>
+            <div>
+              <p class="text-slate-400 font-medium">Création du compte</p>
+              <p class="text-slate-600">{{ user.createdAt | slice:0:10 }}</p>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 text-[11px] text-slate-400">
+        Authentification chiffrée SSL / Token JWT
+      </div>
+    </div>
+
+    <!-- Colonne 2 & 3 : Formulaires de mise à jour -->
+    <div class="md:col-span-2 space-y-6">
+
+      <!-- Formulaire Informations Personnelles -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">Mettre à jour mes informations</h2>
+        <form [formGroup]="profileForm" (ngSubmit)="onSaveProfile()" class="space-y-4" id="update-profile-form">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="profile-fn-input" class="block text-xs font-semibold text-slate-700 mb-1">Prénom</label>
+              <input
+                id="profile-fn-input"
+                type="text"
+                formControlName="firstName"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label for="profile-ln-input" class="block text-xs font-semibold text-slate-700 mb-1">Nom</label>
+              <input
+                id="profile-ln-input"
+                type="text"
+                formControlName="lastName"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="profile-dept-input" class="block text-xs font-semibold text-slate-700 mb-1">Département</label>
+              <input
+                id="profile-dept-input"
+                type="text"
+                formControlName="department"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label for="profile-phone-input" class="block text-xs font-semibold text-slate-700 mb-1">Téléphone</label>
+              <input
+                id="profile-phone-input"
+                type="tel"
+                formControlName="phone"
+                placeholder="+33 6 12 34 56 78"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button
+              type="submit"
+              [disabled]="profileForm.invalid"
+              class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50"
+              id="save-profile-btn">
+              Enregistrer les modifications
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Formulaire Mot de Passe -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <h2 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">Changement de mot de passe</h2>
+        <form [formGroup]="passwordForm" (ngSubmit)="onSavePassword()" class="space-y-4" id="change-pwd-form">
+          <div>
+            <label for="current-pwd-input" class="block text-xs font-semibold text-slate-700 mb-1">Mot de passe actuel</label>
+            <input
+              id="current-pwd-input"
+              type="password"
+              formControlName="currentPassword"
+              class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="new-pwd-input" class="block text-xs font-semibold text-slate-700 mb-1">Nouveau mot de passe</label>
+              <input
+                id="new-pwd-input"
+                type="password"
+                formControlName="newPassword"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label for="confirm-pwd-input" class="block text-xs font-semibold text-slate-700 mb-1">Confirmer le mot de passe</label>
+              <input
+                id="confirm-pwd-input"
+                type="password"
+                formControlName="confirmPassword"
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button
+              type="submit"
+              [disabled]="passwordForm.invalid"
+              class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+              id="submit-new-pwd-btn">
+              Mettre à jour le mot de passe
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

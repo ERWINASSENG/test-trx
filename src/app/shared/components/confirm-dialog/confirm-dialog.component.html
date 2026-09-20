@@ -1,0 +1,98 @@
+@if (isOpen()) {
+  <div
+    id="confirm-dialog-backdrop"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200"
+    (click)="onBackdropClick($event)"
+    (keydown)="onKeydown($event)"
+    tabindex="-1"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirm-dialog-title"
+    aria-describedby="confirm-dialog-message"
+  >
+    <div
+      id="confirm-dialog-panel"
+      class="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-6 transition-transform duration-200"
+    >
+      <div class="flex items-start gap-4">
+        @if (effectiveVariant() === 'danger') {
+          <div
+            id="dialog-icon-danger"
+            class="flex items-center justify-center w-12 h-12 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 shrink-0"
+          >
+            <mat-icon class="text-2xl leading-none">error_outline</mat-icon>
+          </div>
+        } @else if (effectiveVariant() === 'warning') {
+          <div
+            id="dialog-icon-warning"
+            class="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 shrink-0"
+          >
+            <mat-icon class="text-2xl leading-none">warning_amber</mat-icon>
+          </div>
+        } @else {
+          <div
+            id="dialog-icon-info"
+            class="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 shrink-0"
+          >
+            <mat-icon class="text-2xl leading-none">info_outline</mat-icon>
+          </div>
+        }
+
+        <div class="flex-1 min-w-0">
+          <h3
+            id="confirm-dialog-title"
+            class="text-lg font-semibold text-slate-900 dark:text-slate-100 leading-snug"
+          >
+            {{ title() }}
+          </h3>
+          <p
+            id="confirm-dialog-message"
+            class="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed"
+          >
+            {{ message() }}
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+        <button
+          type="button"
+          id="confirm-dialog-cancel-btn"
+          (click)="onCancel()"
+          class="px-4 py-2 text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 focus:outline-hidden focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 transition-colors cursor-pointer"
+        >
+          {{ effectiveCancelLabel() }}
+        </button>
+
+        @if (effectiveVariant() === 'danger') {
+          <button
+            type="button"
+            id="confirm-dialog-submit-btn"
+            (click)="onConfirm()"
+            class="px-4 py-2 text-sm font-medium rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-colors cursor-pointer"
+          >
+            {{ effectiveConfirmLabel() }}
+          </button>
+        } @else if (effectiveVariant() === 'warning') {
+          <button
+            type="button"
+            id="confirm-dialog-submit-btn"
+            (click)="onConfirm()"
+            class="px-4 py-2 text-sm font-medium rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-colors cursor-pointer"
+          >
+            {{ effectiveConfirmLabel() }}
+          </button>
+        } @else {
+          <button
+            type="button"
+            id="confirm-dialog-submit-btn"
+            (click)="onConfirm()"
+            class="px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-colors cursor-pointer"
+          >
+            {{ effectiveConfirmLabel() }}
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

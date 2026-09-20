@@ -1,0 +1,211 @@
+// Styles spécifiques au module Caisse Transimex
+// Conforme au design épuré, minimaliste et fidèle à la vue liste Odoo ERP (Flat Tree View)
+
+.cashier-page {
+  font-family: inherit;
+  color: var(--app-text);
+  margin: 0;
+  padding: 0;
+  width: 100%;
+
+  // Désactivation globale des flèches montante/descendante (spinners)
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+  }
+
+  // Tableau Odoo Tree View 100% plat sans box/card
+  .odoo-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0;
+    border: none;
+    background: transparent;
+
+    .odoo-head-row {
+      border-bottom: 1px solid var(--app-border, rgba(148, 163, 184, 0.2));
+
+      th {
+        color: var(--app-text);
+        font-weight: 600;
+        font-size: 0.875rem;
+        letter-spacing: 0;
+        padding: 0.625rem 0.75rem;
+        white-space: nowrap;
+        background: transparent;
+
+        button, span {
+          color: inherit;
+        }
+      }
+    }
+
+    tbody {
+      .odoo-data-row {
+        border-bottom: 1px solid var(--app-border-subtle, rgba(148, 163, 184, 0.15));
+        transition: background-color 0.12s ease;
+        background-color: transparent;
+
+        &:hover {
+          background-color: var(--app-surface-hover, rgba(0, 0, 0, 0.03));
+        }
+
+        &.odoo-row-selected {
+          background-color: rgba(20, 184, 166, 0.12);
+        }
+
+        td {
+          vertical-align: middle;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.875rem;
+          color: var(--app-text);
+          border: none;
+        }
+      }
+
+      // Ligne active en cours d'édition / création (Image 1 Odoo)
+      .odoo-row-editing {
+        background-color: transparent;
+        border-bottom: 1px solid var(--app-border, rgba(148, 163, 184, 0.25));
+
+        td {
+          vertical-align: middle;
+          padding: 0.5rem 0.75rem;
+          font-size: 0.875rem;
+          color: var(--app-text);
+          border: none;
+        }
+      }
+    }
+  }
+
+  // Checkbox Odoo ultra-discrète
+  .odoo-checkbox {
+    accent-color: #14b8a6;
+    width: 0.95rem;
+    height: 0.95rem;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--app-border, rgba(148, 163, 184, 0.4));
+    border-radius: 2px;
+  }
+
+  // Champs de saisie Odoo (100% plat, sans background, adaptatif au mode clair / sombre)
+  .odoo-field-input,
+  input.odoo-field-input {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: var(--app-text) !important;
+    padding: 2px 2px !important;
+    outline: none !important;
+    font-size: 0.875rem !important;
+    font-family: inherit !important;
+    border-radius: 0 !important;
+
+    &::placeholder {
+      color: var(--app-text-subtle, #94a3b8) !important;
+    }
+
+    // Masquage complet des flèches montante/descendante sur les inputs numériques
+    &[type="number"]::-webkit-outer-spin-button,
+    &[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none !important;
+      margin: 0 !important;
+    }
+
+    &[type="number"] {
+      -moz-appearance: textfield !important;
+      appearance: textfield !important;
+    }
+  }
+
+  // Soulignement actif fin
+  .odoo-active-underline,
+  input.odoo-active-underline {
+    border-bottom: 1px solid var(--app-border, #00a09d) !important;
+    border-radius: 0 !important;
+
+    &:focus {
+      border-bottom: 1px solid #00a09d !important;
+    }
+  }
+
+  // Date active sélectionnée (Fond bleu électrique de la capture d.png sur 02/09/2026)
+  .odoo-date-active,
+  input.odoo-date-active {
+    background-color: #1d4ed8 !important; // Bleu intense de sélection Odoo
+    color: #ffffff !important;
+    padding: 2px 6px !important;
+    border-radius: 2px !important;
+    border-bottom: none !important;
+  }
+
+  // Badge statut Odoo Comptabilisé (Pilule vert émeraude vive fidèle à image 1 & 2)
+  .odoo-badge-posted {
+    background-color: #00a09d;
+    color: #000000;
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.75rem;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+
+  .odoo-badge-draft {
+    background-color: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+    font-weight: 500;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .odoo-badge-cancelled {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    font-weight: 500;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  // Micro-animations sur les boutons de pagination
+  #cashier-prev-page-btn,
+  #cashier-next-page-btn {
+    transition: all 0.2s ease-in-out;
+    &:not(:disabled):hover {
+      transform: scale(1.08);
+    }
+  }
+}
+
+// Adaptations spécifiques mode sombre
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  .cashier-page {
+    table {
+      background-color: transparent;
+    }
+  }
+}
+
