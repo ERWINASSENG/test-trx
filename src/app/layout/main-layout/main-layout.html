@@ -24,18 +24,66 @@
         <!-- Séparateur vertical discret -->
         <div class="hidden sm:block h-5 w-[1px] bg-slate-300 dark:bg-slate-700"></div>
 
-        <!-- Navigation Métier Horizontale -->
-        <nav class="hidden md:flex items-center gap-3 lg:gap-4 overflow-x-auto select-none" id="topbar-main-nav">
+        <!-- Navigation Métier Horizontale (overflow-visible pour laisser flotter les menus déroulants) -->
+        <nav class="hidden md:flex items-center gap-3 lg:gap-4 overflow-visible select-none" id="topbar-main-nav">
           @for (item of visibleMenuItems(); track item.id) {
-            <a
-              [routerLink]="item.route"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
-              class="nav-link flex items-center gap-1.5 text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer"
-              [id]="item.id">
-              <mat-icon class="!text-[16px] !w-4 !h-4 text-slate-400 nav-icon">{{ item.icon }}</mat-icon>
-              <span class="whitespace-nowrap">{{ item.label }}</span>
-            </a>
+            @if (item.id === 'configuration') {
+              <!-- Menu Déroulant Configuration (Style Odoo : Paramètre & Journal) -->
+              <div class="relative overflow-visible" id="config-dropdown-container">
+                <button
+                  type="button"
+                  (click)="toggleConfigDropdown($event)"
+                  [class.text-slate-900]="isConfigActive() || isConfigDropdownOpen()"
+                  [class.dark:text-white]="isConfigActive() || isConfigDropdownOpen()"
+                  [class.font-semibold]="isConfigActive()"
+                  class="nav-link flex items-center text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer bg-transparent border-0 outline-none"
+                  id="nav-configuration-dropdown-trigger"
+                  [attr.aria-expanded]="isConfigDropdownOpen()"
+                  aria-haspopup="true">
+                  <span class="whitespace-nowrap">{{ item.label }}</span>
+                </button>
+
+                <!-- Liste Déroulante Odoo : Paramètre et Journal -->
+                @if (isConfigDropdownOpen()) {
+                  <div
+                    class="config-dropdown-panel absolute left-0 top-full mt-1.5 w-48 bg-white dark:bg-[#282d33] border border-slate-200 dark:border-[#343a40] rounded-lg shadow-2xl py-1.5 z-[9999]"
+                    id="nav-configuration-dropdown-menu"
+                    role="menu"
+                    aria-orientation="vertical">
+                    <!-- 1. Paramètre -->
+                    <a
+                      routerLink="/configuration/parametres"
+                      routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/10"
+                      (click)="closeConfigDropdown()"
+                      class="flex items-center px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                      id="menu-item-config-parametres"
+                      role="menuitem">
+                      <span>Paramètre</span>
+                    </a>
+
+                    <!-- 2. Journal -->
+                    <a
+                      routerLink="/configuration/journal"
+                      routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/10"
+                      (click)="closeConfigDropdown()"
+                      class="flex items-center px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                      id="menu-item-config-journal"
+                      role="menuitem">
+                      <span>Journal</span>
+                    </a>
+                  </div>
+                }
+              </div>
+            } @else {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+                class="nav-link flex items-center gap-1.5 text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer"
+                [id]="item.id">
+                <span class="whitespace-nowrap">{{ item.label }}</span>
+              </a>
+            }
           }
         </nav>
       </div>
@@ -258,16 +306,39 @@
     @if (isMenuOpen()) {
       <div class="md:hidden border-t border-slate-200 dark:border-[#343a40] bg-white dark:bg-[#212529] px-4 py-3 space-y-1 shadow-xl" id="topbar-mobile-dropdown">
         @for (item of visibleMenuItems(); track item.id) {
-          <a
-            [routerLink]="item.route"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
-            (click)="closeMenu()"
-            class="nav-link flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
-            [id]="item.id + '-mobile'">
-            <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400">{{ item.icon }}</mat-icon>
-            <span>{{ item.label }}</span>
-          </a>
+          @if (item.id === 'configuration') {
+            <div class="pt-2 pb-1 border-t border-slate-100 dark:border-white/5 space-y-1">
+              <div class="px-3 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Configuration
+              </div>
+              <a
+                routerLink="/configuration/parametres"
+                routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/5"
+                (click)="closeMenu()"
+                class="nav-link flex items-center pl-6 pr-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                id="configuration-parametres-mobile">
+                <span>Paramètre</span>
+              </a>
+              <a
+                routerLink="/configuration/journal"
+                routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/5"
+                (click)="closeMenu()"
+                class="nav-link flex items-center pl-6 pr-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                id="configuration-journal-mobile">
+                <span>Journal</span>
+              </a>
+            </div>
+          } @else {
+            <a
+              [routerLink]="item.route"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+              (click)="closeMenu()"
+              class="nav-link flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+              [id]="item.id + '-mobile'">
+              <span>{{ item.label }}</span>
+            </a>
+          }
         }
       </div>
     }

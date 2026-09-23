@@ -121,6 +121,15 @@
       }
     }
   }
+
+  /* Panneau dropdown Configuration (Paramètres & Journal) */
+  .config-dropdown-panel {
+    background-color: var(--app-surface, #ffffff);
+    border: 1px solid var(--app-border, #e2e8f0);
+    animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top left;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  }
 }
 
 @keyframes dropdownFadeIn {

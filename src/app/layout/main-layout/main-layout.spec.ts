@@ -31,6 +31,7 @@ describe('MainLayout Component', () => {
       providers: [
         provideRouter([
           { path: 'caisse', component: MainLayout },
+          { path: 'configuration', component: MainLayout },
           { path: '**', component: MainLayout },
         ]),
         CashierService,
@@ -62,16 +63,17 @@ describe('MainLayout Component', () => {
     expect(component).toBeTruthy();
   });
 
-  it('devrait filtrer les éléments de la navigation selon le rôle', () => {
+  it('devrait filtrer les éléments de la navigation selon le rôle et inclure la configuration', () => {
     const items = component.visibleMenuItems();
     expect(items.length).toBeGreaterThan(0);
     expect(items.some((i) => i.route === '/dashboard')).toBe(true);
     expect(items.some((i) => i.route === '/administration')).toBe(true);
+    expect(items.some((i) => i.route === '/configuration')).toBe(true);
   });
 
   it('devrait ouvrir, basculer et fermer le menu déroulant utilisateur', () => {
     expect(component.isUserDropdownOpen()).toBe(false);
-    
+
     component.toggleUserDropdown();
     expect(component.isUserDropdownOpen()).toBe(true);
 
@@ -80,6 +82,7 @@ describe('MainLayout Component', () => {
 
     component.toggleUserDropdown();
     expect(component.isUserDropdownOpen()).toBe(true);
+
     component.closeUserDropdown();
     expect(component.isUserDropdownOpen()).toBe(false);
   });
@@ -102,7 +105,6 @@ describe('MainLayout Component', () => {
     expect(component.isUserDropdownOpen()).toBe(true);
 
     await component.logout();
-
     expect(component.isUserDropdownOpen()).toBe(false);
     expect(logoutCalled).toBe(true);
   });
@@ -137,6 +139,22 @@ describe('MainLayout Component', () => {
   it('devrait renvoyer le libellé correct pour chaque rôle', () => {
     expect(component.roleLabel('admin')).toBe('Administrateur');
     expect(component.roleLabel('manager')).toBe('Manager');
+  });
+
+  it('devrait ouvrir, basculer et fermer le menu déroulant Configuration', () => {
+    expect(component.isConfigDropdownOpen()).toBe(false);
+
+    component.toggleConfigDropdown();
+    expect(component.isConfigDropdownOpen()).toBe(true);
+
+    component.toggleConfigDropdown();
+    expect(component.isConfigDropdownOpen()).toBe(false);
+
+    component.toggleConfigDropdown();
+    expect(component.isConfigDropdownOpen()).toBe(true);
+
+    component.closeConfigDropdown();
+    expect(component.isConfigDropdownOpen()).toBe(false);
   });
 
   it('devrait masquer le Control Panel si la route n\'est pas caisse', () => {

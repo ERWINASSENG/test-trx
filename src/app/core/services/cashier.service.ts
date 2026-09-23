@@ -1324,9 +1324,10 @@ export class CashierService implements OnDestroy {
             // avant ou pendant l'établissement de la connexion WebSocket
             this.loadTransactions();
           } else if (status === 'CHANNEL_ERROR') {
-            console.warn('Erreur sur le canal Realtime Supabase cashier_transactions, tentative de reconnexion auto...');
+            // Silencieux si l'option Realtime n'est pas activée sur la table Supabase
           } else if (status === 'TIMED_OUT') {
-            console.warn('Timeout sur le canal Realtime Supabase cashier_transactions');
+            // Repli HTTP transparent en cas d'incompatibilité WebSocket/réseau
+            this.loadTransactions();
           }
         });
     } catch (err) {

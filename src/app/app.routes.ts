@@ -10,7 +10,6 @@ export const routes: Routes = [
     redirectTo: 'dashboard',
     pathMatch: 'full',
   },
-
   // Route d'authentification publique
   {
     path: 'auth/login',
@@ -18,14 +17,12 @@ export const routes: Routes = [
       import('./features/auth/login/login').then((m) => m.Login),
     title: 'Transmex - Connexion Sécurisée',
   },
-
   // Alias /login vers /auth/login
   {
     path: 'login',
     redirectTo: 'auth/login',
     pathMatch: 'full',
   },
-
   // Page 403 Forbidden
   {
     path: 'forbidden',
@@ -33,7 +30,6 @@ export const routes: Routes = [
       import('./features/forbidden/forbidden').then((m) => m.Forbidden),
     title: 'Transmex - Accès Refusé',
   },
-
   // Routes protégées sous le Layout Principal Transmex
   {
     path: '',
@@ -100,6 +96,32 @@ export const routes: Routes = [
         title: 'Transmex - Caisse',
       },
       {
+        path: 'configuration',
+        redirectTo: 'configuration/parametres',
+        pathMatch: 'full',
+      },
+      {
+        path: 'configuration/parametres',
+        loadComponent: () =>
+          import('./features/configuration/parametres/configuration-parametres').then(
+            (m) => m.ConfigurationParametresComponent
+          ),
+        title: 'Transmex - Paramètres',
+      },
+      {
+        path: 'configuration/journal',
+        loadComponent: () =>
+          import('./features/configuration/journal/configuration-journal').then(
+            (m) => m.ConfigurationJournalComponent
+          ),
+        title: 'Transmex - Journaux',
+      },
+      {
+        path: 'settings',
+        redirectTo: 'configuration/parametres',
+        pathMatch: 'full',
+      },
+      {
         path: 'profile',
         loadComponent: () =>
           import('./features/profile/profile').then((m) => m.Profile),
@@ -107,7 +129,6 @@ export const routes: Routes = [
       },
     ],
   },
-
   // Wildcard
   {
     path: '**',

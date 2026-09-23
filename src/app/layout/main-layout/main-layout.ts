@@ -15,7 +15,7 @@ export interface NavOption {
   id: string;
   label: string;
   route: string;
-  icon: string;
+  icon?: string;
   allowedRoles: UserRole[];
 }
 
@@ -40,6 +40,7 @@ export class MainLayout {
   public readonly currentUser = this.authService.currentUser;
   public readonly isMenuOpen = signal<boolean>(false);
   public readonly isUserDropdownOpen = signal<boolean>(false);
+  public readonly isConfigDropdownOpen = signal<boolean>(false);
   public readonly isActionsMenuOpen = signal<boolean>(false);
   public readonly isDeleting = signal<boolean>(false);
   public readonly searchQuery = signal<string>('');
@@ -66,6 +67,12 @@ export class MainLayout {
   public readonly isCashierRoute = computed(() => {
     const url = this.currentUrl();
     return url ? url.includes('/caisse') : false;
+  });
+
+  // Indicateur si la route active est sous Configuration
+  public readonly isConfigActive = computed(() => {
+    const url = this.currentUrl();
+    return url ? url.includes('/configuration') || url.includes('/settings') : false;
   });
 
   // Droit d'édition en caisse (uniquement admin et caissière, pas le manager)
@@ -105,13 +112,19 @@ export class MainLayout {
       icon: 'badge',
       allowedRoles: ['admin'],
     },
-    
     {
       id: 'administration',
       label: 'Paramètres Système',
       route: '/administration',
       icon: 'admin_panel_settings',
       allowedRoles: ['admin'],
+    },
+    {
+      id: 'configuration',
+      label: 'Configuration',
+      route: '/configuration',
+      icon: 'settings',
+      allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
     },
   ];
 
@@ -155,6 +168,8 @@ export class MainLayout {
     if (event) {
       event.stopPropagation();
     }
+    this.closeConfigDropdown();
+    this.closeActionsMenu();
     this.isUserDropdownOpen.update((open) => !open);
   }
 
@@ -169,11 +184,29 @@ export class MainLayout {
     this.themeService.toggleTheme();
   }
 
+  // --- Gestion du Menu Déroulant Configuration (Paramètres & Journal) ---
+  public toggleConfigDropdown(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.closeUserDropdown();
+    this.closeActionsMenu();
+    this.isConfigDropdownOpen.update((open) => !open);
+  }
+
+  public closeConfigDropdown(): void {
+    this.isConfigDropdownOpen.set(false);
+  }
+
   public onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
     // Si le clic s'est produit en dehors du dropdown utilisateur, on le ferme
     if (!target.closest('#user-dropdown-container')) {
       this.closeUserDropdown();
+    }
+    // Si le clic s'est produit en dehors du menu déroulant Configuration, on le ferme
+    if (!target.closest('#config-dropdown-container')) {
+      this.closeConfigDropdown();
     }
     // Si le clic s'est produit en dehors du menu d'actions de caisse, on le ferme
     if (!target.closest('#cp-actions-dropdown-container')) {
@@ -183,6 +216,7 @@ export class MainLayout {
 
   public onEscape(): void {
     this.closeUserDropdown();
+    this.closeConfigDropdown();
     this.closeActionsMenu();
     this.closeMenu();
   }
@@ -201,7 +235,6 @@ export class MainLayout {
   public async onDeleteSelectedAction(): Promise<void> {
     const count = this.selectedTransactionsCount();
     if (count === 0 || this.isDeleting()) return;
-
     this.isDeleting.set(true);
     this.closeActionsMenu();
 
@@ -210,7 +243,6 @@ export class MainLayout {
       if (!success) {
         const err = this.cashierService.error();
         if (err) {
-          // Affichage non intrusif de l'erreur
           console.warn('Avertissement suppression:', err);
         }
       }
@@ -260,7 +292,6 @@ export class MainLayout {
   }
 
   public onNouveau(): void {
-    // Si nous ne sommes pas déjà sur la page caisse, y naviguer
     if (!this.router.url.includes('/caisse')) {
       void this.router.navigate(['/caisse']);
     }
@@ -288,7 +319,6 @@ export class MainLayout {
         'Transactions existantes'
       );
     }
-
     if (result.errors.length > 0) {
       console.warn('Importation avec alertes:', result.errors);
       const message = result.errors.slice(0, 3).join(' ');
