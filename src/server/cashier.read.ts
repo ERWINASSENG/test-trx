@@ -68,7 +68,7 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
       return;
     }
 
-    const enrichedRows = (data || []).map((row: Record<string, unknown>) => {
+    const enrichedRows = (data || []).map((row) => {
       const enriched = formatPersistedPieceComptable(row);
       if (!isComptable) return enriched;
 

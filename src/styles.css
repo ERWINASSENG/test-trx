@@ -240,10 +240,10 @@ html:not(.dark) #enterprise-control-panel div {
   color: var(--odoo-panel-text);
 }
 
-/* 4. ALIGNEMENT ET RENDU DES ICÔNES MATERIAL ICONS */
+/* 4. ALIGNEMENT ET RENDU DES ICÔNES MATERIAL ICONS ANTI-FOUT */
 .material-icons,
 mat-icon {
-  font-family: 'Material Icons';
+  font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif;
   font-weight: normal;
   font-style: normal;
   font-size: 24px;
@@ -255,8 +255,14 @@ mat-icon {
   word-wrap: normal;
   direction: ltr;
   vertical-align: middle;
+  overflow: hidden;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga';
   -webkit-font-feature-settings: 'liga';
+  -moz-font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
 }
 
 /* 5. ANIMATIONS ET STYLES DES NOTIFICATIONS TOAST GLOBALES */

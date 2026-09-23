@@ -1,29 +1,9 @@
 -- ==============================================================================
 -- SCHEMA SUPABASE : GESTION DE CAISSE & UTILISATEURS (TRANSIMEX / DIGITALTRX)
--- Régénéré le 2026-09-18 pour refléter l'état RÉEL du projet Supabase
--- `Digitaltrx` (acpnphsvdcvagljlcrvl), vérifié colonne par colonne, policy par
--- policy et fonction par fonction contre la base de production.
---
--- Corrige les dérives suivantes trouvées entre l'ancien schema.sql et la prod :
---   1. Colonne `cashier_transactions.created_by` (uuid, défaut auth.uid())
---      manquante dans le CREATE TABLE alors que policies/index la référençaient
---      → aurait fait échouer ce script sur une base neuve.
---   2. Fonction `handle_updated_at()` et son trigger `set_profiles_updated_at`
---      sur `profiles` existent en prod mais étaient absents du fichier.
---   3. `profiles.role` a pour défaut réel `'agent'`, pas `'employe'`.
---   4. `profiles.first_name` / `last_name` sont NOT NULL en prod, pas nullable.
---   5. Policies RLS optimisées : `auth.uid()` remplacé par `(select auth.uid())`
---      partout pour éviter une ré-évaluation par ligne (perf à l'échelle).
---   6. Toutes les fonctions ont `SET search_path TO 'public'` (sécurité).
---   7. Table `audit_logs` ajoutée (journal d'audit dédié).
---   8. Index supplémentaires trouvés en prod : idx_cashier_piece_comptable,
---      idx_profiles_department, idx_profiles_email, idx_profiles_role,
---      idx_dossiers_created_by.
---
--- Tables couvertes : profiles, dossiers, cashier_transactions, audit_logs.
--- Toutes les autres tables (RH, CRM, Inventaire, Achats, Ventes, Comptabilité)
--- ont été supprimées de l'environnement de production le 06/09/2026 et ne sont
--- PAS recréées par ce script.
+-- État consolidé de production incluant les migrations :
+--   - 202609200001_security_roles_and_status.sql (enum 'cancelled', handle_new_user sécurisé)
+--   - 202609201200_sequential_piece_comptable.sql & 202609220001_resync_piece_counter.sql (attribution atomique des pièces comptables)
+--   - 202609221200_rls_auto_enable.sql (activation automatique de RLS)
 -- ==============================================================================
 
 -- 1. EXTENSIONS
@@ -43,13 +23,14 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE public.cashier_transaction_status AS ENUM ('draft', 'posted');
+    CREATE TYPE public.cashier_transaction_status AS ENUM ('draft', 'posted', 'cancelled');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- 3. FONCTIONS UTILITAIRES
--- Toutes fixent search_path pour éviter le hijacking de schéma (advisory sécurité).
+-- Synchronise si le type existait déjà sans la valeur 'cancelled'
+ALTER TYPE public.cashier_transaction_status ADD VALUE IF NOT EXISTS 'cancelled';
 
+-- 3. FONCTIONS UTILITAIRES
 CREATE OR REPLACE FUNCTION public.generate_short_id()
 RETURNS text
 LANGUAGE plpgsql
@@ -67,7 +48,6 @@ BEGIN
 END;
 $function$;
 
--- Rôle de l'utilisateur courant (auth.uid()), utilisé par is_admin() et les policies
 CREATE OR REPLACE FUNCTION public.get_current_user_role()
 RETURNS public.user_role_enum
 LANGUAGE plpgsql
@@ -94,7 +74,6 @@ AS $function$
     SELECT (public.get_current_user_role() = 'admin');
 $function$;
 
--- Met à jour updated_at automatiquement (utilisé par dossiers/cashier_transactions)
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -106,8 +85,6 @@ begin
 end;
 $function$;
 
--- Équivalent utilisé par le trigger sur profiles (trouvé en prod, absent de
--- l'ancien fichier) — même logique que set_updated_at(), nom historique différent.
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -119,9 +96,6 @@ BEGIN
 END;
 $function$;
 
--- Crée automatiquement une ligne public.profiles à la création d'un auth.users
--- SÉCURITÉ : le rôle est dérivé de app_metadata en priorité (scellé serveur),
--- jamais fait confiance aveuglément à un rôle arbitraire fourni par le client.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -133,9 +107,7 @@ DECLARE
   safe_role public.user_role_enum;
 BEGIN
   BEGIN
-        -- Le rôle ne peut venir que de app_metadata, écrit par le serveur admin.
-        -- user_metadata est contrôlable par l'utilisateur et ne doit jamais accorder de droits.
-        requested_role := COALESCE(new.raw_app_meta_data->>'role', 'employe');
+    requested_role := COALESCE(new.raw_app_meta_data->>'role', 'employe');
 
     BEGIN
       safe_role := requested_role::public.user_role_enum;
@@ -210,7 +182,6 @@ CREATE TRIGGER set_profiles_updated_at
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Accès complet pour le rôle service_role (utilisé par le serveur Express avec la clé service_role)
 DROP POLICY IF EXISTS "Acces complet admin service_role" ON public.profiles;
 CREATE POLICY "Acces complet admin service_role"
     ON public.profiles FOR ALL
@@ -245,14 +216,12 @@ CREATE POLICY "profiles_update_policy"
         public.is_admin()
         OR (
             id = (select auth.uid())
-            -- Empêche l'escalade de privilège : un utilisateur ne peut pas modifier son propre rôle ni se réactiver
             AND role = (SELECT p.role FROM public.profiles p WHERE p.id = (select auth.uid()))
             AND is_active = (SELECT p.is_active FROM public.profiles p WHERE p.id = (select auth.uid()))
         )
     );
 
 -- 5. TABLE DES DOSSIERS OPÉRATIONNELS
--- Référencée par les transactions de caisse dont service = 'Opérations'.
 CREATE TABLE IF NOT EXISTS public.dossiers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     no_dossier text NOT NULL UNIQUE,
@@ -317,30 +286,92 @@ CREATE POLICY "dossiers_delete_admin_only"
         )
     );
 
--- 6. TABLE DES TRANSACTIONS DE CAISSE
+-- 6. COMPTEURS ET GESTION ATOMIQUE DES PIÈCES COMPTABLES
+CREATE TABLE IF NOT EXISTS public.cashier_piece_counters (
+    annee integer PRIMARY KEY,
+    dernier_numero integer NOT NULL DEFAULT 0
+);
+
+ALTER TABLE public.cashier_piece_counters ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "cashier_piece_counters_service_role" ON public.cashier_piece_counters;
+CREATE POLICY "cashier_piece_counters_service_role"
+    ON public.cashier_piece_counters FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+CREATE OR REPLACE FUNCTION public.assign_piece_comptable()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  annee_piece integer;
+  prochain_numero integer;
+  candidat_piece text;
+  existe boolean;
+BEGIN
+  -- Si une pièce est déjà fournie (non vide), on la respecte
+  IF NEW.piece_comptable IS NOT NULL AND btrim(NEW.piece_comptable) <> '' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Détermination de l'année (depuis new.date ou année courante)
+  annee_piece := COALESCE(
+    NULLIF(substring(NEW.date from '^\d{4}'), '')::int,
+    EXTRACT(YEAR FROM now())::int
+  );
+
+  -- Initialisation si non existant
+  INSERT INTO public.cashier_piece_counters (annee, dernier_numero)
+  VALUES (annee_piece, 0)
+  ON CONFLICT (annee) DO NOTHING;
+
+  -- Boucle atomique : verrouille la ligne et incrémente jusqu'à trouver un numéro disponible
+  LOOP
+    UPDATE public.cashier_piece_counters
+    SET dernier_numero = public.cashier_piece_counters.dernier_numero + 1
+    WHERE annee = annee_piece
+    RETURNING dernier_numero INTO prochain_numero;
+
+    candidat_piece := 'CSH1/' || annee_piece || '/' || lpad(prochain_numero::text, 5, '0');
+
+    SELECT EXISTS (
+      SELECT 1 FROM public.cashier_transactions WHERE piece_comptable = candidat_piece
+    ) INTO existe;
+
+    IF NOT existe THEN
+      NEW.piece_comptable := candidat_piece;
+      EXIT;
+    END IF;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$function$;
+
+-- 7. TABLE DES TRANSACTIONS DE CAISSE
 CREATE TABLE IF NOT EXISTS public.cashier_transactions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     piece_comptable text UNIQUE,                                -- Numéro de pièce comptable unique (ex: CSH1/2026/00001)
-    date text NOT NULL,                                        -- Format standard ISO YYYY-MM-DD (tri chronologique strict, voir NOTES)
+    date text NOT NULL,                                        -- Format standard ISO YYYY-MM-DD
     libelle text NOT NULL,
     service text,                                              -- "Opérations", "Administration", etc.
     type_description text,
     category public.transaction_type_category NOT NULL,       -- entree (+) / sortie (-)
     status public.cashier_transaction_status NOT NULL DEFAULT 'draft',
-    no_dossier text,                                            -- texte libre, conservé pour rétrocompatibilité
-    dossier_id uuid REFERENCES public.dossiers(id),             -- référence forte, alimentation encore à faire côté API
+    no_dossier text,                                            -- texte libre
+    dossier_id uuid REFERENCES public.dossiers(id),
     first_name text,
     partenaire text,
-    employee text,                                              -- texte libre, conservé pour rétrocompatibilité
-    employee_id uuid REFERENCES public.profiles(id),            -- référence forte, alimentation encore à faire côté API
-    quantity numeric,                                            -- requis si service = 'Opérations'
-    montant numeric NOT NULL,                                    -- valeur signée
+    employee text,
+    employee_id uuid REFERENCES public.profiles(id),
+    quantity numeric,
+    montant numeric NOT NULL,
     solde_apres numeric,
     selected boolean DEFAULT false,
-    -- Colonne manquante dans l'ancien fichier : existe réellement en prod avec
-    -- ce défaut. src/server.ts insère created_by explicitement depuis le
-    -- service_role ; le défaut ne joue que si un insert passe directement par
-    -- le client Supabase (RLS) sans transiter par l'API Express.
     created_by uuid REFERENCES public.profiles(id) DEFAULT auth.uid(),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -351,9 +382,7 @@ CREATE TABLE IF NOT EXISTS public.cashier_transactions (
 );
 
 COMMENT ON TABLE public.cashier_transactions IS 'Transactions de caisse (entrées/sorties) — correspond à l''interface CashierTransaction côté app.';
-COMMENT ON COLUMN public.cashier_transactions.piece_comptable IS 'Numéro de pièce comptable unique (ex: CSH1/2026/00001) garantissant l''absence de doublon.';
-COMMENT ON COLUMN public.cashier_transactions.employee_id IS 'Référence forte vers profiles.id — employee/firstName restent en texte libre pour rétrocompatibilité.';
-COMMENT ON COLUMN public.cashier_transactions.dossier_id IS 'Référence forte vers dossiers.id — no_dossier reste en texte libre pour rétrocompatibilité.';
+COMMENT ON COLUMN public.cashier_transactions.piece_comptable IS 'Numéro de pièce comptable unique (ex: CSH1/2026/00001) généré atomiquement.';
 COMMENT ON COLUMN public.cashier_transactions.created_by IS 'Référence vers profiles.id — auteur de la transaction, utilisé par les policies RLS de mise à jour/suppression.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cashier_transactions_piece_comptable ON public.cashier_transactions (piece_comptable) WHERE piece_comptable IS NOT NULL;
@@ -366,6 +395,11 @@ CREATE INDEX IF NOT EXISTS idx_cashier_transactions_employee_id ON public.cashie
 CREATE INDEX IF NOT EXISTS idx_cashier_transactions_dossier_id ON public.cashier_transactions (dossier_id);
 CREATE INDEX IF NOT EXISTS idx_cashier_transactions_created_by ON public.cashier_transactions (created_by);
 
+DROP TRIGGER IF EXISTS trg_assign_piece_comptable ON public.cashier_transactions;
+CREATE TRIGGER trg_assign_piece_comptable
+    BEFORE INSERT ON public.cashier_transactions
+    FOR EACH ROW EXECUTE FUNCTION public.assign_piece_comptable();
+
 DROP TRIGGER IF EXISTS trg_cashier_transactions_updated_at ON public.cashier_transactions;
 CREATE TRIGGER trg_cashier_transactions_updated_at
     BEFORE UPDATE ON public.cashier_transactions
@@ -373,12 +407,6 @@ CREATE TRIGGER trg_cashier_transactions_updated_at
 
 ALTER TABLE public.cashier_transactions ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "cashier_transactions_select_policy" ON public.cashier_transactions;
-DROP POLICY IF EXISTS "cashier_transactions_insert_policy" ON public.cashier_transactions;
-DROP POLICY IF EXISTS "cashier_transactions_update_policy" ON public.cashier_transactions;
-DROP POLICY IF EXISTS "cashier_transactions_delete_policy" ON public.cashier_transactions;
-
-DROP POLICY IF EXISTS "cashier_transactions_select_authenticated" ON public.cashier_transactions;
 DROP POLICY IF EXISTS "cashier_transactions_select_by_role" ON public.cashier_transactions;
 CREATE POLICY "cashier_transactions_select_by_role"
     ON public.cashier_transactions FOR SELECT
@@ -399,75 +427,56 @@ CREATE POLICY "cashier_transactions_insert_by_role"
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = (select auth.uid())
-              AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager', 'comptable', 'tresorier')
+              AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager')
         )
     );
 
--- RÈGLE MÉTIER : chacun ne modifie que ce qu'il a lui-même enregistré (created_by = auth.uid()).
--- Un manager ne peut pas modifier une saisie de caissier, et un caissier ne peut pas modifier
--- celle d'un collègue, même s'ils travaillent tous sur le même tableau. Seul un admin déroge.
-DROP POLICY IF EXISTS "cashier_transactions_update_by_role" ON public.cashier_transactions;
 DROP POLICY IF EXISTS "cashier_transactions_update_own_or_admin" ON public.cashier_transactions;
 CREATE POLICY "cashier_transactions_update_own_or_admin"
     ON public.cashier_transactions FOR UPDATE
     TO authenticated
     USING (
-        created_by = (select auth.uid())
-        OR EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = (select auth.uid()) AND profiles.role = 'admin'
-        )
+        public.is_admin()
+        OR created_by = (select auth.uid())
+        OR employee_id = (select auth.uid())
     )
     WITH CHECK (
-        created_by = (select auth.uid())
-        OR EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = (select auth.uid()) AND profiles.role = 'admin'
-        )
+        public.is_admin()
+        OR created_by = (select auth.uid())
+        OR employee_id = (select auth.uid())
     );
 
-DROP POLICY IF EXISTS "cashier_transactions_delete_admin_only" ON public.cashier_transactions;
 DROP POLICY IF EXISTS "cashier_transactions_delete_own_or_admin" ON public.cashier_transactions;
 CREATE POLICY "cashier_transactions_delete_own_or_admin"
     ON public.cashier_transactions FOR DELETE
     TO authenticated
     USING (
-        created_by = (select auth.uid())
-        OR EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = (select auth.uid())
-              AND profiles.role = 'admin'
-        )
+        public.is_admin()
+        OR created_by = (select auth.uid())
+        OR employee_id = (select auth.uid())
     );
 
--- 7. TABLE DES JOURNAUX D'AUDIT (AUDIT LOGS)
--- Trace les actions critiques (création, mise à jour, suppression) sur la caisse et la sécurité.
+-- 8. TABLE DES LOGS D'AUDIT
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+    action text NOT NULL,
+    entity_id text,
+    user_id uuid REFERENCES auth.users(id),
     user_email text,
     user_role text,
-    action text NOT NULL,                                       -- 'CREATE_OPERATION', 'UPDATE_OPERATION', 'DELETE_OPERATION', 'LOGIN_SUCCESS', etc.
-    entity_type text NOT NULL DEFAULT 'cashier_transaction',   -- 'cashier_transaction', 'profile', 'auth', etc.
-    entity_id text,                                            -- ID de la ressource concernée
-    details jsonb DEFAULT '{}'::jsonb,                         -- Données contextuelles (champs modifiés, IP, etc.)
+    details jsonb,
     ip_address text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE public.audit_logs IS 'Journaux d''audit et de traçabilité des opérations de caisse et de sécurité.';
-COMMENT ON COLUMN public.audit_logs.action IS 'Type d''action tracée (ex: CREATE_OPERATION, UPDATE_OPERATION, DELETE_OPERATION).';
-COMMENT ON COLUMN public.audit_logs.details IS 'Contenu JSON des modifications ou métadonnées contextuelles de l''action.';
-
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs (action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs (user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs (action);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON public.audit_logs (entity_type, entity_id);
 
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "audit_logs_service_role_all" ON public.audit_logs;
-CREATE POLICY "audit_logs_service_role_all"
+DROP POLICY IF EXISTS "audit_logs_service_role" ON public.audit_logs;
+CREATE POLICY "audit_logs_service_role"
     ON public.audit_logs FOR ALL
     TO service_role
     USING (true)
@@ -478,47 +487,3 @@ CREATE POLICY "audit_logs_admin_select"
     ON public.audit_logs FOR SELECT
     TO authenticated
     USING (public.is_admin());
-
-DROP POLICY IF EXISTS "audit_logs_insert_authenticated" ON public.audit_logs;
-CREATE POLICY "audit_logs_insert_authenticated"
-    ON public.audit_logs FOR INSERT
-    TO authenticated
-    WITH CHECK (
-        (select auth.uid()) IS NOT NULL
-        AND (user_id IS NULL OR user_id = (select auth.uid()))
-    );
-
--- ==============================================================================
--- NOTES (à lire avant toute modification de ce fichier)
--- ==============================================================================
--- 1. `date` est stockée en TEXT au format standard ISO YYYY-MM-DD.
---    Ce format garantit que l'ordre lexicographique PostgreSQL (.order('date', { ascending: false }))
---    est strictement identique à l'ordre chronologique temporel, sans inversion lors
---    de la pagination serveur ou des changements de mois/années. Côté UI client,
---    l'affichage en JJ/MM/AAAA est assuré de manière transparente par formatIsoToDisplayDate().
---
--- 2. `no_dossier` (text) et `employee` (text) restent en plus de `dossier_id`
---    et `employee_id` (uuid, FK) pour la rétrocompatibilité avec l'app existante.
---
--- 3. Ce projet contient aussi de nombreux types ENUM orphelins issus des
---    tables HR/CRM/Inventaire/Achats/Ventes/Comptabilité supprimées le
---    06/09/2026 (account_class_enum, attendance_status_enum, etc.). DROP
---    TABLE ne supprime pas les types associés : ils sont restés en base sans
---    table qui les utilise. Ce script ne les recrée pas et ne les supprime pas.
---
--- 4. Ce fichier a été régénéré à la main colonne par colonne / policy par
---    policy contre `information_schema` et `pg_policies` de la base réelle.
---    Pour toute future dérive, préférer `supabase db dump --schema public`
---    directement depuis la CLI pour garder ce fichier synchronisé automatiquement.
--- ==============================================================================
-
--- ==============================================================================
--- SCRIPT DE MIGRATION MANUELLE (Optionnel - le serveur auto-migre au démarrage)
--- ==============================================================================
--- UPDATE public.cashier_transactions
--- SET date = substring(date from 7 for 4) || '-' || substring(date from 4 for 2) || '-' || substring(date from 1 for 2)
--- WHERE date LIKE '__/__/____';
---
--- CREATE INDEX IF NOT EXISTS idx_cashier_transactions_date
--- ON public.cashier_transactions (date DESC, created_at DESC);
--- ==============================================================================

@@ -1,9 +1,35 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { SlicePipe } from '@angular/common';
 import { ROLE_DEFINITIONS } from '../../core/models/auth.model';
 import { AuthService } from '../../core/services/auth.service';
 import { UserService } from '../../core/services/user.service';
+
+/**
+ * Validateur de complexité de mot de passe :
+ * Exige au moins 8 caractères, une lettre et un chiffre.
+ */
+export function strongPasswordValidator(): ValidatorFn {
+  return (control: AbstractControl): ValidationErrors | null => {
+    const value = control.value;
+    if (!value) return null;
+
+    const hasLetter = /[a-zA-Z]/.test(value);
+    const hasDigit = /[0-9]/.test(value);
+    const isMinLength = value.length >= 8;
+
+    if (!hasLetter || !hasDigit || !isMinLength) {
+      return {
+        strongPassword: {
+          hasLetter,
+          hasDigit,
+          isMinLength,
+        },
+      };
+    }
+    return null;
+  };
+}
 
 @Component({
   selector: 'app-profile',
@@ -48,11 +74,11 @@ export class Profile {
     }),
     newPassword: new FormControl<string>('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(6)],
+      validators: [Validators.required, Validators.minLength(8), strongPasswordValidator()],
     }),
     confirmPassword: new FormControl<string>('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(6)],
+      validators: [Validators.required, Validators.minLength(8)],
     }),
   });
 

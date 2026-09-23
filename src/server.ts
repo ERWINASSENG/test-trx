@@ -749,6 +749,12 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       return;
     }
 
+    // Récupération préalable des lignes complètes pour enrichir l'audit log avant suppression
+    const { data: rowsToDelete } = await adminClient
+      .from('cashier_transactions')
+      .select('id, piece_comptable, date, libelle, montant, category, service, no_dossier, created_by')
+      .in('id', targetIds);
+
     // Si l'utilisateur n'est pas admin, vérifier les autorisations de propriété stricte
     if (!isAdmin) {
       if (!callerId) {
@@ -756,12 +762,7 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
         return;
       }
 
-      const { data: rowsToCheck, error: fetchErr } = await adminClient
-        .from('cashier_transactions')
-        .select('id, created_by, employee_id, libelle')
-        .in('id', targetIds);
-
-      if (fetchErr || !rowsToCheck) {
+      if (!rowsToDelete) {
         res.status(500).json({ error: 'Impossible de vérifier la propriété des opérations' });
         return;
       }
@@ -770,8 +771,8 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       // Vérification stricte de propriété : l'utilisateur ne peut supprimer QUE ses propres opérations.
       // Règle de parité stricte avec la policy RLS : une ligne sans créateur explicite (created_by ou employee_id vide) ne peut être supprimée que par un admin
       const userEmail = (authenticatedUser?.email || '').toLowerCase().trim();
-      const unauthorizedRows = rowsToCheck.filter((r) => {
-        const creator = String(r.created_by || r.employee_id || '').trim();
+      const unauthorizedRows = rowsToDelete.filter((r) => {
+        const creator = String(r.created_by || '').trim();
         // Si aucun créateur n'est défini en base, interdire la suppression à tout non-administrateur
         if (!creator) return true;
         const matchesId = Boolean(callerId && creator === callerId);
@@ -804,7 +805,20 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       userRole: userRole,
       action: 'DELETE_OPERATION',
       entityId: targetIds.join(','),
-      details: { nombre_supprime: count ?? targetIds.length, ids: targetIds },
+      details: {
+        nombre_supprime: count ?? targetIds.length,
+        ids: targetIds,
+        snapshot_operations: (rowsToDelete || []).map((r) => ({
+          id: r.id,
+          piece_comptable: r.piece_comptable,
+          date: r.date,
+          libelle: r.libelle,
+          montant: r.montant,
+          category: r.category,
+          service: r.service,
+          no_dossier: r.no_dossier,
+        })),
+      },
     });
 
     // Nettoyage éventuel des pièces justificatives associées dans storage ou liens
@@ -871,6 +885,7 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
     }
 
     const todayIso = new Date().toISOString();
+    const todayDay = normalizeDateToDay(todayIso);
     const rowsToInsert = await Promise.all(
       originalRows.map(async (orig) => {
         // `piece_comptable: null` -> assigné atomiquement par le déclencheur DB pour chaque ligne.
@@ -890,7 +905,7 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
           created_by: callerId,
           quantity: orig.quantity,
           montant: orig.montant,
-          date: todayIso,
+          date: todayDay,
         };
       })
     );

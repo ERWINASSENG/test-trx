@@ -30,11 +30,32 @@ describe('Profile Component', () => {
     expect(component).toBeTruthy();
   });
 
+  it('devrait rejeter un mot de passe trop court ou sans chiffre', () => {
+    component.passwordForm.patchValue({
+      currentPassword: 'oldPassword1',
+      newPassword: 'short',
+      confirmPassword: 'short',
+    });
+    expect(component.passwordForm.get('newPassword')?.invalid).toBe(true);
+
+    component.passwordForm.patchValue({
+      newPassword: 'onlylettershere',
+      confirmPassword: 'onlylettershere',
+    });
+    expect(component.passwordForm.get('newPassword')?.invalid).toBe(true);
+
+    component.passwordForm.patchValue({
+      newPassword: 'validPassword123',
+      confirmPassword: 'validPassword123',
+    });
+    expect(component.passwordForm.get('newPassword')?.valid).toBe(true);
+  });
+
   it('devrait valider la correspondance des mots de passe lors de la mise à jour', () => {
     component.passwordForm.patchValue({
       currentPassword: 'password123',
       newPassword: 'newSecretPassword123',
-      confirmPassword: 'differentPassword',
+      confirmPassword: 'differentPassword123',
     });
 
     component.onSavePassword();
