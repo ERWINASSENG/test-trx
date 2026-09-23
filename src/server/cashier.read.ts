@@ -47,8 +47,9 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
 
     const rawLimit = req.query['limit'];
     const rawOffset = req.query['offset'];
-    let limit = rawLimit ? Number(rawLimit) : 100;
-    if (isNaN(limit) || limit <= 0) limit = 100;
+    // Nombre minimum de lignes par page : 80 strict (plafond de sécurité à 1000)
+    let limit = rawLimit ? Number(rawLimit) : 80;
+    if (isNaN(limit) || limit < 80) limit = 80;
     if (limit > 1000) limit = 1000;
 
     let offset = rawOffset ? Number(rawOffset) : 0;
@@ -67,7 +68,7 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
       return;
     }
 
-    const enrichedRows = (data || []).map((row) => {
+    const enrichedRows = (data || []).map((row: Record<string, unknown>) => {
       const enriched = formatPersistedPieceComptable(row);
       if (!isComptable) return enriched;
 

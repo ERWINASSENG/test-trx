@@ -15,6 +15,12 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Disallow alternative package managers lockfiles (npm only)
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-lock.yaml
+
 # IDEs and editors
 .idea/
 .project

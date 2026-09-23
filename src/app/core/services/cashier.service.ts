@@ -112,12 +112,12 @@ export class CashierService implements OnDestroy {
     this.cleanupRealtimeSubscription();
   }
 
-  // Filtres et pagination
+  // Filtres et pagination (plancher de 80 lignes minimum par page)
   private readonly _filterState = signal<CashierFilterState>({
     searchQuery: '',
     categoryFilter: 'all',
     pageIndex: 0,
-    pageSize: 10,
+    pageSize: 80,
   });
 
   // Signal pour piloter l'ouverture de la ligne d'ajout inline depuis le Layout
@@ -323,12 +323,12 @@ export class CashierService implements OnDestroy {
   ): Promise<{ success: boolean; operation?: CashierTransaction; error?: string }> {
     this._error.set(null);
 
-    // Contrôle d'unicité strict : N° de pièce comptable en priorité absolue
-    const candidatePiece = normalizePieceComptable(op.pieceComptable || this.nextPieceComptable());
-    if (candidatePiece) {
-      const pieceDuplicate = findDuplicatePieceComptable({ pieceComptable: candidatePiece }, this._transactions());
+    // Si une pièce comptable est explicitement fournie par l'appelant (ex: import ou rattachement manuel), on la normalise
+    const explicitPiece = op.pieceComptable ? normalizePieceComptable(op.pieceComptable) : undefined;
+    if (explicitPiece) {
+      const pieceDuplicate = findDuplicatePieceComptable({ pieceComptable: explicitPiece }, this._transactions());
       if (pieceDuplicate) {
-        const errorMsg = `Le numéro de pièce comptable "${candidatePiece}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Date: ${pieceDuplicate.date}, Libellé: "${pieceDuplicate.libelle}"). Les numéros de pièces comptables doivent être strictement uniques.`;
+        const errorMsg = `Le numéro de pièce comptable "${explicitPiece}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Date: ${pieceDuplicate.date}, Libellé: "${pieceDuplicate.libelle}"). Les numéros de pièces comptables doivent être strictement uniques.`;
         this.setError(errorMsg);
         return { success: false, error: errorMsg };
       }
@@ -343,7 +343,7 @@ export class CashierService implements OnDestroy {
         libelle: op.libelle,
         noDossier: op.noDossier,
         service: op.service,
-        pieceComptable: candidatePiece,
+        pieceComptable: explicitPiece,
       },
       this._transactions()
     );
@@ -363,6 +363,7 @@ export class CashierService implements OnDestroy {
     let savedRow: CashierDbRow | null = null;
 
     // Étape 1 : Appel de l'API Serveur-Relais sécurisée
+    // Comme sur Odoo, si explicitPiece est vide (création standard), on envoie null/undefined pour que le trigger assigne la séquence
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -375,7 +376,7 @@ export class CashierService implements OnDestroy {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          pieceComptable: candidatePiece,
+          pieceComptable: explicitPiece || null,
           libelle: op.libelle,
           service: op.service,
           typeDescription: op.typeDescription || null,
@@ -426,11 +427,11 @@ export class CashierService implements OnDestroy {
       return { success: false, error: failureMsg };
     }
 
-    // Étape 3 : Création de l'objet transaction unifié
+    // Étape 3 : Création de l'objet transaction unifié (comme sur Odoo : la pièce officielle retournée par la base)
     const currentUserId = this.authService.currentUser()?.id;
     const operationToStore: CashierTransaction = {
       id: savedRow.id,
-      pieceComptable: savedRow.piece_comptable || this.nextPieceComptable(),
+      pieceComptable: savedRow.piece_comptable || explicitPiece || this.nextPieceComptable(),
       date: this.formatDate(savedRow.date || new Date().toISOString()),
       libelle: savedRow.libelle,
       service: savedRow.service || savedRow.type_transaction || '',
@@ -543,6 +544,12 @@ export class CashierService implements OnDestroy {
         const msg = err instanceof Error ? err.message : 'Erreur inconnue';
         errors.push(`Écriture "${row.libelle}" : ${msg}`);
       }
+    }
+
+    // Après l'insertion du lot, forcer le rechargement depuis le serveur pour synchroniser
+    // l'état local avec les pièces officielles et soldes recalculés en base de données.
+    if (insertedCount > 0) {
+      await this.loadTransactions();
     }
 
     return {
@@ -1129,11 +1136,11 @@ export class CashierService implements OnDestroy {
         : (row.date?.includes('-') ? Number(row.date.split('-')[0]) : 2026);
       const year = isNaN(yrMatch) ? 2026 : yrMatch;
       yearCounters[year] = (yearCounters[year] || 0) + 1;
-      const computedPiece = `CSH1/${year}/${String(yearCounters[year]).padStart(5, '0')}`;
+      const computedFallback = `CSH1/${year}/${String(yearCounters[year]).padStart(5, '0')}`;
 
       return {
         id: row.id,
-        pieceComptable: row.piece_comptable || computedPiece,
+        pieceComptable: row.piece_comptable ? String(row.piece_comptable).trim() : computedFallback,
         date: this.formatDate(row.date),
         libelle: row.libelle || '',
         service: row.service || row.type_transaction || '',
@@ -1210,6 +1217,18 @@ export class CashierService implements OnDestroy {
     this._filterState.update((state) => ({
       ...state,
       pageIndex: Math.max(0, index),
+    }));
+  }
+
+  /**
+   * Modifie la taille de la page en imposant strictement un minimum de 80 lignes
+   */
+  public setPageSize(size: number): void {
+    const validSize = Math.max(80, isNaN(size) ? 80 : Number(size));
+    this._filterState.update((state) => ({
+      ...state,
+      pageSize: validSize,
+      pageIndex: 0,
     }));
   }
 

@@ -289,7 +289,7 @@
                   <!-- Pièce comptable (Cyan/Teal pendant l'édition active) -->
                   <td class="py-2 px-3 whitespace-nowrap align-middle">
                     <span class="text-[#00a09d] dark:text-[#2dd4bf] font-medium text-xs">
-                      {{ getOdooSequence(tx, $index) }}
+                      {{ getOdooSequence(tx) }}
                     </span>
                   </td>
 
@@ -421,7 +421,7 @@
 
                   <!-- Pièce comptable (Blanc normal une fois enregistrée) -->
                   <td class="py-2.5 px-3 whitespace-nowrap text-slate-900 dark:text-slate-100 font-normal">
-                    <span>{{ getOdooSequence(tx, $index) }}</span>
+                    <span>{{ getOdooSequence(tx) }}</span>
                   </td>
 
                   <!-- Libellé -->

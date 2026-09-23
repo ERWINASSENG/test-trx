@@ -27,7 +27,7 @@ export class Login {
     }),
     password: new FormControl<string>('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(4)],
+      validators: [Validators.required, Validators.minLength(8)],
     }),
     rememberMe: new FormControl<boolean>(true, { nonNullable: true }),
   });

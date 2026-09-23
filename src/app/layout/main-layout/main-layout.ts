@@ -105,13 +105,7 @@ export class MainLayout {
       icon: 'badge',
       allowedRoles: ['admin'],
     },
-    {
-      id: 'settings',
-      label: 'Paramètres',
-      route: '/parametres',
-      icon: 'settings',
-      allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
-    },
+    
     {
       id: 'administration',
       label: 'Paramètres Système',
@@ -283,11 +277,23 @@ export class MainLayout {
   public async onImportConfirmed(rows: ParsedImportRow[]): Promise<void> {
     this.cashierService.closeImportModal();
     const result = await this.cashierService.importTransactions(rows);
+    if (result.insertedCount > 0) {
+      this.notificationService.success(
+        `${result.insertedCount} transaction(s) importée(s) avec succès avec numéros de pièce attribués par le serveur.${result.duplicateCount > 0 ? ` (${result.duplicateCount} doublon(s) ignoré(s))` : ''}`,
+        'Import réussi'
+      );
+    } else if (result.duplicateCount > 0 && result.insertedCount === 0) {
+      this.notificationService.info(
+        `Aucune nouvelle transaction importée : les ${result.duplicateCount} transaction(s) existent déjà en base de données (doublons).`,
+        'Transactions existantes'
+      );
+    }
+
     if (result.errors.length > 0) {
-      console.warn('Importation partielle avec alertes:', result.errors);
-      const message = result.errors.join(' ');
+      console.warn('Importation avec alertes:', result.errors);
+      const message = result.errors.slice(0, 3).join(' ');
       const isDuplicate = result.errors.some((error) => error.toLowerCase().includes('doublon'));
-      this.notificationService.warning(message, isDuplicate ? 'Doublon détecté' : 'Importation partielle');
+      this.notificationService.warning(message, isDuplicate ? 'Doublon détecté' : 'Erreurs lors de l’import');
     }
   }
 

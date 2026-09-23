@@ -673,19 +673,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Contrôle strict d'unicité de la pièce comptable
-      const candidatePiece = normalizePieceComptable(this.nextPieceComptable());
-      if (candidatePiece) {
-        const pieceDuplicate = findDuplicatePieceComptable({ pieceComptable: candidatePiece }, this.allTransactions());
-        if (pieceDuplicate) {
-          const pieceMsg = `Le numéro de pièce comptable "${candidatePiece}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Date: ${pieceDuplicate.date}, Libellé: "${pieceDuplicate.libelle}"). Les pièces comptables doivent être strictement uniques.`;
-          this.cashierService.setError(pieceMsg, false);
-          this.cancelAddInline();
-          this.notificationService.warning(pieceMsg, 'Pièce comptable en double');
-          return;
-        }
-      }
-
       // Contrôle strict anti-doublon en direct : Date + Montant + Libellé + N° de dossier + Service
       const duplicate = findDuplicateTransaction(
         {
@@ -694,7 +681,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
           libelle: formValues.libelle,
           noDossier: formValues.noDossier,
           service: formValues.service,
-          pieceComptable: candidatePiece,
         },
         this.allTransactions()
       );
@@ -709,8 +695,10 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
+      // Comme sur Odoo, nous ne passons pas de numéro de pièce figé à la création :
+      // le trigger PostgreSQL assigne la pièce officielle de manière atomique et sans trou.
       const result = await this.cashierService.addTransaction({
-        pieceComptable: candidatePiece,
+        pieceComptable: undefined,
         date: formattedDate,
         libelle: formValues.libelle,
         service: (formValues.service as Service) || undefined,
@@ -1066,15 +1054,11 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   /**
    * Retourne la référence officielle de pièce comptable séquentielle au format Odoo ERP (ex: CSH1/2026/00001)
    */
-  public getOdooSequence(tx: CashierTransaction, index: number): string {
-    if (tx.pieceComptable) {
-      return tx.pieceComptable;
+  public getOdooSequence(tx: CashierTransaction): string {
+    if (tx.pieceComptable && tx.pieceComptable.trim() !== '') {
+      return tx.pieceComptable.trim();
     }
-    const year = tx.date?.includes('/')
-      ? tx.date.split('/')[2] || '2026'
-      : (tx.date?.includes('-') ? tx.date.split('-')[0] : '2026');
-    const seqNum = String(index + 1).padStart(5, '0');
-    return `CSH1/${year}/${seqNum}`;
+    return '-';
   }
 
   /**
