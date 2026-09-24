@@ -1,0 +1,379 @@
+<div class="journal-page w-full p-0">
+  <div class="w-full">
+
+    <!-- ========================================================================= -->
+    <!-- LIGNE 2 : CONTROL PANEL & ACTIONS (Style Odoo 100% conforme à la capture)  -->
+    <!-- ========================================================================= -->
+    <div class="control-panel sticky top-0 z-30 w-full bg-[#1b1e24] dark:bg-[#1b1e24] border-b border-[#2b303c] transition-colors" id="journal-control-panel">
+      <div class="w-full px-4 sm:px-6 flex flex-wrap lg:flex-nowrap items-center justify-between min-h-[48px] py-1.5 gap-4">
+
+        <!-- GAUCHE : Bouton Nouveau violet Odoo + Titre "Journaux ⚙" -->
+        <div class="cp-left flex items-center gap-3 shrink-0" id="journal-cp-actions-left">
+          <!-- Bouton Nouveau Odoo officiel violet (#714B67) -->
+          <button
+            type="button"
+            (click)="openCreateModal()"
+            class="btn-nouveau-odoo flex items-center justify-center text-xs font-semibold px-3 py-1.5 rounded transition-all cursor-pointer shadow-xs active:scale-95 text-white"
+            id="journal-cp-btn-nouveau"
+            title="Créer un nouveau journal comptable">
+            <span>Nouveau</span>
+          </button>
+
+          <!-- Titre Odoo "Journaux" avec icône engrenage -->
+          <div class="flex items-center gap-1.5 text-white select-none">
+            <span class="text-sm font-semibold tracking-wide">Journaux</span>
+            <button
+              type="button"
+              class="text-slate-400 hover:text-white transition-colors cursor-pointer p-0.5 inline-flex items-center"
+              title="Paramètres des journaux">
+              <mat-icon class="!text-[15px] !w-4 !h-4 text-slate-400 hover:text-white">settings</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- CENTRE : Barre de sélection Odoo OU Barre de recherche Odoo -->
+        <div class="cp-center flex-1 max-w-[560px] min-w-[200px]" id="journal-cp-center">
+          @if (selectedJournalsCount() > 0) {
+            <!-- BARRE DE SÉLECTION ODOO STYLE (Badge sélection + Bouton Actions) -->
+            <div class="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150" id="journal-cp-selection-bar">
+              <!-- Badge [ N sélectionné(s) ✕ ] -->
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#00A09D]/15 text-[#00A09D] border border-[#00A09D] shadow-2xs select-none" id="journal-cp-selection-badge">
+                <span>{{ selectedJournalsCount() }} sélectionné(s)</span>
+                <button
+                  type="button"
+                  (click)="clearSelection()"
+                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#00A09D]/30 text-[#00A09D] transition-colors cursor-pointer flex items-center justify-center font-bold"
+                  title="Annuler la sélection"
+                  aria-label="Annuler la sélection">
+                  <mat-icon class="!text-[13px] !w-3.5 !h-3.5 leading-none">close</mat-icon>
+                </button>
+              </div>
+
+              <!-- Bouton [ ⚙ Actions ] avec Dropdown Odoo -->
+              <div class="relative" id="journal-cp-actions-dropdown-container">
+                <button
+                  type="button"
+                  (click)="toggleActionsMenu($event)"
+                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 bg-[#252830] text-white border border-[#3e4354] hover:bg-[#2c303c]"
+                  [class.ring-2]="isActionsMenuOpen()"
+                  [class.ring-[#00A09D]/40]="isActionsMenuOpen()"
+                  id="journal-cp-btn-odoo-actions">
+                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#00A09D]">settings</mat-icon>
+                  <span>Actions</span>
+                </button>
+
+                <!-- DROPDOWN MENU ODOO OWL -->
+                @if (isActionsMenuOpen()) {
+                  <div
+                    class="absolute top-full left-0 mt-1.5 w-56 bg-[#212529] rounded-lg shadow-2xl border border-white/10 py-1.5 z-50 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+                    id="journal-cp-actions-menu"
+                    role="menu">
+                    
+                    <!-- 1. Exporter -->
+                    <button
+                      type="button"
+                      (click)="onExportAction()"
+                      class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-white/10 text-slate-200 font-medium"
+                      id="journal-cp-action-export-csv"
+                      role="menuitem">
+                      <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-slate-400">upload</mat-icon>
+                      <span>Exporter (CSV)</span>
+                    </button>
+
+                    <div class="my-1 border-t border-white/10"></div>
+
+                    <!-- 2. Supprimer les éléments sélectionnés -->
+                    <button
+                      type="button"
+                      (click)="onDeleteSelectedAction()"
+                      [disabled]="isDeleting()"
+                      class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer hover:bg-red-950/40 text-red-400 font-medium disabled:opacity-50"
+                      id="journal-cp-action-delete"
+                      role="menuitem">
+                      <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-red-500">delete_outline</mat-icon>
+                      <span>{{ isDeleting() ? 'Suppression...' : 'Supprimer la sélection' }}</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+          } @else {
+            <!-- BARRE DE RECHERCHE ODOO (Fond sombre conforme à la capture) -->
+            <div class="search-bar-odoo flex items-center rounded px-3 py-1 text-xs bg-[#242832] border border-[#343846] focus-within:border-[#00A09D]" id="journal-cp-search-wrapper">
+              <!-- Loupe Odoo -->
+              <mat-icon class="search-icon !text-[15px] !w-4 !h-4 text-slate-400 mr-2 shrink-0">search</mat-icon>
+
+              <!-- Champ de saisie -->
+              <input
+                type="text"
+                [value]="searchQuery()"
+                (input)="onSearchInput($event)"
+                placeholder="Rechercher..."
+                class="bg-transparent text-white placeholder-slate-400 outline-none flex-grow min-w-[60px] text-xs font-normal"
+                id="journal-cp-search-input" />
+
+              <!-- Flèche descendante menu déroulant -->
+              <button
+                type="button"
+                class="text-slate-400 hover:text-white pl-2 border-l border-[#3a3f50] ml-1 p-0.5 shrink-0 cursor-pointer"
+                title="Options de recherche">
+                <mat-icon class="!text-[16px] !w-4 !h-4">arrow_drop_down</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- DROITE : Pagination 1-8 / 8 & Switchers Odoo (Cyan actif + Kanban) -->
+        <div class="cp-right flex items-center gap-3 shrink-0" id="journal-cp-controls-right">
+          <!-- Pagination exacte Odoo : 1-8 / 8 -->
+          <span class="pagination text-xs text-slate-300 select-none font-medium" id="journal-cp-pagination-label">
+            {{ paginationLabel() }}
+          </span>
+
+          <!-- Groupe de boutons Flèches Chevrons (< >) -->
+          <div class="flex items-center text-slate-400" id="journal-cp-pagination-buttons">
+            <button
+              type="button"
+              id="journal-prev-page-btn"
+              (click)="prevPage()"
+              [disabled]="!hasPrevPage()"
+              [class.opacity-40]="!hasPrevPage()"
+              [class.cursor-not-allowed]="!hasPrevPage()"
+              class="p-1 hover:text-white transition-colors cursor-pointer"
+              title="Précédent">
+              <mat-icon class="!text-[16px] !w-4 !h-4 flex items-center justify-center">chevron_left</mat-icon>
+            </button>
+            <button
+              type="button"
+              id="journal-next-page-btn"
+              (click)="nextPage()"
+              [disabled]="!hasNextPage()"
+              [class.opacity-40]="!hasNextPage()"
+              [class.cursor-not-allowed]="!hasNextPage()"
+              class="p-1 hover:text-white transition-colors cursor-pointer"
+              title="Suivant">
+              <mat-icon class="!text-[16px] !w-4 !h-4 flex items-center justify-center">chevron_right</mat-icon>
+            </button>
+          </div>
+
+          <!-- Sélecteurs de Vue Odoo : Bouton Liste vert sarcelle/cyan Odoo (#008784) + Bouton Kanban -->
+          <div class="flex items-center gap-1.5" id="journal-cp-view-switchers">
+            <!-- Bouton Liste ACTIF (Fond sarcelle Odoo avec lignes blanches) -->
+            <button
+              type="button"
+              class="view-btn-list-active p-1.5 rounded transition-all cursor-pointer shadow-xs"
+              title="Vue Liste">
+              <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-white flex items-center justify-center">view_list</mat-icon>
+            </button>
+
+            <!-- Bouton Kanban INACTIF (Fond sombre) -->
+            <button
+              type="button"
+              class="view-btn-kanban p-1.5 rounded bg-[#252830] text-slate-400 hover:text-white hover:bg-[#2e323e] transition-colors cursor-pointer"
+              title="Vue Kanban">
+              <mat-icon class="!text-[17px] !w-4.5 !h-4.5 flex items-center justify-center">view_kanban</mat-icon>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TABLEAU PLEINE LARGEUR ODOO (Exactement conforme à la capture d'écran)    -->
+    <!-- ========================================================================= -->
+    <div class="w-full overflow-x-auto min-h-[420px] pb-32">
+      <table class="w-full text-left text-sm border-collapse bg-transparent odoo-table" id="journals-transactions-table">
+        <thead>
+          <tr class="odoo-head-row select-none">
+            <th scope="col" class="py-2.5 px-3 text-center w-8">
+              <input
+                type="checkbox"
+                id="journal-select-all-checkbox"
+                [checked]="isAllSelected()"
+                (change)="onToggleSelectAll()"
+                aria-label="Sélectionner tous les journaux"
+                class="odoo-checkbox" />
+            </th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap min-w-[180px]">Nom du journal</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-36">Type</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-36">Grand livre</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-44">Préfixe de la Séquence</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap min-w-[280px]">Compte par défaut</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-24">
+              <div class="flex items-center justify-center gap-1.5">
+                <span>Actif</span>
+                <mat-icon class="!text-[15px] !w-4 !h-4 text-slate-400 cursor-pointer hover:text-white" title="Personnaliser les colonnes">tune</mat-icon>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#252834] bg-transparent">
+          @for (journal of pagedJournals(); track journal.id) {
+            <tr
+              class="odoo-data-row select-none cursor-pointer"
+              [class.odoo-row-selected]="journal.selected"
+              (click)="onRowClick(journal)">
+              <!-- Case à cocher unitaire -->
+              <td class="py-2.5 px-3 text-center align-middle" (click)="$event.stopPropagation()">
+                <input
+                  type="checkbox"
+                  [checked]="journal.selected"
+                  (change)="onToggleSelect(journal.id)"
+                  aria-label="Sélectionner ce journal"
+                  class="odoo-checkbox" />
+              </td>
+
+              <!-- Nom du journal -->
+              <td class="py-2.5 px-3 font-normal text-white align-middle whitespace-nowrap">
+                {{ journal.name }}
+              </td>
+
+              <!-- Type de journal -->
+              <td class="py-2.5 px-3 whitespace-nowrap align-middle text-slate-200">
+                {{ journal.type_label }}
+              </td>
+
+              <!-- Grand livre (Vide dans la capture pour la plupart) -->
+              <td class="py-2.5 px-3 whitespace-nowrap text-slate-400 align-middle">
+                {{ journal.currency || '' }}
+              </td>
+
+              <!-- Préfixe de la Séquence (ex: INV, BILL, BNK1, MISC, EXCH, CABA, TAX, CSH1) -->
+              <td class="py-2.5 px-3 whitespace-nowrap text-slate-200 align-middle font-mono text-xs">
+                {{ journal.sequence_prefix }}
+              </td>
+
+              <!-- Compte par défaut (ex: 701100 Vente de marchandises dans la région) -->
+              <td class="py-2.5 px-3 whitespace-nowrap text-slate-300 align-middle text-xs">
+                {{ journal.default_account }}
+              </td>
+
+              <!-- Colonne Actif : Case à cocher cyan/teal Odoo -->
+              <td class="py-2.5 px-3 text-center whitespace-nowrap align-middle" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  (click)="toggleActive(journal.id)"
+                  class="cursor-pointer inline-flex items-center justify-center p-0.5 rounded transition-transform active:scale-90"
+                  [title]="journal.is_active ? 'Désactiver' : 'Activer'">
+                  @if (journal.is_active) {
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#00A09D]">check_box</mat-icon>
+                  } @else {
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-600">check_box_outline_blank</mat-icon>
+                  }
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="py-12 text-center text-slate-500 text-sm">
+                Aucun journal comptable trouvé.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- MODAL DE CRÉATION DE JOURNAL ODOO -->
+  @if (isCreateModalOpen()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div class="w-full max-w-lg bg-[#252830] border border-[#383d4c] rounded-lg shadow-2xl overflow-hidden flex flex-col text-[#e6e8eb]">
+        
+        <!-- En-tête Modal Odoo -->
+        <div class="flex items-center justify-between px-5 py-3.5 bg-[#20232b] border-b border-[#343846]">
+          <h2 class="text-sm font-semibold text-white tracking-wide">Créer un Journal Comptable</h2>
+          <button
+            type="button"
+            (click)="closeCreateModal()"
+            class="text-slate-400 hover:text-white cursor-pointer transition-colors"
+            title="Fermer">
+            <mat-icon class="!w-5 !h-5 !text-[20px]">close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Formulaire Modal -->
+        <form [formGroup]="journalForm" (ngSubmit)="submitCreateJournal()" class="p-5 space-y-4 text-xs">
+          <!-- Nom du journal -->
+          <div>
+            <label for="jnl_modal_name" class="block font-medium text-[#abb1c2] mb-1">
+              Nom du journal <span class="text-rose-500">*</span>
+            </label>
+            <input
+              id="jnl_modal_name"
+              type="text"
+              formControlName="name"
+              placeholder="Ex: Ventes, Achats, Banque Afriland"
+              class="w-full px-3 py-2 rounded bg-[#191b22] border border-[#3e4354] text-white focus:outline-hidden focus:border-[#00A09D] text-xs" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <!-- Type de journal -->
+            <div>
+              <label for="jnl_modal_type" class="block font-medium text-[#abb1c2] mb-1">Type de journal</label>
+              <select
+                id="jnl_modal_type"
+                formControlName="type"
+                class="w-full px-2.5 py-2 rounded bg-[#191b22] border border-[#3e4354] text-white focus:outline-hidden focus:border-[#00A09D] text-xs">
+                <option value="sale">Ventes</option>
+                <option value="purchase">Achats</option>
+                <option value="bank">Banque</option>
+                <option value="cash">Espèces</option>
+                <option value="general">Divers</option>
+              </select>
+            </div>
+
+            <!-- Préfixe de séquence -->
+            <div>
+              <label for="jnl_modal_prefix" class="block font-medium text-[#abb1c2] mb-1">
+                Préfixe de la Séquence <span class="text-rose-500">*</span>
+              </label>
+              <input
+                id="jnl_modal_prefix"
+                type="text"
+                formControlName="sequence_prefix"
+                placeholder="Ex: INV, BILL, BNK1, MISC, CSH1"
+                class="w-full px-3 py-2 rounded bg-[#191b22] border border-[#3e4354] text-white uppercase font-mono focus:outline-hidden focus:border-[#00A09D] text-xs" />
+            </div>
+          </div>
+
+          <!-- Compte par défaut -->
+          <div>
+            <label for="jnl_modal_account" class="block font-medium text-[#abb1c2] mb-1">
+              Compte par défaut <span class="text-rose-500">*</span>
+            </label>
+            <input
+              id="jnl_modal_account"
+              type="text"
+              formControlName="default_account"
+              placeholder="Ex: 701100 Vente de marchandises dans la région"
+              class="w-full px-3 py-2 rounded bg-[#191b22] border border-[#3e4354] text-white focus:outline-hidden focus:border-[#00A09D] text-xs" />
+          </div>
+
+          <!-- Pied de modal : Actions -->
+          <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-[#343846]">
+            <button
+              type="button"
+              (click)="closeCreateModal()"
+              class="px-4 py-1.5 bg-[#2c303c] hover:bg-[#383d4c] text-[#c2c7d2] rounded font-medium cursor-pointer transition-colors">
+              Annuler
+            </button>
+            <button
+              type="submit"
+              [disabled]="journalForm.invalid || isSubmitting()"
+              class="btn-nouveau-odoo px-4 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded font-medium cursor-pointer shadow-xs transition-colors flex items-center gap-1.5">
+              @if (isSubmitting()) {
+                <span class="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                <span>Enregistrement...</span>
+              } @else {
+                <span>Créer le journal</span>
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

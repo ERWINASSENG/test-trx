@@ -5,6 +5,7 @@ import { signal } from '@angular/core';
 import { DashboardManager } from './dashboard-manager';
 import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
+import { JournalService } from '../../../core/services/journal.service';
 import { UserProfile } from '../../../core/models/auth.model';
 import { CashierTransaction } from '../../../core/models/cashier-transaction.model';
 
@@ -61,6 +62,10 @@ describe('DashboardManager', () => {
     loadTransactions: () => Promise.resolve(),
   };
 
+  const journalServiceMock = {
+    activeJournals: signal([]),
+  };
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DashboardManager],
@@ -68,6 +73,7 @@ describe('DashboardManager', () => {
         provideRouter([]),
         { provide: AuthService, useValue: authServiceMock },
         { provide: CashierService, useValue: cashierServiceMock },
+        { provide: JournalService, useValue: journalServiceMock },
       ],
     }).compileComponents();
 

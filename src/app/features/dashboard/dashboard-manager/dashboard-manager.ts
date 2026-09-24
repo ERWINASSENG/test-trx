@@ -27,6 +27,8 @@ import {
 } from 'chart.js';
 import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
+import { JournalService } from '../../../core/services/journal.service';
+import { Journal } from '../../../core/models/journal.model';
 
 // Enregistrement des composants nécessaires de Chart.js
 Chart.register(
@@ -75,11 +77,26 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
   private readonly authService = inject(AuthService);
   private readonly cashierService = inject(CashierService);
+  private readonly journalService = inject(JournalService, { optional: true });
   private readonly platformId = inject(PLATFORM_ID);
 
   public readonly currentUser = this.authService.currentUser;
   public readonly allTransactions = this.cashierService.allTransactions;
   public readonly currentBalance = this.cashierService.currentBalance;
+
+  // Journaux additionnels actifs créés depuis le sous-module de configuration
+  public readonly additionalJournals = computed<Journal[]>(() => {
+    if (!this.journalService) return [];
+    // Filtre pour ne pas dupliquer la caisse principale qui possède déjà sa carte dédiée avec la courbe Chart.js
+    return this.journalService
+      .activeJournals()
+      .filter(
+        (j) =>
+          j.sequence_prefix !== 'CSH1' &&
+          j.id !== 'native-caisse-principal' &&
+          !j.name.toLowerCase().includes('caisse principale')
+      );
+  });
 
   private chartInstance: Chart | null = null;
 
