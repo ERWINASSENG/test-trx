@@ -8,7 +8,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { JournalService } from '../../../core/services/journal.service';
@@ -16,7 +15,7 @@ import { Journal, JournalType } from '../../../core/models/journal.model';
 
 @Component({
   selector: 'app-configuration-journal',
-  imports: [RouterLink, ReactiveFormsModule, MatIconModule],
+  imports: [ReactiveFormsModule, MatIconModule],
   templateUrl: './configuration-journal.html',
   styleUrl: './configuration-journal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
