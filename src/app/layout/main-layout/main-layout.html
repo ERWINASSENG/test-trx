@@ -1,4 +1,4 @@
-<div class="layout-container min-h-screen bg-slate-50 dark:bg-[#1e2227] flex flex-col text-slate-800 dark:text-slate-100" id="main-app-container">
+<div class="layout-container min-h-screen bg-slate-50 dark:bg-[#1e2227] flex flex-col text-slate-800 dark:text-slate-100" id="main-app-container" [class.apps-home]="currentUrl().startsWith('/apps')">
 
   <!-- ========================================================================= -->
   <!-- LIGNE 1 : TOPBAR NAVIGATION GLOBALE (Style ERP Odoo Adaptatif)            -->
@@ -19,6 +19,15 @@
               Global Logistics Provider
             </span>
           </div>
+        </a>
+
+        <a
+          routerLink="/apps"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-[#008f8c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#008f8c] dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-[#00c4c0]"
+          id="topbar-app-launcher-link"
+          title="Applications"
+          aria-label="Ouvrir les applications">
+          <mat-icon aria-hidden="true">apps</mat-icon>
         </a>
 
         <!-- Séparateur vertical discret -->

@@ -274,3 +274,33 @@
     }
   }
 }
+
+.layout-container.apps-home {
+  background-color: #1f1f23 !important;
+  color: #ebebeb;
+
+  .topbar {
+    background-color: #1f1f23 !important;
+    border-color: #3b3c42 !important;
+    box-shadow: none;
+    color: #ebebeb;
+
+    #topbar-brand-logo span:first-child {
+      color: #ebebeb;
+    }
+
+    #topbar-main-nav {
+      display: none !important;
+    }
+
+    .utility-icon-btn,
+    #topbar-user-profile-trigger {
+      color: #ebebeb;
+    }
+
+    #topbar-app-launcher-link:hover {
+      background-color: rgba(255, 255, 255, 0.1) !important;
+      color: #1cbcb1 !important;
+    }
+  }
+}

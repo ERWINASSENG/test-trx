@@ -301,7 +301,7 @@ export class AuthService {
         }
 
         this._isLoading.set(false);
-        this.router.navigate(['/dashboard']);
+        this.router.navigate(['/apps']);
         return { success: true };
       }
 

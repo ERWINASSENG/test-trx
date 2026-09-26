@@ -4,10 +4,10 @@ import { roleGuard } from './core/guards/role.guard';
 import { MainLayout } from './layout/main-layout/main-layout';
 
 export const routes: Routes = [
-  // Redirection racine vers le tableau de bord
+  // Redirection racine vers le lanceur d'applications
   {
     path: '',
-    redirectTo: 'dashboard',
+    redirectTo: 'apps',
     pathMatch: 'full',
   },
   // Route d'authentification publique
@@ -36,6 +36,12 @@ export const routes: Routes = [
     component: MainLayout,
     canActivate: [authGuard],
     children: [
+      {
+        path: 'apps',
+        loadComponent: () =>
+          import('./features/app-launcher/app-launcher').then((m) => m.AppLauncher),
+        title: 'Transmex - Applications',
+      },
       {
         path: 'dashboard',
         loadComponent: () =>

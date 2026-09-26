@@ -1,0 +1,33 @@
+<main class="app-launcher" aria-label="Applications">
+  <input
+    class="launcher-search-accessible"
+    type="search"
+    autocomplete="off"
+    aria-label="Rechercher un menu"
+    [value]="searchQuery()"
+    (input)="onSearchInput($event)" />
+
+  @if (visibleModules().length > 0) {
+    <nav class="launcher-navigation" aria-label="Applications disponibles">
+      <ul class="launcher-grid">
+        @for (module of visibleModules(); track module.id) {
+          <li class="launcher-grid-cell">
+            <a
+              class="launcher-tile"
+              [routerLink]="module.route"
+              [style.--module-accent]="module.accent">
+              <span class="launcher-tile-icon">
+                <mat-icon aria-hidden="true">{{ module.icon }}</mat-icon>
+              </span>
+              <span class="launcher-tile-label">{{ module.label }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    </nav>
+  } @else {
+    <p class="launcher-empty" role="status">
+      Aucun menu ne correspond à « {{ searchQuery() }} ».
+    </p>
+  }
+</main>

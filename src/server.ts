@@ -19,8 +19,6 @@ import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
 import { getOperationsHandler } from './server/cashier.read';
-import { auditPiecesComptablesHandler } from './server/cashier.audit';
-import { writeAuditLog } from './server/audit-log';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -394,14 +392,8 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
 
     const status = payload.status === 'posted' ? 'posted' : (payload.status === 'cancelled' ? 'cancelled' : 'draft');
 
-    // Si aucune pièce comptable n'est fournie explicitement (saisie manuelle/import), on laisse `null` :
-    // le déclencheur PostgreSQL `assign_piece_comptable` (voir supabase/migrations/202609201200_...)
-    // assigne alors le numéro de façon atomique (verrouillage de ligne sur le compteur de l'année),
-    // ce qu'un calcul "SELECT max()+1" en Node.js ne peut pas garantir sous concurrence.
-    const finalPieceComptable = candidatePiece || null;
-
     const rowToInsert = {
-      piece_comptable: finalPieceComptable,
+      piece_comptable: candidatePiece,
       libelle,
       service,
       type_description: typeDescription,
@@ -419,6 +411,8 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       date: dateToStore,
     };
 
+    console.log(`[AUDIT CASHIER] Création opération par [${authenticatedUser?.email || callerId || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) : Montant=${montant}, Libellé="${libelle}", Pièce="${candidatePiece || 'auto'}"`);
+
     const { data, error } = await adminClient
       .from('cashier_transactions')
       .insert([rowToInsert])
@@ -426,27 +420,17 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       .single();
 
     if (error) {
-      console.error('Erreur SQL lors de l’insertion de l’opération:', error.message, error.details, error.hint);
+      console.error('Erreur SQL lors de l’insertion de l’opération:', error.message);
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
-        const detailMsg = error.details || error.message || '';
         res.status(409).json({
-          error: `Erreur d'unicité : ${detailMsg.includes('piece_comptable') ? 'le numéro de pièce comptable est déjà utilisé' : 'une valeur unique est en doublon'} dans la base de données (${detailMsg || 'conflit d’unicité SQL'}).`,
+          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
         });
         return;
       }
-      res.status(500).json({ error: `Erreur lors de l’enregistrement de l’opération : ${error.message || 'erreur base de données'}` });
+      res.status(500).json({ error: 'Erreur lors de l’enregistrement de l’opération de caisse.' });
       return;
     }
-
-    await writeAuditLog(adminClient, {
-      userId: callerId,
-      userEmail: authenticatedUser?.email,
-      userRole: authenticatedUser?.role,
-      action: 'CREATE_OPERATION',
-      entityId: data?.id ?? null,
-      details: { montant, libelle, piece_comptable: data?.piece_comptable ?? finalPieceComptable },
-    });
 
     const enrichedOperation = formatPersistedPieceComptable(data);
 
@@ -671,6 +655,8 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
 
     updateData['updated_at'] = new Date().toISOString();
 
+    console.log(`[AUDIT CASHIER] Modification opération [${targetId}] par [${authenticatedUser?.email || authenticatedUser?.id || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) :`, Object.keys(updateData));
+
     const { data, error } = await adminClient
       .from('cashier_transactions')
       .update(updateData)
@@ -679,27 +665,17 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       .single();
 
     if (error) {
-      console.error('Erreur SQL lors de la mise à jour de l’opération:', error.message, error.details, error.hint);
+      console.error('Erreur SQL lors de la mise à jour de l’opération:', error.message);
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
-        const detailMsg = error.details || error.message || '';
         res.status(409).json({
-          error: `Erreur d'unicité : ${detailMsg.includes('piece_comptable') ? 'le numéro de pièce comptable est déjà utilisé' : 'une valeur unique est en doublon'} dans la base de données (${detailMsg || 'conflit d’unicité SQL'}).`,
+          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
         });
         return;
       }
-      res.status(500).json({ error: `Erreur lors de la modification de l’opération : ${error.message || 'erreur base de données'}` });
+      res.status(500).json({ error: 'Erreur lors de la modification de l’opération de caisse.' });
       return;
     }
-
-    await writeAuditLog(adminClient, {
-      userId: authenticatedUser?.id,
-      userEmail: authenticatedUser?.email,
-      userRole: authenticatedUser?.role,
-      action: 'UPDATE_OPERATION',
-      entityId: targetId,
-      details: { champs_modifies: Object.keys(updateData) },
-    });
 
     const enrichedOperation = formatPersistedPieceComptable(data);
 
@@ -749,12 +725,6 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       return;
     }
 
-    // Récupération préalable des lignes complètes pour enrichir l'audit log avant suppression
-    const { data: rowsToDelete } = await adminClient
-      .from('cashier_transactions')
-      .select('id, piece_comptable, date, libelle, montant, category, service, no_dossier, created_by')
-      .in('id', targetIds);
-
     // Si l'utilisateur n'est pas admin, vérifier les autorisations de propriété stricte
     if (!isAdmin) {
       if (!callerId) {
@@ -762,7 +732,12 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
         return;
       }
 
-      if (!rowsToDelete) {
+      const { data: rowsToCheck, error: fetchErr } = await adminClient
+        .from('cashier_transactions')
+        .select('id, created_by, employee_id, libelle')
+        .in('id', targetIds);
+
+      if (fetchErr || !rowsToCheck) {
         res.status(500).json({ error: 'Impossible de vérifier la propriété des opérations' });
         return;
       }
@@ -771,8 +746,8 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       // Vérification stricte de propriété : l'utilisateur ne peut supprimer QUE ses propres opérations.
       // Règle de parité stricte avec la policy RLS : une ligne sans créateur explicite (created_by ou employee_id vide) ne peut être supprimée que par un admin
       const userEmail = (authenticatedUser?.email || '').toLowerCase().trim();
-      const unauthorizedRows = rowsToDelete.filter((r) => {
-        const creator = String(r.created_by || '').trim();
+      const unauthorizedRows = rowsToCheck.filter((r) => {
+        const creator = String(r.created_by || r.employee_id || '').trim();
         // Si aucun créateur n'est défini en base, interdire la suppression à tout non-administrateur
         if (!creator) return true;
         const matchesId = Boolean(callerId && creator === callerId);
@@ -788,6 +763,8 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       }
     }
 
+    console.warn(`[AUDIT CASHIER] Suppression de ${targetIds.length} opération(s) [${targetIds.join(', ')}] initiée par [${authenticatedUser?.email || authenticatedUser?.id || 'inconnu'}] (rôle: ${userRole || 'non-défini'})`);
+
     const { error, count } = await adminClient
       .from('cashier_transactions')
       .delete({ count: 'exact' })
@@ -798,28 +775,6 @@ const deleteOperationsHandler = async (req: express.Request, res: express.Respon
       res.status(500).json({ error: 'Erreur lors de la suppression des opérations de caisse.' });
       return;
     }
-
-    await writeAuditLog(adminClient, {
-      userId: authenticatedUser?.id,
-      userEmail: authenticatedUser?.email,
-      userRole: userRole,
-      action: 'DELETE_OPERATION',
-      entityId: targetIds.join(','),
-      details: {
-        nombre_supprime: count ?? targetIds.length,
-        ids: targetIds,
-        snapshot_operations: (rowsToDelete || []).map((r) => ({
-          id: r.id,
-          piece_comptable: r.piece_comptable,
-          date: r.date,
-          libelle: r.libelle,
-          montant: r.montant,
-          category: r.category,
-          service: r.service,
-          no_dossier: r.no_dossier,
-        })),
-      },
-    });
 
     // Nettoyage éventuel des pièces justificatives associées dans storage ou liens
     res.json({
@@ -885,30 +840,23 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
     }
 
     const todayIso = new Date().toISOString();
-    const todayDay = normalizeDateToDay(todayIso);
-    const rowsToInsert = await Promise.all(
-      originalRows.map(async (orig) => {
-        // `piece_comptable: null` -> assigné atomiquement par le déclencheur DB pour chaque ligne.
-        return {
-          piece_comptable: null,
-          libelle: orig.libelle ? `${orig.libelle} (Copie)` : 'Copie opération',
-          service: orig.service,
-          type_description: orig.type_description,
-          category: orig.category,
-          status: 'draft',
-          no_dossier: orig.no_dossier,
-          dossier_id: orig.dossier_id,
-          first_name: orig.first_name,
-          partenaire: orig.partenaire,
-          employee: orig.employee,
-          employee_id: callerId,
-          created_by: callerId,
-          quantity: orig.quantity,
-          montant: orig.montant,
-          date: todayDay,
-        };
-      })
-    );
+    const rowsToInsert = originalRows.map((orig) => ({
+      libelle: orig.libelle ? `${orig.libelle} (Copie)` : 'Copie opération',
+      service: orig.service,
+      type_description: orig.type_description,
+      category: orig.category,
+      status: 'draft',
+      no_dossier: orig.no_dossier,
+      dossier_id: orig.dossier_id,
+      first_name: orig.first_name,
+      partenaire: orig.partenaire,
+      employee: orig.employee,
+      employee_id: callerId,
+      created_by: callerId,
+      quantity: orig.quantity,
+      montant: orig.montant,
+      date: todayIso,
+    }));
 
     const { data: insertedRows, error: insertErr } = await adminClient
       .from('cashier_transactions')
@@ -1036,10 +984,6 @@ cashierOperationAliases.forEach((path) => {
   app.put(`${path}/:id`, requireAuth, requireRole(cashierWriteRoles), updateOperationHandler);
   app.patch(`${path}/:id`, requireAuth, requireRole(cashierWriteRoles), updateOperationHandler);
 });
-
-// Audit de conformité et intégrité de la séquence des pièces comptables
-app.get('/api/cashier/audit-pieces', requireAuth, requireRole(cashierReadRoles), auditPiecesComptablesHandler);
-app.get('/api/cahier/audit-pieces', requireAuth, requireRole(cashierReadRoles), auditPiecesComptablesHandler);
 
 // Suppression : autorisée pour les Administrateurs et Caissières (vérification stricte de propriété dans deleteOperationsHandler)
 cashierOperationAliases.forEach((path) => {
