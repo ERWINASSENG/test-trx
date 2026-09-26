@@ -103,11 +103,11 @@
   color: #fff;
 }
 
-.launcher-tile-icon mat-icon {
-  width: 42px;
-  height: 42px;
-  font-size: 42px;
-  line-height: 42px;
+.launcher-tile-icon img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: contain;
 }
 
 .launcher-tile-label {

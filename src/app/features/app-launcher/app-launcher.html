@@ -17,7 +17,7 @@
               [routerLink]="module.route"
               [style.--module-accent]="module.accent">
               <span class="launcher-tile-icon">
-                <mat-icon aria-hidden="true">{{ module.icon }}</mat-icon>
+                <img [src]="module.icon" alt="" />
               </span>
               <span class="launcher-tile-label">{{ module.label }}</span>
             </a>

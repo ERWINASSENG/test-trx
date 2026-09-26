@@ -1,12 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatIconModule } from '@angular/material/icon';
 import { APP_MODULES, AppModule, isAppModuleVisibleToRole } from '../../core/models/app-module.model';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-launcher',
-  imports: [RouterLink, MatIconModule],
+  imports: [RouterLink],
   templateUrl: './app-launcher.html',
   styleUrl: './app-launcher.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
