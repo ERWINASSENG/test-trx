@@ -10,7 +10,7 @@
   </div>
 
   @if (isCashier()) {
-    <section class="grid grid-cols-1 sm:grid-cols-2 gap-4" aria-label="Synthèse de trésorerie">
+    <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" aria-label="Synthèse de trésorerie">
       <article class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
         <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
           <span class="text-xs font-medium uppercase tracking-wider">Solde Trésorerie Caisse</span>
@@ -40,6 +40,29 @@
           </p>
         </div>
       </article>
+
+      <a
+        routerLink="/caisse"
+        class="bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between transition-colors hover:border-[#00A09D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00A09D]"
+        aria-label="Ouvrir le journal de caisse"
+      >
+        <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+          <span class="text-xs font-medium uppercase tracking-wider">Journal de caisse</span>
+          <mat-icon class="text-[#00A09D]" aria-hidden="true">point_of_sale</mat-icon>
+        </div>
+        <div>
+          <div class="text-lg font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
+            Opérations de caisse
+          </div>
+          <p class="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
+            Accéder au journal et aux pièces comptables
+          </p>
+        </div>
+        <div class="inline-flex items-center gap-2 text-sm font-semibold text-[#008f8c] mt-4">
+          <span>Ouvrir le journal</span>
+          <mat-icon class="!text-base" aria-hidden="true">arrow_forward</mat-icon>
+        </div>
+      </a>
     </section>
   }
 </div>

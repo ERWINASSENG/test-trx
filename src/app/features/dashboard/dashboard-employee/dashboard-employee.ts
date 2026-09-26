@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
 
 @Component({
   selector: 'app-dashboard-employee',
-  imports: [MatIconModule],
+  imports: [MatIconModule, RouterLink],
   templateUrl: './dashboard-employee.html',
   styleUrl: './dashboard-employee.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
