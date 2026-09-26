@@ -74,8 +74,36 @@
                 <span class="text-slate-500 font-medium">#</span>
               }
             </th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-24">Date</th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-40">Pièce comptable</th>
+            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-28">
+              <button
+                type="button"
+                (click)="toggleSort('date')"
+                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors"
+                title="Trier par date"
+              >
+                <span>Date</span>
+                @if (sortField() === 'date') {
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  </mat-icon>
+                }
+              </button>
+            </th>
+            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-44">
+              <button
+                type="button"
+                (click)="toggleSort('pieceComptable')"
+                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors"
+                title="Trier par numéro séquentiel de pièce comptable"
+              >
+                <span>Pièce comptable</span>
+                @if (sortField() === 'pieceComptable') {
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  </mat-icon>
+                }
+              </button>
+            </th>
             <th scope="col" class="py-2 px-3 font-semibold min-w-[200px]">Libellé</th>
             <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-44">Partenaire</th>
             <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-28">
@@ -85,7 +113,21 @@
             </th>
             <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-36">Service</th>
             <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-24">Quantité</th>
-            <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-32">Montant</th>
+            <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-32">
+              <button
+                type="button"
+                (click)="toggleSort('montant')"
+                class="inline-flex items-center justify-end gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors w-full"
+                title="Trier par montant"
+              >
+                <span>Montant</span>
+                @if (sortField() === 'montant') {
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  </mat-icon>
+                }
+              </button>
+            </th>
             @if (canViewBalance()) {
               <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-32">Solde courant</th>
             }

@@ -32,7 +32,7 @@ import {
   Filler,
   ChartConfiguration,
 } from 'chart.js';
-import { CashierService } from '../../core/services/cashier.service';
+import { CashierService, CashierSortField } from '../../core/services/cashier.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
 import {
@@ -140,6 +140,15 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly isLoading = this.cashierService.isLoading;
   public readonly error = this.cashierService.error;
   public readonly nextPieceComptable = this.cashierService.nextPieceComptable;
+  public readonly sortField = this.cashierService.sortField;
+  public readonly sortDirection = this.cashierService.sortDirection;
+
+  /**
+   * Bascule le tri sur un champ donné
+   */
+  public toggleSort(field: CashierSortField): void {
+    this.cashierService.toggleSort(field);
+  }
 
   // Contrôles UI synchronisés avec le service
   public readonly isAddingRow = this.cashierService.isAddingRow;

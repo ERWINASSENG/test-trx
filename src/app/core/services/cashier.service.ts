@@ -43,6 +43,9 @@ export interface CashierDbRow {
   updated_at?: string;
 }
 
+export type CashierSortField = 'pieceComptable' | 'date' | 'montant' | 'libelle';
+export type CashierSortDirection = 'asc' | 'desc';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -112,6 +115,10 @@ export class CashierService implements OnDestroy {
     this.cleanupRealtimeSubscription();
   }
 
+  // Signaux de tri réactif (par défaut : Pièce comptable en ordre décroissant)
+  public readonly sortField = signal<CashierSortField>('pieceComptable');
+  public readonly sortDirection = signal<CashierSortDirection>('desc');
+
   // Filtres et pagination (plancher de 80 lignes minimum par page)
   private readonly _filterState = signal<CashierFilterState>({
     searchQuery: '',
@@ -132,6 +139,32 @@ export class CashierService implements OnDestroy {
 
   public closeImportModal(): void {
     this.isImportModalOpen.set(false);
+  }
+
+  /**
+   * Bascule le tri sur un champ donné ou inverse la direction si déjà actif
+   */
+  public toggleSort(field: CashierSortField): void {
+    if (this.sortField() === field) {
+      this.sortDirection.update((dir) => (dir === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set(field === 'pieceComptable' ? 'desc' : 'asc');
+    }
+  }
+
+  public setSort(field: CashierSortField, direction: CashierSortDirection): void {
+    this.sortField.set(field);
+    this.sortDirection.set(direction);
+  }
+
+  /**
+   * Extrait le numéro séquentiel numérique d'une référence de pièce comptable (ex: "CSH1/2026/00011" -> 11)
+   */
+  public extractPieceSequence(piece?: string): number {
+    if (!piece) return 0;
+    const match = piece.match(/\/(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   // Signal calculé pour la prochaine référence de pièce comptable prévisionnelle (ex: CSH1/2026/00004)
@@ -161,21 +194,46 @@ export class CashierService implements OnDestroy {
   public readonly error = computed(() => this._error());
   public readonly allTransactions = computed(() => this._transactions());
 
-  // Transactions filtrées par mot-clé et type
+  // Transactions filtrées par mot-clé et type, puis triées de manière déterministe
   public readonly filteredTransactions = computed(() => {
     const query = this._filterState().searchQuery.trim().toLowerCase();
     const category = this._filterState().categoryFilter;
+    const field = this.sortField();
+    const direction = this.sortDirection();
     const list = this._transactions();
 
-    return list.filter((tx) => {
+    const filtered = list.filter((tx) => {
       const matchesCategory =
         category === 'all' || tx.category === category;
       if (!matchesCategory) return false;
 
       if (!query) return true;
 
-      const searchableText = `${tx.libelle} ${tx.service || ''} ${tx.typeDescription || ''} ${tx.firstName || ''} ${tx.employee || ''} ${tx.partenaire || ''} ${tx.noDossier || ''}`.toLowerCase();
+      const searchableText = `${tx.libelle} ${tx.pieceComptable || ''} ${tx.service || ''} ${tx.typeDescription || ''} ${tx.firstName || ''} ${tx.employee || ''} ${tx.partenaire || ''} ${tx.noDossier || ''}`.toLowerCase();
       return searchableText.includes(query);
+    });
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (field === 'pieceComptable') {
+        const numA = this.extractPieceSequence(a.pieceComptable);
+        const numB = this.extractPieceSequence(b.pieceComptable);
+        comparison = numA - numB;
+      } else if (field === 'date') {
+        const timeA = this.parseDateTimestamp(a.date);
+        const timeB = this.parseDateTimestamp(b.date);
+        if (timeA !== timeB) {
+          comparison = timeA - timeB;
+        } else {
+          comparison = this.extractPieceSequence(a.pieceComptable) - this.extractPieceSequence(b.pieceComptable);
+        }
+      } else if (field === 'montant') {
+        comparison = a.montant - b.montant;
+      } else if (field === 'libelle') {
+        comparison = (a.libelle || '').localeCompare(b.libelle || '');
+      }
+
+      return direction === 'asc' ? comparison : -comparison;
     });
   });
 
