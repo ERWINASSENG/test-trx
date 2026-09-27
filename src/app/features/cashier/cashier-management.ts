@@ -14,6 +14,7 @@ import {
   signal,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   FormControl,
   FormGroup,
@@ -35,6 +36,7 @@ import {
 import { CashierService, CashierSortField } from '../../core/services/cashier.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { JournalService } from '../../core/services/journal.service';
 import {
   CASHIER_SERVICES,
   CashierTransaction,
@@ -86,6 +88,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly cashierService = inject(CashierService);
   private readonly notificationService = inject(NotificationService);
   private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  public readonly journalService = inject(JournalService);
   private readonly elementRef = inject(ElementRef);
   private readonly cdr = inject(ChangeDetectorRef);
   protected readonly Math = Math;
@@ -96,32 +101,67 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   private touchStartX = 0;
   private touchStartY = 0;
 
-  // Permissions : Seuls admin et caissiere peuvent créer/modifier/supprimer
+  // Journal actif et liste des journaux disponibles
+  public readonly activeJournalId = this.cashierService.activeJournalId;
+  public readonly activeJournalPrefix = this.cashierService.activeJournalPrefix;
+
+  public readonly availableJournals = computed(() => [
+    { id: 'native-caisse-principal', name: 'Caisse Principale', sequence_prefix: 'CSH1' },
+    ...this.journalService.journals().filter((j) => j.id !== 'native-caisse-principal' && j.sequence_prefix !== 'CSH1'),
+  ]);
+
+  public readonly activeJournalName = computed<string>(() => {
+    const id = this.activeJournalId();
+    const found = this.availableJournals().find((j) => j.id === id);
+    return found ? found.name : 'Caisse Principale';
+  });
+
+  public selectJournal(journalId: string): void {
+    if (journalId === 'native-caisse-principal') {
+      this.cashierService.setActiveJournal('native-caisse-principal', 'CSH1');
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { journalId: 'native-caisse-principal' },
+        queryParamsHandling: 'merge',
+      });
+    } else {
+      const journal = this.availableJournals().find((j) => j.id === journalId);
+      const prefix = journal?.sequence_prefix || 'JRNL';
+      this.cashierService.setActiveJournal(journalId, prefix);
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { journalId },
+        queryParamsHandling: 'merge',
+      });
+    }
+  }
+
+  // Permissions : Seuls admin, caissiere et tresorier peuvent créer/modifier/supprimer
   public readonly canEdit = computed(() => {
     const role = this.authService.currentUser()?.role;
-    return role === 'admin' || role === 'caissiere';
+    return role === 'admin' || role === 'caissiere' || role === 'tresorier';
   });
 
   /**
    * Vérifie si l'utilisateur actuel a le droit d'éditer une transaction spécifique.
    * - Admin : peut éditer toutes les lignes
-   * - Caissière : ne peut éditer que les lignes qu'elle a elle-même enregistrées ou importées (createdBy === currentUser.id)
+   * - Caissière & Trésorier : peuvent éditer les lignes qu'ils ont eux-mêmes enregistrées ou importées (createdBy === currentUser.id)
    * - Autres rôles : lecture seule
    */
   public canEditTransaction(tx: CashierTransaction): boolean {
     const user = this.authService.currentUser();
     if (!user) return false;
     if (user.role === 'admin') return true;
-    if (user.role !== 'caissiere') return false;
+    if (user.role !== 'caissiere' && user.role !== 'tresorier') return false;
     // Si la ligne n'a pas encore de créateur spécifié (rétrocompatibilité), autoriser
     if (!tx.createdBy) return true;
     return tx.createdBy === user.id;
   }
 
-  // Sélection de lignes : autorisé pour admin, caissiere et comptable (pour l'exportation et consultation)
+  // Sélection de lignes : autorisé pour admin, caissiere, tresorier et comptable (pour l'exportation et consultation)
   public readonly canSelect = computed(() => {
     const role = this.authService.currentUser()?.role;
-    return role === 'admin' || role === 'caissiere' || role === 'comptable';
+    return role === 'admin' || role === 'caissiere' || role === 'tresorier' || role === 'comptable';
   });
 
   // Visibilité du solde de caisse en temps réel : masqué pour le rôle comptable
@@ -388,6 +428,17 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         );
       }
     });
+
+    // Synchronisation automatique du préfixe dès que la liste des journaux est disponible
+    effect(() => {
+      const curId = this.cashierService.activeJournalId();
+      if (curId && curId !== 'native-caisse-principal') {
+        const matching = this.journalService.journals().find((j) => j.id === curId);
+        if (matching && matching.sequence_prefix) {
+          this.cashierService.setActiveJournalPrefix(matching.sequence_prefix);
+        }
+      }
+    });
   }
 
   private updateOperationsValidators(form: FormGroup, isOperations: boolean): void {
@@ -411,6 +462,21 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public ngOnInit(): void {
     this.cashierService.loadTransactions();
+
+    // Prise en compte du paramètre d'URL journalId (ex: depuis le Tableau de bord)
+    this.route.queryParams.subscribe((params) => {
+      const journalId = params['journalId'];
+      if (journalId) {
+        if (journalId === 'native-caisse-principal') {
+          this.cashierService.setActiveJournal('native-caisse-principal', 'CSH1');
+        } else {
+          const matching = this.journalService.journals().find((j) => j.id === journalId);
+          const prefix = matching?.sequence_prefix || 'JRNL';
+          this.cashierService.setActiveJournal(journalId, prefix);
+        }
+      }
+    });
+
     const today = new Date();
     const isoDate = today.toISOString().split('T')[0];
     this.todayIsoDate.set(isoDate);
@@ -682,7 +748,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Contrôle strict anti-doublon en direct : Date + Montant + Libellé + N° de dossier + Service
+      // Contrôle strict anti-doublon au sein du journal actif : Date + Montant + Libellé + N° de dossier + Service
       const duplicate = findDuplicateTransaction(
         {
           date: formattedDate,
@@ -691,13 +757,13 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
           noDossier: formValues.noDossier,
           service: formValues.service,
         },
-        this.allTransactions()
+        this.cashierService.journalTransactions()
       );
 
       if (duplicate) {
         const montantDisplay = Math.abs(Number(duplicate.montant)).toLocaleString('fr-FR');
         const serviceDisplay = duplicate.service || 'Sans service';
-        const duplicateMsg = `Opération déjà enregistrée : une opération identique existe déjà en caisse (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}"). La double saisie est interdite.`;
+        const duplicateMsg = `Opération déjà enregistrée : une opération identique existe déjà dans ce journal (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}"). La double saisie est interdite.`;
         this.cashierService.setError(duplicateMsg, false);
         this.cancelAddInline();
         this.notificationService.warning(duplicateMsg, 'Doublon détecté');
@@ -705,7 +771,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Comme sur Odoo, nous ne passons pas de numéro de pièce figé à la création :
-      // le trigger PostgreSQL assigne la pièce officielle de manière atomique et sans trou.
+      // le trigger / routeur serveur assigne la pièce officielle du journal actif de manière atomique et sans trou.
+      const activeJId = this.cashierService.activeJournalId();
       const result = await this.cashierService.addTransaction({
         pieceComptable: undefined,
         date: formattedDate,
@@ -718,6 +785,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         employee: formValues.employee || undefined,
         quantity: formValues.quantity !== null && formValues.quantity !== undefined ? Number(formValues.quantity) : undefined,
         montant: finalMontant,
+        journalId: activeJId,
+        journal_id: activeJId,
       });
 
       if (result.success) {
@@ -980,13 +1049,13 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Contrôle strict anti-doublon lors de l'édition
-      const existingTx = this.allTransactions().find((t) => t.id === activeId);
+      // Contrôle strict anti-doublon lors de l'édition au sein du journal
+      const existingTx = this.cashierService.journalTransactions().find((t) => t.id === activeId);
       const pieceToValidate = normalizePieceComptable(existingTx?.pieceComptable);
       if (pieceToValidate) {
-        const pieceDuplicate = findDuplicatePieceComptable({ id: activeId, pieceComptable: pieceToValidate }, this.allTransactions());
+        const pieceDuplicate = findDuplicatePieceComptable({ id: activeId, pieceComptable: pieceToValidate }, this.cashierService.journalTransactions());
         if (pieceDuplicate) {
-          const pieceMsg = `Modification refusée : le numéro de pièce comptable "${pieceToValidate}" est déjà attribué à une autre opération (ID: ${pieceDuplicate.id}, Libellé: "${pieceDuplicate.libelle}").`;
+          const pieceMsg = `Modification refusée : le numéro de pièce comptable "${pieceToValidate}" est déjà attribué à une autre opération dans ce journal (ID: ${pieceDuplicate.id}, Libellé: "${pieceDuplicate.libelle}").`;
           this.cashierService.setError(pieceMsg, false);
           this.cancelInlineEdit();
           this.notificationService.warning(pieceMsg, 'Pièce comptable en double');
@@ -1004,24 +1073,25 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
           service: formValues.service,
           pieceComptable: pieceToValidate,
         },
-        this.allTransactions()
+        this.cashierService.journalTransactions()
       );
 
       if (duplicate) {
         const montantDisplay = Math.abs(Number(duplicate.montant)).toLocaleString('fr-FR');
         const serviceDisplay = duplicate.service || 'Sans service';
-        const duplicateMsg = `Modification refusée : une opération identique existe déjà en caisse (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}").`;
+        const duplicateMsg = `Modification refusée : une opération identique existe déjà dans ce journal (Date : ${duplicate.date}, Montant : ${montantDisplay} FCFA, Service : ${serviceDisplay}, Libellé : "${duplicate.libelle}").`;
         this.cashierService.setError(duplicateMsg, false);
         this.cancelInlineEdit();
         this.notificationService.warning(duplicateMsg, 'Doublon détecté');
         return;
       }
 
+      const activeJId = this.cashierService.activeJournalId();
       const updateResult = await this.cashierService.updateTransaction(activeId, {
         pieceComptable: pieceToValidate,
         date: formattedDate,
         libelle: libelle,
-        service: (formValues.service as Service) || '',
+        service: (formValues.service as Service) || undefined,
         typeDescription: formValues.typeDescription || undefined,
         category: resolvedCategory,
         status: (formValues.status as TransactionStatus) || 'draft',
@@ -1029,6 +1099,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         employee: formValues.employee || undefined,
         quantity: formValues.quantity !== null && formValues.quantity !== undefined ? Number(formValues.quantity) : undefined,
         montant: finalMontant,
+        journalId: activeJId,
+        journal_id: activeJId,
       });
 
       if (updateResult.success) {

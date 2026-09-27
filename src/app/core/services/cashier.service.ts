@@ -39,6 +39,7 @@ export interface CashierDbRow {
   selected?: boolean;
   created_by?: string | null;
   employee_id?: string | null;
+  journal_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -167,11 +168,121 @@ export class CashierService implements OnDestroy {
     return match ? parseInt(match[1], 10) : 0;
   }
 
-  // Signal calculé pour la prochaine référence de pièce comptable prévisionnelle (ex: CSH1/2026/00004)
-  public readonly nextPieceComptable = computed<string>(() => {
+  // Gestion du journal actif sélectionné
+  private readonly _activeJournalId = signal<string>('native-caisse-principal');
+  private readonly _activeJournalPrefix = signal<string>('CSH1');
+  public readonly activeJournalId = computed(() => this._activeJournalId());
+  public readonly activeJournalPrefix = computed(() => this._activeJournalPrefix());
+
+  public setActiveJournal(journalId: string, prefix = 'CSH1'): void {
+    const targetId = journalId || 'native-caisse-principal';
+    this._activeJournalId.set(targetId);
+    this._activeJournalPrefix.set(prefix || 'CSH1');
+    this.setPageIndex(0);
+
+    if (targetId !== 'native-caisse-principal' && targetId !== 'CSH1') {
+      void this.loadJournalEntries(targetId);
+    }
+  }
+
+  public setActiveJournalId(journalId: string): void {
+    this.setActiveJournal(journalId, this._activeJournalPrefix());
+  }
+
+  public setActiveJournalPrefix(prefix: string): void {
+    this._activeJournalPrefix.set(prefix || 'CSH1');
+  }
+
+  /**
+   * Charge de manière hermétique les écritures rattachées à un journal bancaire / trésorerie
+   */
+  public async loadJournalEntries(journalId: string): Promise<void> {
+    if (!journalId || journalId === 'native-caisse-principal' || journalId === 'CSH1') {
+      return;
+    }
+
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
+        }
+      } catch {
+        // Ignorer
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/journals/${encodeURIComponent(journalId)}/entries`, {
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const entries = json.entries || [];
+        const mappedOps: CashierTransaction[] = entries.map((row: Record<string, unknown>) => ({
+          id: String(row['id']),
+          pieceComptable: String(row['piece_comptable']),
+          date: this.formatDate(String(row['date'] || '')),
+          libelle: String(row['libelle']),
+          service: row['service'] ? String(row['service']) : '',
+          typeDescription: row['type_description'] ? String(row['type_description']) : '',
+          category: (row['category'] === 'sortie' ? 'sortie' : 'entree') as 'entree' | 'sortie',
+          status: (row['status'] as 'draft' | 'posted' | 'cancelled') || 'draft',
+          noDossier: row['no_dossier'] ? String(row['no_dossier']) : '',
+          firstName: '',
+          employee: row['employee'] ? String(row['employee']) : '',
+          partenaire: row['partenaire'] ? String(row['partenaire']) : '',
+          quantity: row['quantity'] ? Number(row['quantity']) : undefined,
+          montant: Number(row['montant']) || 0,
+          soldeApres: row['solde_apres'] !== undefined && row['solde_apres'] !== null ? Number(row['solde_apres']) : undefined,
+          selected: false,
+          createdBy: row['created_by'] ? String(row['created_by']) : undefined,
+          employeeId: row['employee_id'] ? String(row['employee_id']) : undefined,
+          journalId: journalId,
+          journal_id: journalId,
+          createdAt: String(row['created_at'] || ''),
+          updatedAt: row['updated_at'] ? String(row['updated_at']) : undefined,
+        }));
+
+        this._transactions.update((curr) => {
+          const withoutThisJournal = curr.filter((t) => t.journalId !== journalId && t.journal_id !== journalId);
+          return [...withoutThisJournal, ...mappedOps];
+        });
+      }
+    } catch (err) {
+      console.warn(`Erreur chargement écritures pour le journal ${journalId}:`, err);
+    }
+  }
+
+  // Transactions appartenant exclusivement au journal sélectionné
+  public readonly journalTransactions = computed(() => {
     const list = this._transactions();
+    const currentJournal = this._activeJournalId();
+
+    if (!currentJournal || currentJournal === 'native-caisse-principal' || currentJournal === 'CSH1') {
+      return list.filter(
+        (t) =>
+          (!t.journalId && !t.journal_id) ||
+          t.journalId === 'native-caisse-principal' ||
+          t.journal_id === 'native-caisse-principal' ||
+          t.pieceComptable?.startsWith('CSH1')
+      );
+    }
+
+    return list.filter((t) => t.journalId === currentJournal || t.journal_id === currentJournal);
+  });
+
+  // Signal calculé pour la prochaine référence de pièce comptable prévisionnelle adaptée au journal
+  public readonly nextPieceComptable = computed<string>(() => {
+    const list = this.journalTransactions();
     const currentYear = new Date().getFullYear() || 2026;
-    const prefix = `CSH1/${currentYear}/`;
+    const prefixStr = this._activeJournalPrefix() || 'CSH1';
+    const prefix = `${prefixStr}/${currentYear}/`;
     let maxSeq = 0;
 
     for (const t of list) {
@@ -200,7 +311,7 @@ export class CashierService implements OnDestroy {
     const category = this._filterState().categoryFilter;
     const field = this.sortField();
     const direction = this.sortDirection();
-    const list = this._transactions();
+    const list = this.journalTransactions();
 
     const filtered = list.filter((tx) => {
       const matchesCategory =
@@ -237,9 +348,9 @@ export class CashierService implements OnDestroy {
     });
   });
 
-  // Calcul du solde actuel en temps réel
+  // Calcul du solde actuel en temps réel pour le journal actif
   public readonly currentBalance = computed(() => {
-    const list = this._transactions();
+    const list = this.journalTransactions();
     if (list.length === 0) return 0;
     return list.reduce((acc, curr) => acc + curr.montant, 0);
   });
@@ -418,10 +529,102 @@ export class CashierService implements OnDestroy {
     const montant = Number(op.montant) || 0;
     const estimatedNewSolde = currentSolde + montant;
 
-    let savedRow: CashierDbRow | null = null;
+    const targetJournalId = op.journalId || op.journal_id || this._activeJournalId();
+    const isNativeCaisse =
+      !targetJournalId ||
+      targetJournalId === 'native-caisse-principal' ||
+      targetJournalId === 'CSH1' ||
+      this._activeJournalPrefix() === 'CSH1';
 
-    // Étape 1 : Appel de l'API Serveur-Relais sécurisée
-    // Comme sur Odoo, si explicitPiece est vide (création standard), on envoie null/undefined pour que le trigger assigne la séquence
+    let savedRow: CashierDbRow | null = null;
+    let bankEntryResult: Record<string, unknown> | null = null;
+
+    // ROUTAGE SÉCURISÉ SELON LE TYPE DE JOURNAL
+    if (!isNativeCaisse) {
+      // ────────────────────────────────────────────────────────────────────────
+      // ROUTAGE HERMÉTIQUE VERS LE JOURNAL DE BANQUE / TRÉSORERIE DÉDIÉ
+      // Aucune écriture n'est envoyée vers cashier_transactions ni la Caisse Principale
+      // ────────────────────────────────────────────────────────────────────────
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`/api/journals/${encodeURIComponent(targetJournalId)}/entries`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            journal_id: targetJournalId,
+            date: this.toIsoDateString(op.date),
+            libelle: op.libelle,
+            service: op.service || null,
+            type_description: op.typeDescription || null,
+            category: op.category === 'sortie' ? 'sortie' : 'entree',
+            status: op.status || 'draft',
+            no_dossier: op.noDossier || null,
+            partenaire: op.partenaire || op.employee || null,
+            employee: op.employee || op.partenaire || null,
+            quantity: Number(op.quantity) || 1,
+            montant: montant,
+          }),
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          bankEntryResult = resJson.entry;
+        } else {
+          const errJson = await response.json().catch(() => ({}));
+          const serverError = errJson.error || `Erreur serveur ${response.status}`;
+          this.setError(serverError);
+          return { success: false, error: serverError };
+        }
+      } catch (apiErr) {
+        console.error('Erreur API journal entries POST:', apiErr);
+        const errMsg = apiErr instanceof Error ? apiErr.message : 'Erreur de connexion';
+        this.setError(errMsg);
+        return { success: false, error: errMsg };
+      }
+
+      if (!bankEntryResult) {
+        this.setError('Impossible d’enregistrer l’écriture dans ce journal.');
+        return { success: false, error: this._error()! };
+      }
+
+      const currentUserId = this.authService.currentUser()?.id;
+      const operationToStore: CashierTransaction = {
+        id: String(bankEntryResult['id']),
+        pieceComptable: String(bankEntryResult['piece_comptable']),
+        date: this.formatDate(String(bankEntryResult['date'] || '')),
+        libelle: String(bankEntryResult['libelle']),
+        service: bankEntryResult['service'] ? String(bankEntryResult['service']) : '',
+        typeDescription: bankEntryResult['type_description'] ? String(bankEntryResult['type_description']) : '',
+        category: (bankEntryResult['category'] === 'sortie' ? 'sortie' : 'entree') as 'entree' | 'sortie',
+        status: (bankEntryResult['status'] as 'draft' | 'posted' | 'cancelled') || op.status || 'draft',
+        noDossier: bankEntryResult['no_dossier'] ? String(bankEntryResult['no_dossier']) : '',
+        firstName: '',
+        employee: bankEntryResult['employee'] ? String(bankEntryResult['employee']) : '',
+        partenaire: bankEntryResult['partenaire'] ? String(bankEntryResult['partenaire']) : '',
+        quantity: bankEntryResult['quantity'] ? Number(bankEntryResult['quantity']) : undefined,
+        montant: Number(bankEntryResult['montant']),
+        soldeApres: bankEntryResult['solde_apres'] !== undefined && bankEntryResult['solde_apres'] !== null ? Number(bankEntryResult['solde_apres']) : estimatedNewSolde,
+        selected: false,
+        createdBy: bankEntryResult['created_by'] ? String(bankEntryResult['created_by']) : currentUserId,
+        employeeId: bankEntryResult['employee_id'] ? String(bankEntryResult['employee_id']) : undefined,
+        journalId: targetJournalId,
+        journal_id: targetJournalId,
+        createdAt: String(bankEntryResult['created_at'] || new Date().toISOString()),
+        updatedAt: bankEntryResult['updated_at'] ? String(bankEntryResult['updated_at']) : undefined,
+      };
+
+      this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
+      return { success: true, operation: operationToStore };
+    }
+
+    // Étape 1 : Appel de l'API Serveur-Relais pour la Caisse Principale
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -447,6 +650,7 @@ export class CashierService implements OnDestroy {
           quantity: op.quantity || 1,
           montant: op.montant,
           date: this.toIsoDateString(op.date),
+          journal_id: null,
         }),
       });
 
@@ -457,8 +661,6 @@ export class CashierService implements OnDestroy {
         const errJson = await response.json().catch(() => ({}));
         const serverError = errJson.error || `Erreur serveur ${response.status}`;
 
-        // RÈGLE D'OR : Si le serveur signale un doublon (409 Conflict) ou un refus explicite,
-        // stoppe immédiatement : aucun repli pirate n'est toléré.
         if (response.status === 409 || response.status === 400 || response.status === 403) {
           this.setError(serverError);
           return { success: false, error: serverError };
@@ -506,6 +708,8 @@ export class CashierService implements OnDestroy {
       selected: false,
       createdBy: savedRow.created_by || currentUserId || undefined,
       employeeId: savedRow.employee_id || currentUserId || undefined,
+      journalId: savedRow.journal_id || op.journalId || op.journal_id || this._activeJournalId(),
+      journal_id: savedRow.journal_id || op.journalId || op.journal_id || this._activeJournalId(),
       createdAt: savedRow.created_at || new Date().toISOString(),
       updatedAt: savedRow.updated_at,
     };
@@ -591,6 +795,8 @@ export class CashierService implements OnDestroy {
           employee: row.employee || row.partenaire,
           quantity: row.quantity,
           montant: row.montant,
+          journalId: this._activeJournalId(),
+          journal_id: this._activeJournalId() === 'native-caisse-principal' ? null : this._activeJournalId(),
         });
 
         if (res.success) {
@@ -1164,6 +1370,8 @@ export class CashierService implements OnDestroy {
       selected: !!row.selected,
       createdBy: row.created_by || undefined,
       employeeId: row.employee_id || undefined,
+      journalId: row.journal_id || undefined,
+      journal_id: row.journal_id || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1213,6 +1421,10 @@ export class CashierService implements OnDestroy {
         montant: numMontant,
         soldeApres: row.solde_apres !== undefined && row.solde_apres !== null ? Number(row.solde_apres) : runningBalance,
         selected: !!row.selected,
+        createdBy: row.created_by || undefined,
+        employeeId: row.employee_id || undefined,
+        journalId: row.journal_id || undefined,
+        journal_id: row.journal_id || undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       } as CashierTransaction;

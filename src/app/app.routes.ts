@@ -98,7 +98,7 @@ export const routes: Routes = [
             (m) => m.CashierManagement
           ),
         canActivate: [roleGuard],
-        data: { roles: ['admin', 'manager', 'caissiere', 'comptable'] },
+        data: { roles: ['admin', 'manager', 'caissiere', 'comptable', 'tresorier'] },
         title: 'Transmex - Caisse',
       },
       {
@@ -120,6 +120,8 @@ export const routes: Routes = [
           import('./features/configuration/journal/configuration-journal').then(
             (m) => m.ConfigurationJournalComponent
           ),
+        canActivate: [roleGuard],
+        data: { roles: ['admin', 'tresorier', 'manager'] },
         title: 'Transmex - Journaux',
       },
       {

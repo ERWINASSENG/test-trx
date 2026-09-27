@@ -6,6 +6,7 @@ import { DashboardManager } from './dashboard-manager';
 import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
 import { JournalService } from '../../../core/services/journal.service';
+import { JournalEntryService } from '../../../core/services/journal-entry.service';
 import { UserProfile } from '../../../core/models/auth.model';
 import { CashierTransaction } from '../../../core/models/cashier-transaction.model';
 
@@ -64,6 +65,11 @@ describe('DashboardManager', () => {
 
   const journalServiceMock = {
     activeJournals: signal([]),
+    loadJournals: () => Promise.resolve(),
+  };
+
+  const journalEntryServiceMock = {
+    getChartData: () => Promise.resolve(null),
   };
 
   beforeEach(async () => {
@@ -74,6 +80,7 @@ describe('DashboardManager', () => {
         { provide: AuthService, useValue: authServiceMock },
         { provide: CashierService, useValue: cashierServiceMock },
         { provide: JournalService, useValue: journalServiceMock },
+        { provide: JournalEntryService, useValue: journalEntryServiceMock },
       ],
     }).compileComponents();
 

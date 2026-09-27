@@ -44,4 +44,36 @@ describe('JournalService', () => {
     expect(service.getTypeLabel('purchase')).toBe('Achats');
     expect(service.getTypeLabel('general')).toBe('Divers');
   });
+
+  it('devrait calculer le solde propre du journal natif de caisse', () => {
+    Object.assign(service, {
+      defaultNativeCashJournal: { id: 'native-caisse-principal' },
+      cashierService: {
+        allTransactions: () => [
+          { montant: 10000, journalId: 'native-caisse-principal' },
+          { montant: -4000, journal_id: 'native-caisse-principal' },
+          { montant: 50000, journalId: 'other-journal' },
+        ],
+      },
+    });
+
+    const balance = service.getJournalBalance('native-caisse-principal');
+    expect(balance).toBe(6000);
+  });
+
+  it('devrait calculer le solde propre d’un autre journal', () => {
+    Object.assign(service, {
+      defaultNativeCashJournal: { id: 'native-caisse-principal' },
+      cashierService: {
+        allTransactions: () => [
+          { montant: 10000, journalId: 'native-caisse-principal' },
+          { montant: 50000, journalId: 'bank-1' },
+          { montant: -20000, journalId: 'bank-1' },
+        ],
+      },
+    });
+
+    expect(service.getJournalBalance('bank-1')).toBe(30000);
+    expect(service.getJournalTransactionCount('bank-1')).toBe(2);
+  });
 });

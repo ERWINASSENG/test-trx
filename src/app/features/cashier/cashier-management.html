@@ -33,10 +33,14 @@
       </div>
     }
 
-    <!-- Barre d'état Solde Actuel -->
+    <!-- Barre d'état Solde Actuel & Journal Actif -->
     <div class="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-white/5">
-      <div class="text-xs text-slate-500 font-medium">
-        Journal des opérations de caisse
+      <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-[#190056]/10 text-[#190056] dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff] border border-[#190056]/20 shadow-2xs select-none">
+          <mat-icon class="!text-[13px] !w-3.5 !h-3.5">book</mat-icon>
+          <span>{{ activeJournalName() }}</span>
+        </span>
+        <span class="text-slate-400 font-mono text-[11px]">[{{ activeJournalPrefix() }}]</span>
       </div>
 
       <!-- Solde Actuel (Masqué pour le rôle comptable) -->

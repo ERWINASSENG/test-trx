@@ -57,7 +57,7 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
 
     const { data, error, count } = await adminClient
       .from('cashier_transactions')
-      .select('id, piece_comptable, date, libelle, service, type_description, category, status, no_dossier, dossier_id, first_name, partenaire, employee, employee_id, created_by, quantity, montant, solde_apres, selected, created_at, updated_at', { count: 'exact' })
+      .select('id, piece_comptable, date, libelle, service, type_description, category, status, no_dossier, dossier_id, first_name, partenaire, employee, employee_id, created_by, quantity, montant, solde_apres, selected, journal_id, created_at, updated_at', { count: 'exact' })
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);

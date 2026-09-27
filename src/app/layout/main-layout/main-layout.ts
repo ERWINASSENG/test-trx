@@ -10,6 +10,7 @@ import { ThemeService } from '../../core/services/theme.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { CashierImportModal } from '../../features/cashier/import-modal/cashier-import-modal.component';
 import { ParsedImportRow } from '../../core/services/import.service';
+import { JournalService } from '../../core/services/journal.service';
 
 export interface NavOption {
   id: string;
@@ -35,6 +36,7 @@ export class MainLayout {
   public readonly cashierService = inject(CashierService);
   public readonly themeService = inject(ThemeService);
   public readonly notificationService = inject(NotificationService);
+  public readonly journalService = inject(JournalService);
   public readonly router = inject(Router);
 
   public readonly currentUser = this.authService.currentUser;
@@ -75,10 +77,26 @@ export class MainLayout {
     return url ? url.includes('/configuration') || url.includes('/settings') : false;
   });
 
-  // Droit d'édition en caisse (uniquement admin et caissière, pas le manager)
+  // Droit d'édition en caisse et journaux (admin, caissière et trésorier - managers en consultation seule)
   public readonly canEditCaisse = computed(() => {
     const role = this.authService.currentRole();
-    return role === 'admin' || role === 'caissiere';
+    return role === 'admin' || role === 'caissiere' || role === 'tresorier';
+  });
+
+  // Nom dynamique du journal actif (Caisse Principale ou journal personnalisé)
+  public readonly activeJournalName = computed<string>(() => {
+    const activeId = this.cashierService.activeJournalId();
+    if (!activeId || activeId === 'native-caisse-principal') {
+      return 'Caisse Principale';
+    }
+    const found = this.journalService.journals().find((j) => j.id === activeId);
+    return found ? found.name : 'Journal';
+  });
+
+  // Droit de consultation des journaux (admin, tresorier, manager)
+  public readonly canViewJournals = computed(() => {
+    const role = this.authService.currentRole();
+    return role === 'admin' || role === 'tresorier' || role === 'manager';
   });
 
   // Synchronisation pagination et état avec le module Caisse
@@ -103,7 +121,7 @@ export class MainLayout {
       label: 'Caisse',
       route: '/caisse',
       icon: 'point_of_sale',
-      allowedRoles: ['admin', 'caissiere', 'comptable'],
+      allowedRoles: ['admin', 'caissiere', 'comptable', 'tresorier', 'manager'],
     },
     {
       id: 'personnel',
