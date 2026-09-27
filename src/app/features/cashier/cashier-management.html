@@ -57,10 +57,10 @@
 
     <!-- TABLEAU DE CAISSE PLEINE LARGEUR STYLE ODOO TREE VIEW -->
     <div class="w-full overflow-x-auto min-h-[380px] pb-32">
-      <table class="w-full text-left text-sm border-collapse bg-transparent odoo-table" id="cashier-transactions-table">
+      <table class="w-full text-left text-sm border-collapse bg-white dark:bg-transparent odoo-table shadow-xs border border-slate-200 dark:border-none rounded-lg" id="cashier-transactions-table">
         <thead>
           <tr class="odoo-head-row select-none">
-            <th scope="col" class="py-2 px-3 text-center w-8">
+            <th scope="col" class="py-2.5 px-3 text-center w-8">
               @if (canSelect()) {
                 <input
                   type="checkbox"
@@ -71,70 +71,70 @@
                   class="odoo-checkbox"
                 />
               } @else {
-                <span class="text-slate-500 font-medium">#</span>
+                <span class="text-slate-600 dark:text-slate-400 font-semibold">#</span>
               }
             </th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-28">
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-28">
               <button
                 type="button"
                 (click)="toggleSort('date')"
-                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors"
+                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors"
                 title="Trier par date"
               >
                 <span>Date</span>
                 @if (sortField() === 'date') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
               </button>
             </th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-44">
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-44">
               <button
                 type="button"
                 (click)="toggleSort('pieceComptable')"
-                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors"
+                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors"
                 title="Trier par numéro séquentiel de pièce comptable"
               >
                 <span>Pièce comptable</span>
                 @if (sortField() === 'pieceComptable') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
               </button>
             </th>
-            <th scope="col" class="py-2 px-3 font-semibold min-w-[200px]">Libellé</th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-44">Partenaire</th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-28">
+            <th scope="col" class="py-2.5 px-3 font-semibold min-w-[200px]">Libellé</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-44">Partenaire</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-28">
               <span class="inline-flex items-center gap-1">
                 N°Dossier
               </span>
             </th>
-            <th scope="col" class="py-2 px-3 font-semibold whitespace-nowrap w-36">Service</th>
-            <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-24">Quantité</th>
-            <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-32">
+            <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-36">Service</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold text-right whitespace-nowrap w-24">Quantité</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold text-right whitespace-nowrap w-32">
               <button
                 type="button"
                 (click)="toggleSort('montant')"
-                class="inline-flex items-center justify-end gap-1 font-semibold hover:text-emerald-400 cursor-pointer transition-colors w-full"
+                class="inline-flex items-center justify-end gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors w-full"
                 title="Trier par montant"
               >
                 <span>Montant</span>
                 @if (sortField() === 'montant') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
               </button>
             </th>
             @if (canViewBalance()) {
-              <th scope="col" class="py-2 px-3 font-semibold text-right whitespace-nowrap w-32">Solde courant</th>
+              <th scope="col" class="py-2.5 px-3 font-semibold text-right whitespace-nowrap w-32">Solde courant</th>
             }
-            <th scope="col" class="py-2 px-3 font-semibold text-center whitespace-nowrap w-28">Statut</th>
+            <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-28">Statut</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-white/5 bg-transparent">
+        <tbody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
           <!-- LIGNE D'AJOUT RAPIDE STYLE ODOO (INLINE EDITABLE FLAT SANS BOX) -->
           @if (isAddingRow()) {
             <tr class="odoo-row-editing" id="inline-add-row" [formGroup]="transactionForm" (keydown)="onAddKeydown($event)">
@@ -467,20 +467,20 @@
                   </td>
 
                   <!-- Libellé -->
-                  <td class="py-2.5 px-3 text-slate-900 dark:text-slate-100 font-normal">{{ tx.libelle }}</td>
+                  <td class="py-2.5 px-3 text-slate-900 dark:text-slate-100 font-medium">{{ tx.libelle }}</td>
 
                   <!-- Partenaire (Vide si absent, pas de tiret) -->
-                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-300 font-normal">
+                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-800 dark:text-slate-200 font-normal">
                     {{ tx.employee || '' }}
                   </td>
 
                   <!-- Référence (Vide si absent) -->
-                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-600 dark:text-slate-400 font-normal">
+                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-800 dark:text-slate-300 font-normal">
                     {{ tx.noDossier || '' }}
                   </td>
 
                   <!-- Service -->
-                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-600 dark:text-slate-400 font-normal">
+                  <td class="py-2.5 px-3 whitespace-nowrap text-slate-800 dark:text-slate-300 font-normal">
                     {{ tx.service || '' }}
                   </td>
 

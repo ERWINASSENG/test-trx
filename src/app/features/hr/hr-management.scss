@@ -40,6 +40,7 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+:host-context(html.dark),
 :host-context(.dark),
 :host-context([data-theme="dark"]) {
   #hr-management-container {

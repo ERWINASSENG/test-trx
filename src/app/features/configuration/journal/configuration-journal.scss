@@ -1,16 +1,17 @@
 // Styles spécifiques au module Journaux Transimex
-// 100% fidèle à l'interface Odoo Comptabilité de la capture d'écran
+// 100% fidèle à l'interface Odoo Comptabilité avec prise en charge Mode Clair / Sombre
 
 .journal-page {
   font-family: inherit;
-  color: #e6e8eb;
+  color: var(--app-text, #1e293b);
   margin: 0;
   padding: 0;
   width: 100%;
-  background-color: #1b1e24;
+  background-color: var(--app-bg, #eef1f5);
   min-height: calc(100vh - 50px);
+  transition: background-color 0.2s ease, color 0.2s ease;
 
-  // Bouton Nouveau officiel Odoo (Aubergine/Violet foncé comme sur l'image)
+  // Bouton Nouveau officiel Odoo (Aubergine/Violet foncé)
   .btn-nouveau-odoo {
     background-color: #714B67;
     color: #ffffff;
@@ -30,12 +31,12 @@
     }
   }
 
-  // Barre de recherche Odoo sombre
+  // Barre de recherche Odoo adaptative
   .search-bar-odoo {
-    background-color: #242832;
-    border: 1px solid #343846;
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 
     &:focus-within {
       border-color: #00A09D;
@@ -60,37 +61,38 @@
 
   .view-btn-kanban {
     border-radius: 4px;
-    background-color: #252830;
-    color: #94a3b8;
+    background-color: #f1f5f9;
+    color: #64748b;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
 
     &:hover {
-      background-color: #2e323e;
-      color: #ffffff;
+      background-color: #e2e8f0;
+      color: #0f172a;
     }
   }
 
-  // Tableau Odoo Tree View sombre 100% plat
+  // Tableau Odoo Tree View adaptatif
   .odoo-table {
     border-collapse: collapse;
     width: 100%;
     margin: 0;
     border: none;
-    background: transparent;
+    background: #ffffff;
 
     .odoo-head-row {
-      border-bottom: 1px solid #2b303c;
+      border-bottom: 2px solid #cbd5e1;
+      background-color: #f8fafc;
 
       th {
-        color: #ffffff;
-        font-weight: 600;
+        color: #1e293b;
+        font-weight: 700;
         font-size: 0.8125rem;
         letter-spacing: 0;
         padding: 0.625rem 0.75rem;
         white-space: nowrap;
-        background: transparent;
 
         button, span {
           color: inherit;
@@ -100,23 +102,23 @@
 
     tbody {
       .odoo-data-row {
-        border-bottom: 1px solid #232732;
+        border-bottom: 1px solid #e2e8f0;
         transition: background-color 0.12s ease;
-        background-color: transparent;
+        background-color: #ffffff;
 
         &:hover {
-          background-color: rgba(255, 255, 255, 0.04);
+          background-color: #f1f5f9;
         }
 
         &.odoo-row-selected {
-          background-color: rgba(0, 160, 157, 0.15);
+          background-color: #ecfdf5;
         }
 
         td {
           vertical-align: middle;
           padding: 0.625rem 0.75rem;
           font-size: 0.8125rem;
-          color: #e6e8eb;
+          color: #1e293b;
           border: none;
         }
       }
@@ -125,12 +127,12 @@
 
   // Checkbox Odoo ultra-discrète
   .odoo-checkbox {
-    accent-color: #00A09D;
+    accent-color: #008784;
     width: 0.95rem;
     height: 0.95rem;
     cursor: pointer;
-    background: transparent;
-    border: 1px solid #475569;
+    background: #ffffff;
+    border: 1.5px solid #64748b;
     border-radius: 2px;
   }
 
@@ -141,5 +143,58 @@
     &:not(:disabled):hover {
       transform: scale(1.1);
     }
+  }
+}
+
+:host-context(html.dark) .journal-page,
+:host-context([data-theme="dark"]) .journal-page {
+  background-color: #1b1e24;
+  color: #e6e8eb;
+
+  .search-bar-odoo {
+    background-color: #242832;
+    border-color: #343846;
+  }
+
+  .view-btn-kanban {
+    background-color: #252830;
+    color: #94a3b8;
+
+    &:hover {
+      background-color: #2e323e;
+      color: #ffffff;
+    }
+  }
+
+  .odoo-table {
+    .odoo-head-row {
+      border-bottom: 1px solid #2b303c;
+
+      th {
+        color: #ffffff;
+      }
+    }
+
+    tbody {
+      .odoo-data-row {
+        border-bottom: 1px solid #232732;
+
+        &:hover {
+          background-color: rgba(255, 255, 255, 0.04);
+        }
+
+        &.odoo-row-selected {
+          background-color: rgba(0, 160, 157, 0.15);
+        }
+
+        td {
+          color: #e6e8eb;
+        }
+      }
+    }
+  }
+
+  .odoo-checkbox {
+    border-color: #475569;
   }
 }

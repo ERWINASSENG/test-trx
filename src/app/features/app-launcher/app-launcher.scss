@@ -5,8 +5,15 @@
 
 .app-launcher {
   min-height: calc(100vh - 50px);
-  padding: 20px 16px 32px;
-  background: #1f1f23;
+  padding: 24px 16px 36px;
+  background-color: var(--app-bg, #eef1f5);
+  color: var(--app-text, #1e293b);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:host-context(html.dark) .app-launcher,
+:host-context([data-theme="dark"]) .app-launcher {
+  background-color: #1e2227;
   color: #ebebeb;
 }
 
@@ -30,19 +37,28 @@
   left: 50%;
   width: min(90vw, 480px);
   height: 42px;
-  padding: 0 12px;
+  padding: 0 14px;
   margin: 0;
   transform: translateX(-50%);
   overflow: visible;
   clip: auto;
   clip-path: none;
-  border: 1px solid #55565c;
-  border-radius: 6px;
-  outline: 2px solid #1cbcb1;
-  background: #1f1f23;
-  color: #ebebeb;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: 2px solid #00A09D;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
   font: inherit;
   font-size: 14px;
+}
+
+:host-context(html.dark) .launcher-search-accessible:focus,
+:host-context([data-theme="dark"]) .launcher-search-accessible:focus {
+  border-color: #55565c;
+  background: #2b2f33;
+  color: #ebebeb;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
 .launcher-navigation {
@@ -70,17 +86,27 @@
   justify-content: flex-start;
   width: 100%;
   min-height: 106px;
-  gap: 5px;
-  padding: 4px;
+  gap: 6px;
+  padding: 6px 4px;
   border-radius: 12px;
-  color: #1cbcb1;
+  color: #0f172a;
   text-align: center;
   text-decoration: none;
-  transition: background-color 120ms ease, transform 120ms ease;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+:host-context(html.dark) .launcher-tile,
+:host-context([data-theme="dark"]) .launcher-tile {
+  color: #f1f5f9;
 }
 
 .launcher-tile:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:host-context(html.dark) .launcher-tile:hover,
+:host-context([data-theme="dark"]) .launcher-tile:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .launcher-tile:active {
@@ -88,7 +114,7 @@
 }
 
 .launcher-tile:focus-visible {
-  outline: 2px solid #1cbcb1;
+  outline: 2px solid #00A09D;
   outline-offset: 2px;
 }
 
@@ -98,9 +124,16 @@
   height: 70px;
   flex: 0 0 70px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--module-accent, #714b67);
   color: #fff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.launcher-tile:hover .launcher-tile-icon {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
 }
 
 .launcher-tile-icon img {
@@ -113,9 +146,9 @@
 .launcher-tile-label {
   overflow: hidden;
   max-width: 100%;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 21px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
 }
@@ -124,9 +157,14 @@
   width: min(100%, 540px);
   margin: 0 auto;
   padding: 24px 8px;
-  color: #bebfc3;
+  color: #64748b;
   font-size: 14px;
   text-align: center;
+}
+
+:host-context(html.dark) .launcher-empty,
+:host-context([data-theme="dark"]) .launcher-empty {
+  color: #94a3b8;
 }
 
 @media (min-width: 768px) {
@@ -145,7 +183,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .launcher-tile {
+  .launcher-tile,
+  .launcher-tile-icon {
     transition: none;
   }
 }

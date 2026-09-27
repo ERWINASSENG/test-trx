@@ -3,6 +3,7 @@
   width: 100%;
 }
 
+:host-context(html.dark),
 :host-context(.dark),
 :host-context([data-theme="dark"]) {
   #users-management-container {
