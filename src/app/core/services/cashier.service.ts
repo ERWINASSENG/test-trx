@@ -259,19 +259,34 @@ export class CashierService implements OnDestroy {
     }
   }
 
+  // Transactions appartenant exclusivement à la Caisse Principale (CSH1)
+  public readonly caisseTransactions = computed(() => {
+    const list = this._transactions();
+    return list.filter(
+      (t) =>
+        (!t.journalId && !t.journal_id) ||
+        t.journalId === 'native-caisse-principal' ||
+        t.journal_id === 'native-caisse-principal' ||
+        t.journalId === 'CSH1' ||
+        t.journal_id === 'CSH1' ||
+        t.pieceComptable?.startsWith('CSH1')
+    );
+  });
+
+  // Solde permanent et hermétique de la Caisse Principale (CSH1)
+  public readonly caisseBalance = computed(() => {
+    const list = this.caisseTransactions();
+    if (list.length === 0) return 0;
+    return list.reduce((acc, curr) => acc + (Number(curr.montant) || 0), 0);
+  });
+
   // Transactions appartenant exclusivement au journal sélectionné
   public readonly journalTransactions = computed(() => {
     const list = this._transactions();
     const currentJournal = this._activeJournalId();
 
     if (!currentJournal || currentJournal === 'native-caisse-principal' || currentJournal === 'CSH1') {
-      return list.filter(
-        (t) =>
-          (!t.journalId && !t.journal_id) ||
-          t.journalId === 'native-caisse-principal' ||
-          t.journal_id === 'native-caisse-principal' ||
-          t.pieceComptable?.startsWith('CSH1')
-      );
+      return this.caisseTransactions();
     }
 
     return list.filter((t) => t.journalId === currentJournal || t.journal_id === currentJournal);
@@ -463,7 +478,16 @@ export class CashierService implements OnDestroy {
         // Traitement et injection dans le Signal Angular 19
         if (rawRows && Array.isArray(rawRows)) {
           const mappedTransactions = this.mapDatabaseOperations(rawRows);
-          this._transactions.set(mappedTransactions);
+          this._transactions.update((curr) => {
+            const bankOps = curr.filter(
+              (t) =>
+                t.journalId &&
+                t.journalId !== 'native-caisse-principal' &&
+                t.journalId !== 'CSH1' &&
+                !t.pieceComptable?.startsWith('CSH1')
+            );
+            return [...mappedTransactions, ...bankOps];
+          });
         }
       } catch (err: unknown) {
         console.error('Erreur globale lors du chargement des opérations de caisse:', err);

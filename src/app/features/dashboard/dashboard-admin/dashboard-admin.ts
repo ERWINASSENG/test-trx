@@ -76,8 +76,8 @@ export class DashboardAdmin implements OnInit {
     void this.cashierService.loadTransactions();
   }
 
-  // Transactions brutes et état de chargement
-  public readonly allTransactions = computed(() => this.cashierService.allTransactions());
+  // Transactions brutes de caisse et état de chargement
+  public readonly allTransactions = computed(() => this.cashierService.caisseTransactions());
   public readonly isLoading = computed(() => this.cashierService.isLoading());
 
   // Filtrage selon la période sélectionnée

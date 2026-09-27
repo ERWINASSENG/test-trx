@@ -90,8 +90,8 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
 
   public readonly currentUser = this.authService.currentUser;
-  public readonly allTransactions = this.cashierService.allTransactions;
-  public readonly currentBalance = this.cashierService.currentBalance;
+  public readonly caisseTransactions = this.cashierService.caisseTransactions;
+  public readonly caisseBalance = this.cashierService.caisseBalance;
 
   // Données de graphiques en cache par journal
   private readonly journalChartsMap = new Map<string, Chart>();
@@ -112,9 +112,9 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
   private caisseChartInstance: Chart | null = null;
 
-  // Préparation réactive des données chronologiques pour Chart.js (Caisse Principale)
+  // Préparation réactive des données chronologiques pour Chart.js (Caisse Principale exclusivement)
   public readonly chartData = computed<CaisseTimelineData>(() => {
-    const list = [...this.allTransactions()].sort((a, b) => {
+    const list = [...this.caisseTransactions()].sort((a, b) => {
       const dateA = parseTransactionDate(a.date).getTime();
       const dateB = parseTransactionDate(b.date).getTime();
       if (dateA !== dateB) {

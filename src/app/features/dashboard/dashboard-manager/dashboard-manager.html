@@ -11,9 +11,6 @@
           <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50" id="caisse-title">
             Caisse Principale
           </h2>
-          <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-[#0b5ed7] dark:text-[#8cc2ff] border border-blue-200/50 dark:border-blue-800/50">
-            CSH1 • Espèces
-          </span>
         </div>
 
         <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
@@ -26,14 +23,13 @@
             id="caisse-transactions-link"
             title="Consulter les transactions de caisse">
             <span>Transactions</span>
-            <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
           </a>
 
           <!-- Solde à droite -->
           <div class="flex items-baseline gap-1.5" id="caisse-balance-container">
             <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
-            <span class="text-sm sm:text-base font-bold tracking-tight" [class]="currentBalance() >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'" id="caisse-balance-value">
-              {{ formatCurrency(currentBalance()) }}
+            <span class="text-sm sm:text-base font-bold tracking-tight" [class]="caisseBalance() >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'" id="caisse-balance-value">
+              {{ formatCurrency(caisseBalance()) }}
             </span>
           </div>
         </div>
@@ -61,9 +57,6 @@
             <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50">
               {{ journal.name }}
             </h2>
-            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-[#0b5ed7] dark:text-[#8cc2ff] border border-blue-200/50 dark:border-blue-800/50">
-              {{ journal.sequence_prefix }} • {{ journal.type_label || journal.type }}
-            </span>
           </div>
 
           <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
@@ -75,7 +68,6 @@
               class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
               title="Consulter les écritures de ce journal">
               <span>Transactions</span>
-              <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
             </a>
 
             <!-- Solde à droite -->
