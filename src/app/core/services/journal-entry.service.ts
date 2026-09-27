@@ -6,7 +6,6 @@ import {
   CreateJournalEntryDto,
   JournalChartData,
   JournalEntry,
-  UpdateJournalEntryDto,
 } from '../models/journal-entry.model';
 
 @Injectable({
