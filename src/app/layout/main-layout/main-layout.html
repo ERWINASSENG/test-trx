@@ -11,7 +11,7 @@
         <!-- Logo Transimex Préservé & Adaptatif -->
         <a routerLink="/dashboard" class="flex items-center gap-2 group shrink-0" id="topbar-brand-logo" title="Transimex Global Logistics">
           <div class="flex flex-col">
-            <span class="text-base sm:text-lg font-serif font-black tracking-wide text-slate-900 dark:text-white leading-none uppercase group-hover:text-[#00a09d] transition-colors">
+            <span class="text-base sm:text-lg font-serif font-black tracking-wide text-slate-900 dark:text-white leading-none uppercase group-hover:text-[#0b5ed7] dark:group-hover:text-[#8cc2ff] transition-colors">
               TRANSIMEX
             </span>
             <div class="w-full h-[1px] bg-slate-300 dark:bg-white/70 mt-0.5 mb-0.5"></div>
@@ -23,7 +23,7 @@
 
         <a
           routerLink="/apps"
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-[#008f8c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#008f8c] dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-[#00c4c0]"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-[#0b5ed7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b5ed7] dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-[#8cc2ff] dark:focus-visible:outline-[#8cc2ff]"
           id="topbar-app-launcher-link"
           title="Applications"
           aria-label="Ouvrir les applications">
@@ -62,7 +62,7 @@
                     <!-- 1. Paramètre -->
                     <a
                       routerLink="/configuration/parametres"
-                      routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/10"
+                      routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/10"
                       (click)="closeConfigDropdown()"
                       class="flex items-center px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                       id="menu-item-config-parametres"
@@ -73,7 +73,7 @@
                     <!-- 2. Journal -->
                     <a
                       routerLink="/configuration/journal"
-                      routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/10"
+                      routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/10"
                       (click)="closeConfigDropdown()"
                       class="flex items-center px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                       id="menu-item-config-journal"
@@ -156,7 +156,7 @@
             <button
               type="button"
               (click)="toggleUserDropdown($event)"
-              class="user-profile flex items-center gap-2 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#00A09D]"
+              class="user-profile flex items-center gap-2 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#0b5ed7] dark:focus:ring-[#8cc2ff]"
               id="topbar-user-profile-trigger"
               [attr.aria-expanded]="isUserDropdownOpen()"
               aria-haspopup="true"
@@ -225,7 +225,7 @@
                     class="dropdown-item flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     id="dropdown-action-profile"
                     role="menuitem">
-                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#00A09D]">person</mat-icon>
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#0b5ed7] dark:text-[#8cc2ff]">person</mat-icon>
                     <div class="flex flex-col">
                       <span>Mon Profil</span>
                       <span class="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Modifier mes informations</span>
@@ -268,7 +268,7 @@
                       </div>
                     </div>
                     <!-- Switch visuel -->
-                    <div class="w-8 h-4.5 rounded-full p-0.5 flex items-center transition-colors" [class.bg-[#00A09D]]="isDarkMode()" [class.bg-slate-300]="!isDarkMode()">
+                    <div class="w-8 h-4.5 rounded-full p-0.5 flex items-center transition-colors" [class.bg-[#0b5ed7]]="isDarkMode()" [class.bg-slate-300]="!isDarkMode()">
                       <div class="w-3.5 h-3.5 rounded-full bg-white shadow-sm transform transition-transform" [class.translate-x-3.5]="isDarkMode()" [class.translate-x-0]="!isDarkMode()"></div>
                     </div>
                   </button>
@@ -322,7 +322,7 @@
               </div>
               <a
                 routerLink="/configuration/parametres"
-                routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/5"
+                routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/5"
                 (click)="closeMenu()"
                 class="nav-link flex items-center pl-6 pr-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                 id="configuration-parametres-mobile">
@@ -330,7 +330,7 @@
               </a>
               <a
                 routerLink="/configuration/journal"
-                routerLinkActive="font-bold text-[#00A09D] bg-slate-100 dark:bg-white/5"
+                routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/5"
                 (click)="closeMenu()"
                 class="nav-link flex items-center pl-6 pr-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                 id="configuration-journal-mobile">
@@ -364,11 +364,11 @@
         <!-- GAUCHE : Boutons d'Action & Fil d'Ariane -->
         <div class="cp-left flex items-center gap-2 sm:gap-3 shrink-0" id="cp-actions-left">
           @if (canEditCaisse()) {
-            <!-- Bouton Primaire (#190056) -->
+            <!-- Action principale Transimex -->
             <button
               type="button"
               (click)="onNouveau()"
-              class="btn-primary flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded transition-all cursor-pointer shadow-xs active:scale-95 bg-[#190056] hover:bg-[#130042] text-white"
+              class="btn-primary flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded transition-all cursor-pointer shadow-xs active:scale-95 bg-[#0b5ed7] hover:bg-[#084db1] dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb] text-white"
               id="cp-btn-nouveau">
               <span>Nouveau</span>
             </button>
@@ -387,7 +387,7 @@
           <div class="breadcrumbs hidden sm:flex flex-col ml-1 leading-tight" id="cp-breadcrumbs">
             <a
               routerLink="/dashboard"
-              class="title text-xs font-bold text-[#00A09D] hover:underline hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1 focus:outline-hidden focus:ring-1 focus:ring-[#00A09D] rounded-xs"
+              class="title text-xs font-bold text-[#0b5ed7] dark:text-[#8cc2ff] hover:underline hover:text-[#084db1] dark:hover:text-[#a6ccff] transition-colors cursor-pointer inline-flex items-center gap-1 focus:outline-hidden focus:ring-1 focus:ring-[#0b5ed7] dark:focus:ring-[#8cc2ff] rounded-xs"
               id="cp-breadcrumb-dashboard-link"
               title="Retour au Tableau de bord">
               Tableau de bord
@@ -404,12 +404,12 @@
             <!-- BARRE DE SÉLECTION ODOO STYLE (Badge sélection + Bouton Actions) -->
             <div class="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150" id="cp-odoo-selection-bar">
               <!-- Badge [ N sélectionné(s) ✕ ] -->
-              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#00A09D]/15 text-[#00A09D] border border-[#00A09D] shadow-2xs select-none" id="cp-selection-badge">
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#0b5ed7]/10 text-[#0b5ed7] dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff] border border-[#0b5ed7]/30 dark:border-[#7cb3ff]/40 shadow-2xs select-none" id="cp-selection-badge">
                 <span>{{ selectedTransactionsCount() }} sélectionné(s)</span>
                 <button
                   type="button"
                   (click)="clearSelection()"
-                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#00A09D]/30 text-[#00A09D] transition-colors cursor-pointer flex items-center justify-center font-bold"
+                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#0b5ed7]/15 dark:hover:bg-[#7cb3ff]/20 text-[#0b5ed7] dark:text-[#a6ccff] transition-colors cursor-pointer flex items-center justify-center font-bold"
                   title="Annuler la sélection"
                   aria-label="Annuler la sélection">
                   <mat-icon class="!text-[13px] !w-3.5 !h-3.5 leading-none">close</mat-icon>
@@ -421,11 +421,11 @@
                 <button
                   type="button"
                   (click)="toggleActionsMenu($event)"
-                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 bg-white dark:bg-[#1e2227] text-slate-800 dark:text-white border border-[#00A09D] hover:bg-slate-50 dark:hover:bg-white/5"
+                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 bg-white dark:bg-[#0d1f3a] text-slate-800 dark:text-white border border-[#0b5ed7] dark:border-[#7cb3ff] hover:bg-slate-50 dark:hover:bg-white/5"
                   [class.ring-2]="isActionsMenuOpen()"
-                  [class.ring-[#00A09D]/40]="isActionsMenuOpen()"
+                  [class.ring-[#0b5ed7]/40]="isActionsMenuOpen()"
                   id="cp-btn-odoo-actions">
-                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#00A09D]">settings</mat-icon>
+                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#0b5ed7] dark:text-[#8cc2ff]">settings</mat-icon>
                   <span>Actions</span>
                 </button>
 
@@ -515,7 +515,7 @@
             </div>
           } @else {
             <!-- BARRE DE RECHERCHE STANDARD QUAND 0 SÉLECTION -->
-            <div class="search-bar flex items-center rounded px-2.5 py-1 text-xs transition-all bg-white dark:bg-[#1e2227] border border-slate-300 dark:border-white/10 focus-within:border-[#00A09D]" id="cp-search-bar-wrapper">
+            <div class="search-bar flex items-center rounded px-2.5 py-1 text-xs transition-all bg-white dark:bg-[#0d1f3a] border border-slate-300 dark:border-white/10 focus-within:border-[#0b5ed7] dark:focus-within:border-[#7cb3ff]" id="cp-search-bar-wrapper">
               <!-- Loupe -->
               <mat-icon class="search-icon !text-[15px] !w-4 !h-4 text-slate-400 mr-2 shrink-0">search</mat-icon>
 
