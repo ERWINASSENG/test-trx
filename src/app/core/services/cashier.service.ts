@@ -102,8 +102,13 @@ export class CashierService implements OnDestroy {
 
   private async initBrowserData(): Promise<void> {
     try {
-      await this.authService.waitForSession();
-      if (this.authService.isAuthenticated()) {
+      if (typeof this.authService.waitForSession === 'function') {
+        await this.authService.waitForSession();
+      }
+      const isAuth = typeof this.authService.isAuthenticated === 'function'
+        ? this.authService.isAuthenticated()
+        : Boolean(typeof this.authService.currentUser === 'function' ? this.authService.currentUser() : null);
+      if (isAuth) {
         await this.loadTransactions();
         await this.setupRealtimeSubscription();
       }

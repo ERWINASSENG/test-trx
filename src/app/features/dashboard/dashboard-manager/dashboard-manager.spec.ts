@@ -59,7 +59,9 @@ describe('DashboardManager', () => {
 
   const cashierServiceMock = {
     allTransactions: transactionsSignal,
+    caisseTransactions: transactionsSignal,
     currentBalance: balanceSignal,
+    caisseBalance: balanceSignal,
     loadTransactions: () => Promise.resolve(),
   };
 

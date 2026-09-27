@@ -156,7 +156,9 @@ export class AuthService {
    */
   public async restoreSession(): Promise<void> {
     try {
-      await this.supabaseService.ensureInitialized();
+      if (typeof this.supabaseService.ensureInitialized === 'function') {
+        await this.supabaseService.ensureInitialized();
+      }
 
       if (this.checkSupabaseConfigured() && this.supabaseService.supabase) {
         // Validation stricte du JWT avec le serveur Supabase Auth (bonnes pratiques Supabase)

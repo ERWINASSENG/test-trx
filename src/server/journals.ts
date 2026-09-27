@@ -157,6 +157,144 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
 };
 
 /**
+ * PATCH / PUT /api/journals/:id
+ * Modifie les attributs d'un journal existant (nom, type, sigle/préfixe, compte par défaut, statut actif)
+ * Strictement réservé à admin et tresorier
+ */
+export const updateJournalHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    res.status(503).json({ error: 'Service Supabase non configuré sur le serveur' });
+    return;
+  }
+
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
+  const userRole = authenticatedUser?.role;
+
+  if (!userRole || !ALLOWED_MANAGE_ROLES.includes(userRole)) {
+    res.status(403).json({
+      error: 'Accès interdit : seuls les administrateurs et les trésoriers ont le droit de modifier les journaux.',
+    });
+    return;
+  }
+
+  const journalId = req.params['id'];
+  if (!journalId) {
+    res.status(400).json({ error: 'Identifiant du journal manquant.' });
+    return;
+  }
+
+  const body = req.body || {};
+  const updateData: Record<string, unknown> = {};
+
+  if (body.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length < 2) {
+      res.status(400).json({ error: 'Le nom du journal doit contenir au moins 2 caractères.' });
+      return;
+    }
+    updateData['name'] = name;
+  }
+
+  if (body.type !== undefined) {
+    const type = typeof body.type === 'string' ? body.type.trim() : 'bank';
+    updateData['type'] = type;
+  }
+
+  if (body.ledger_type !== undefined) {
+    updateData['ledger_type'] = typeof body.ledger_type === 'string' ? body.ledger_type.trim() : '';
+  }
+
+  if (body.sequence_prefix !== undefined) {
+    const sequence_prefix = typeof body.sequence_prefix === 'string' ? body.sequence_prefix.trim().toUpperCase() : '';
+    if (!sequence_prefix || sequence_prefix.length < 2 || sequence_prefix.length > 6) {
+      res.status(400).json({ error: 'Le préfixe de séquence doit contenir entre 2 et 6 lettres majuscules.' });
+      return;
+    }
+
+    // Vérifier si le journal ciblé est la caisse principale système (protection du préfixe CSH1)
+    const { data: existingTarget } = await adminClient
+      .from('journals')
+      .select('sequence_prefix')
+      .eq('id', journalId)
+      .maybeSingle();
+
+    if (existingTarget?.sequence_prefix === 'CSH1' && sequence_prefix !== 'CSH1') {
+      res.status(400).json({ error: 'Le préfixe CSH1 de la Caisse Principale ne peut pas être modifié.' });
+      return;
+    }
+
+    // Vérifier l'unicité du préfixe parmi les autres journaux
+    const { data: existingPrefix } = await adminClient
+      .from('journals')
+      .select('id')
+      .eq('sequence_prefix', sequence_prefix)
+      .neq('id', journalId)
+      .maybeSingle();
+
+    if (existingPrefix) {
+      res.status(409).json({ error: `Le préfixe de séquence « ${sequence_prefix} » est déjà utilisé par un autre journal.` });
+      return;
+    }
+
+    updateData['sequence_prefix'] = sequence_prefix;
+  }
+
+  if (body.default_account !== undefined) {
+    const default_account = typeof body.default_account === 'string' ? body.default_account.trim() : '';
+    if (!default_account) {
+      res.status(400).json({ error: 'Le compte comptable par défaut est obligatoire.' });
+      return;
+    }
+    updateData['default_account'] = default_account;
+  }
+
+  if (body.currency !== undefined) {
+    updateData['currency'] = typeof body.currency === 'string' && body.currency.trim() ? body.currency.trim().toUpperCase() : 'XAF';
+  }
+
+  if (body.is_active !== undefined) {
+    updateData['is_active'] = typeof body.is_active === 'boolean' ? body.is_active : true;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ error: 'Aucun champ valide à mettre à jour.' });
+    return;
+  }
+
+  updateData['updated_at'] = new Date().toISOString();
+
+  try {
+    const { data: updated, error: updateError } = await adminClient
+      .from('journals')
+      .update(updateData)
+      .eq('id', journalId)
+      .select()
+      .maybeSingle();
+
+    if (updateError) {
+      console.error('[API JOURNAUX] Erreur mise à jour Supabase:', updateError);
+      res.status(500).json({ error: updateError.message || 'Impossible de mettre à jour le journal.' });
+      return;
+    }
+
+    if (!updated) {
+      res.status(404).json({ error: 'Journal introuvable pour la mise à jour.' });
+      return;
+    }
+
+    res.status(200).json({
+      message: `Journal « ${updated.name} » mis à jour avec succès.`,
+      journal: updated,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Erreur interne';
+    console.error('[API JOURNAUX] Exception mise à jour:', err);
+    res.status(500).json({ error: msg });
+  }
+};
+
+/**
  * DELETE /api/journals/:id
  * Supprime un journal comptable (strictement réservé à admin et tresorier)
  */

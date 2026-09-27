@@ -69,7 +69,9 @@ describe('DashboardAdmin', () => {
 
   const cashierServiceMock = {
     allTransactions: signal<CashierTransaction[]>(mockTransactions),
+    caisseTransactions: signal<CashierTransaction[]>(mockTransactions),
     currentBalance: signal<number>(18500000),
+    caisseBalance: signal<number>(18500000),
     isLoading: signal<boolean>(false),
     loadTransactions: vi.fn().mockResolvedValue(undefined),
   };
@@ -140,6 +142,7 @@ describe('DashboardAdmin', () => {
 
   it('should handle empty transaction list gracefully (cas limite)', () => {
     cashierServiceMock.allTransactions.set([]);
+    cashierServiceMock.caisseTransactions.set([]);
     fixture.detectChanges();
 
     expect(component.timelineChartData()).toEqual([]);

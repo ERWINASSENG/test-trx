@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { signal } from '@angular/core';
 import { CashierManagement } from './cashier-management';
 import { CashierService } from '../../core/services/cashier.service';
 import { SupabaseService } from '../../core/services/supabase.service';
@@ -18,14 +20,24 @@ describe('CashierManagement', () => {
     await TestBed.configureTestingModule({
       imports: [CashierManagement],
       providers: [
+        provideRouter([]),
         CashierService,
         SupabaseService,
         NotificationService,
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ id: 'usr-1', email: 'caissiere@transmex.cm', role: 'caissiere' }),
-            token: () => 'mock-jwt-token',
+            currentUser: signal({ id: 'usr-1', email: 'caissiere@transmex.cm', role: 'caissiere' }),
+            token: signal('mock-jwt-token'),
+            waitForSession: vi.fn().mockResolvedValue(undefined),
+            isAuthenticated: signal(true),
+            currentRole: signal('caissiere'),
+            isAdmin: signal(false),
+            isManager: signal(false),
+            isTresorier: signal(false),
+            isCaissiere: signal(true),
+            isEmploye: signal(false),
+            isComptable: signal(false),
           },
         },
       ],
