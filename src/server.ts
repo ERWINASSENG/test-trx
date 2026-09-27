@@ -19,7 +19,12 @@ import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
 import { getOperationsHandler } from './server/cashier.read';
-import { createJournalHandler, deleteJournalHandler, getJournalsHandler } from './server/journals';
+import {
+  createJournalHandler,
+  deleteJournalHandler,
+  getJournalsHandler,
+  updateJournalHandler,
+} from './server/journals';
 import {
   createJournalEntryHandler,
   deleteJournalEntryHandler,
@@ -1012,6 +1017,8 @@ const journalManageRoles: UserRole[] = ['admin', 'tresorier'];
 
 app.get('/api/journals', requireAuth, requireRole(journalViewRoles), getJournalsHandler);
 app.post('/api/journals', requireAuth, requireRole(journalManageRoles), createJournalHandler);
+app.put('/api/journals/:id', requireAuth, requireRole(journalManageRoles), updateJournalHandler);
+app.patch('/api/journals/:id', requireAuth, requireRole(journalManageRoles), updateJournalHandler);
 app.delete('/api/journals/:id', requireAuth, requireRole(journalManageRoles), deleteJournalHandler);
 
 /**

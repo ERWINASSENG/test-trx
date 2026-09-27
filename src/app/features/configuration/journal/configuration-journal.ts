@@ -47,6 +47,28 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   public readonly isDeleting = signal<boolean>(false);
   public readonly isCreateModalOpen = signal<boolean>(false);
   public readonly isSubmitting = signal<boolean>(false);
+  public readonly editingJournalId = signal<string | null>(null);
+  public readonly isSavingEdit = signal<boolean>(false);
+
+  // Formulaire d'édition en ligne
+  public readonly editForm = new FormGroup({
+    name: new FormControl<string>('', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.minLength(2)],
+    }),
+    type: new FormControl<JournalType>('bank', {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    sequence_prefix: new FormControl<string>('', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.minLength(2), Validators.maxLength(6)],
+    }),
+    default_account: new FormControl<string>('', {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+  });
 
   // Formulaire Odoo de création d'un journal
   public readonly journalForm = new FormGroup({
@@ -77,11 +99,27 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   }
 
   public onDocumentClick(event: MouseEvent): void {
-    if (!this.isActionsMenuOpen()) return;
-    const target = event.target as HTMLElement;
-    const actionsContainer = this.elementRef.nativeElement.querySelector('#journal-cp-actions-dropdown-container');
-    if (actionsContainer && !actionsContainer.contains(target)) {
-      this.closeActionsMenu();
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    if (this.isActionsMenuOpen()) {
+      const actionsContainer = this.elementRef.nativeElement.querySelector('#journal-cp-actions-dropdown-container');
+      if (actionsContainer && !actionsContainer.contains(target)) {
+        this.closeActionsMenu();
+      }
+    }
+
+    // Sauvegarde automatique lors d'un clic extérieur à la ligne en cours d'édition
+    const currentEditId = this.editingJournalId();
+    if (currentEditId) {
+      const editRow = this.elementRef.nativeElement.querySelector(`#inline-edit-journal-${currentEditId}`);
+      if (editRow && !editRow.contains(target)) {
+        if (this.editForm.valid) {
+          void this.saveEdit(currentEditId);
+        } else {
+          this.cancelEdit();
+        }
+      }
     }
   }
 
@@ -112,8 +150,71 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
     this.closeActionsMenu();
   }
 
-  public onRowClick(journal: Journal): void {
-    this.journalService.toggleSelect(journal.id);
+  public async onRowClick(journal: Journal): Promise<void> {
+    if (this.canManageJournals()) {
+      if (this.editingJournalId() !== journal.id) {
+        // Sauvegarder la ligne précédente si déjà en édition
+        const prevId = this.editingJournalId();
+        if (prevId) {
+          if (this.editForm.valid) {
+            await this.saveEdit(prevId);
+          } else {
+            this.cancelEdit();
+          }
+        }
+        this.startEdit(journal);
+      }
+    } else {
+      this.journalService.toggleSelect(journal.id);
+    }
+  }
+
+  public startEdit(journal: Journal, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (!this.canManageJournals()) return;
+
+    this.editingJournalId.set(journal.id);
+    this.editForm.reset({
+      name: journal.name,
+      type: journal.type,
+      sequence_prefix: journal.sequence_prefix,
+      default_account: journal.default_account,
+    });
+  }
+
+  public cancelEdit(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.editingJournalId.set(null);
+    this.editForm.reset();
+  }
+
+  public async saveEdit(id: string, event?: Event): Promise<void> {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (this.editForm.invalid || this.isSavingEdit()) return;
+
+    const val = this.editForm.getRawValue();
+    this.isSavingEdit.set(true);
+
+    try {
+      const updated = await this.journalService.updateJournal(id, {
+        name: val.name,
+        type: val.type,
+        sequence_prefix: val.sequence_prefix,
+        default_account: val.default_account,
+      });
+
+      if (updated) {
+        this.editingJournalId.set(null);
+      }
+    } finally {
+      this.isSavingEdit.set(false);
+    }
   }
 
   public prevPage(): void {

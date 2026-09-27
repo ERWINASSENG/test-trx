@@ -220,56 +220,79 @@
         </thead>
         <tbody class="divide-y divide-slate-200 dark:divide-[#252834] bg-transparent">
           @for (journal of pagedJournals(); track journal.id) {
-            <tr
-              class="odoo-data-row select-none cursor-pointer"
-              [class.odoo-row-selected]="journal.selected"
-              (click)="onRowClick(journal)"
-              (dblclick)="openJournalTransactions(journal)">
-              <!-- Case à cocher unitaire -->
-              <td class="py-2.5 px-3 text-center align-middle" (click)="$event.stopPropagation()">
-                <input
-                  type="checkbox"
-                  [checked]="journal.selected"
-                  (change)="onToggleSelect(journal.id)"
-                  aria-label="Sélectionner ce journal"
-                  class="odoo-checkbox" />
-              </td>
+            @if (editingJournalId() === journal.id) {
+              <!-- LIGNE EN COURS DE MODIFICATION (INLINE EDIT ODOO FLAT) -->
+              <tr
+                class="odoo-row-editing"
+                id="inline-edit-journal-{{ journal.id }}"
+                [formGroup]="editForm"
+                (keydown.enter)="saveEdit(journal.id, $event)"
+                (keydown.escape)="cancelEdit($event)"
+                (click)="$event.stopPropagation()">
+                <!-- Checkbox unitaire -->
+                <td class="py-2.5 px-3 text-center align-middle">
+                  <input
+                    type="checkbox"
+                    [checked]="journal.selected"
+                    (change)="onToggleSelect(journal.id)"
+                    aria-label="Sélectionner ce journal"
+                    class="odoo-checkbox" />
+                </td>
 
-              <!-- Nom du journal avec ouverture vers la saisie d'opérations -->
-              <td class="py-2.5 px-3 font-normal text-slate-900 dark:text-white align-middle whitespace-nowrap">
-                <button
-                  type="button"
-                  (click)="openJournalTransactions(journal); $event.stopPropagation()"
-                  class="group inline-flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white hover:text-[#190056] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer text-left"
-                  title="Ouvrir la saisie des opérations de ce journal">
-                  <span>{{ journal.name }}</span>
-                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#00A09D] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</mat-icon>
-                </button>
-              </td>
+                <!-- Nom du journal (Champ actif avec soulignement fin Odoo) -->
+                <td class="py-2 px-3 align-middle">
+                  <input
+                    type="text"
+                    formControlName="name"
+                    placeholder="Nom du journal"
+                    class="odoo-field-input odoo-active-underline w-full font-semibold" />
+                </td>
 
-              <!-- Type de journal -->
-              <td class="py-2.5 px-3 whitespace-nowrap align-middle text-slate-700 dark:text-slate-200">
-                {{ journal.type_label }}
-              </td>
+                <!-- Type de journal (Select actif Odoo) -->
+                <td class="py-2 px-3 align-middle">
+                  <select
+                    formControlName="type"
+                    class="odoo-field-input odoo-active-underline w-full cursor-pointer bg-transparent">
+                    <option value="bank" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Banque</option>
+                    <option value="cash" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Espèces</option>
+                    <option value="sale" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Ventes</option>
+                    <option value="purchase" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Achats</option>
+                    <option value="general" class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Divers</option>
+                  </select>
+                </td>
 
-              <!-- Grand livre -->
-              <td class="py-2.5 px-3 whitespace-nowrap text-slate-500 dark:text-slate-400 align-middle">
-                {{ journal.currency || '' }}
-              </td>
+                <!-- Grand livre (Monnaie / Devise) -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-500 dark:text-slate-400 align-middle text-xs">
+                  {{ journal.currency || 'XAF' }}
+                </td>
 
-              <!-- Préfixe de la Séquence -->
-              <td class="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-200 align-middle font-mono text-xs">
-                {{ journal.sequence_prefix }}
-              </td>
+                <!-- Préfixe de la Séquence (Modifiable si non-CSH1) -->
+                <td class="py-2 px-3 align-middle">
+                  @if (journal.sequence_prefix === 'CSH1') {
+                    <span class="text-xs font-mono font-bold text-slate-600 dark:text-slate-300" title="Le sigle CSH1 de la caisse principale est protégé">
+                      CSH1
+                    </span>
+                  } @else {
+                    <input
+                      type="text"
+                      formControlName="sequence_prefix"
+                      placeholder="BNK1"
+                      maxlength="6"
+                      class="odoo-field-input odoo-active-underline w-20 uppercase font-mono font-semibold" />
+                  }
+                </td>
 
-              <!-- Compte par défaut -->
-              <td class="py-2.5 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300 align-middle text-xs">
-                {{ journal.default_account }}
-              </td>
+                <!-- Compte par défaut -->
+                <td class="py-2 px-3 align-middle">
+                  <input
+                    type="text"
+                    formControlName="default_account"
+                    placeholder="521000 - Banque"
+                    class="odoo-field-input odoo-active-underline w-full text-xs" />
+                </td>
 
-              <!-- Colonne Actif : Case à cocher cyan/teal Odoo -->
-              <td class="py-2.5 px-3 text-center whitespace-nowrap align-middle" (click)="$event.stopPropagation()">
-                @if (canCreateJournal()) {
+                <!-- Colonne Actif -->
+                <td class="py-2.5 px-3 text-center whitespace-nowrap align-middle" (click)="$event.stopPropagation()">
                   <button
                     type="button"
                     (click)="toggleActive(journal.id)"
@@ -281,17 +304,76 @@
                       <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400 dark:text-slate-600">check_box_outline_blank</mat-icon>
                     }
                   </button>
-                } @else {
-                  <span class="inline-flex items-center justify-center p-0.5 select-none" [title]="journal.is_active ? 'Actif' : 'Inactif'">
-                    @if (journal.is_active) {
-                      <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#0b5ed7] dark:text-[#8cc2ff]">check_box</mat-icon>
-                    } @else {
-                      <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400 dark:text-slate-600">check_box_outline_blank</mat-icon>
-                    }
-                  </span>
-                }
-              </td>
-            </tr>
+                </td>
+              </tr>
+            } @else {
+              <!-- LIGNE NORMALE DE CONSULTATION (FLAT ODOO STYLE) -->
+              <tr
+                class="odoo-data-row select-none cursor-pointer"
+                [class.odoo-row-selected]="journal.selected"
+                (click)="onRowClick(journal)"
+                (dblclick)="openJournalTransactions(journal)">
+                <!-- Case à cocher unitaire -->
+                <td class="py-2.5 px-3 text-center align-middle" (click)="$event.stopPropagation()">
+                  <input
+                    type="checkbox"
+                    [checked]="journal.selected"
+                    (change)="onToggleSelect(journal.id)"
+                    aria-label="Sélectionner ce journal"
+                    class="odoo-checkbox" />
+                </td>
+
+                <!-- Nom du journal -->
+                <td class="py-2.5 px-3 font-semibold text-slate-900 dark:text-white align-middle whitespace-nowrap">
+                  {{ journal.name }}
+                </td>
+
+                <!-- Type de journal -->
+                <td class="py-2.5 px-3 whitespace-nowrap align-middle text-slate-700 dark:text-slate-200">
+                  {{ journal.type_label }}
+                </td>
+
+                <!-- Grand livre -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-500 dark:text-slate-400 align-middle">
+                  {{ journal.currency || '' }}
+                </td>
+
+                <!-- Préfixe de la Séquence -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-200 align-middle font-mono text-xs">
+                  {{ journal.sequence_prefix }}
+                </td>
+
+                <!-- Compte par défaut -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300 align-middle text-xs">
+                  {{ journal.default_account }}
+                </td>
+
+                <!-- Colonne Actif : Case à cocher cyan/teal Odoo -->
+                <td class="py-2.5 px-3 text-center whitespace-nowrap align-middle" (click)="$event.stopPropagation()">
+                  @if (canCreateJournal()) {
+                    <button
+                      type="button"
+                      (click)="toggleActive(journal.id)"
+                      class="cursor-pointer inline-flex items-center justify-center p-0.5 rounded transition-transform active:scale-90"
+                      [title]="journal.is_active ? 'Désactiver' : 'Activer'">
+                      @if (journal.is_active) {
+                        <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#0b5ed7] dark:text-[#8cc2ff]">check_box</mat-icon>
+                      } @else {
+                        <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400 dark:text-slate-600">check_box_outline_blank</mat-icon>
+                      }
+                    </button>
+                  } @else {
+                    <span class="inline-flex items-center justify-center p-0.5 select-none" [title]="journal.is_active ? 'Actif' : 'Inactif'">
+                      @if (journal.is_active) {
+                        <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#0b5ed7] dark:text-[#8cc2ff]">check_box</mat-icon>
+                      } @else {
+                        <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400 dark:text-slate-600">check_box_outline_blank</mat-icon>
+                      }
+                    </span>
+                  }
+                </td>
+              </tr>
+            }
           } @empty {
             <tr>
               <td colspan="7" class="py-12 text-center text-slate-500 text-sm">

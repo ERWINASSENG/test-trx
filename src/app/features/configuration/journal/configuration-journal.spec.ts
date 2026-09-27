@@ -51,7 +51,9 @@ describe('ConfigurationJournalComponent', () => {
     exportJournals: vi.fn(),
     deleteSelectedJournals: vi.fn().mockResolvedValue(true),
     createJournal: vi.fn().mockResolvedValue(true),
+    updateJournal: vi.fn().mockResolvedValue(mockJournals[1]),
     toggleActive: vi.fn(),
+    canManageJournals: signal(true),
   };
 
   beforeEach(() => {
@@ -65,16 +67,67 @@ describe('ConfigurationJournalComponent', () => {
       paginationLabel: mockJournalService.paginationLabel,
       hasPrevPage: mockJournalService.hasPrevPage,
       hasNextPage: mockJournalService.hasNextPage,
+      canManageJournals: mockJournalService.canManageJournals,
       totalJournalsCount: signal(2),
       isActionsMenuOpen: signal(false),
       isDeleting: signal(false),
       isCreateModalOpen: signal(false),
       isSubmitting: signal(false),
+      editingJournalId: signal<string | null>(null),
+      isSavingEdit: signal(false),
     });
   });
 
   it('devrait être instancié avec succès', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('devrait démarrer et annuler le mode édition en ligne', () => {
+    component.startEdit = ConfigurationJournalComponent.prototype.startEdit;
+    component.cancelEdit = ConfigurationJournalComponent.prototype.cancelEdit;
+    const resetSpy = vi.fn();
+    Object.defineProperty(component, 'editForm', {
+      value: { reset: resetSpy },
+      writable: true,
+    });
+
+    component.startEdit(mockJournals[1]);
+    expect(component.editingJournalId()).toBe('native-banque');
+    expect(resetSpy).toHaveBeenCalledWith({
+      name: 'Banque Principale',
+      type: 'bank',
+      sequence_prefix: 'BNK1',
+      default_account: '521000 Banque',
+    });
+
+    component.cancelEdit();
+    expect(component.editingJournalId()).toBeNull();
+  });
+
+  it('devrait enregistrer les modifications en ligne d’un journal', async () => {
+    component.saveEdit = ConfigurationJournalComponent.prototype.saveEdit;
+    Object.defineProperty(component, 'editForm', {
+      value: {
+        invalid: false,
+        getRawValue: vi.fn().mockReturnValue({
+          name: 'Banque Modifiée',
+          type: 'bank',
+          sequence_prefix: 'BNK2',
+          default_account: '521000 Banque',
+        }),
+      },
+      writable: true,
+    });
+    component.editingJournalId.set('native-banque');
+
+    await component.saveEdit('native-banque');
+    expect(mockJournalService.updateJournal).toHaveBeenCalledWith('native-banque', {
+      name: 'Banque Modifiée',
+      type: 'bank',
+      sequence_prefix: 'BNK2',
+      default_account: '521000 Banque',
+    });
+    expect(component.editingJournalId()).toBeNull();
   });
 
   it('devrait ouvrir et fermer le modal de création', () => {

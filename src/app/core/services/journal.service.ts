@@ -4,7 +4,7 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { CashierService } from './cashier.service';
-import { CreateJournalDto, Journal, JournalType } from '../models/journal.model';
+import { CreateJournalDto, Journal, JournalType, UpdateJournalDto } from '../models/journal.model';
 
 @Injectable({
   providedIn: 'root',
@@ -398,6 +398,91 @@ export class JournalService {
         }
       } catch (err: unknown) {
         console.error('Erreur API création journal:', err);
+        this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+        return null;
+      }
+    }
+
+    this.notificationService.error('Session expirée ou non autorisée.', 'Authentification requise');
+    return null;
+  }
+
+  /**
+   * Modifie un journal comptable existant via l'API sécurisée /api/journals/:id
+   * Strictement réservé à l'administrateur et au trésorier.
+   */
+  public async updateJournal(id: string, dto: UpdateJournalDto): Promise<Journal | null> {
+    if (!this.canManageJournals()) {
+      this.notificationService.error(
+        'Seul le trésorier et l’administrateur sont autorisés à modifier des journaux.',
+        'Action non autorisée'
+      );
+      return null;
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (dto.name !== undefined) payload['name'] = dto.name.trim();
+    if (dto.type !== undefined) payload['type'] = dto.type;
+    if (dto.ledger_type !== undefined) payload['ledger_type'] = dto.ledger_type.trim();
+    if (dto.sequence_prefix !== undefined) payload['sequence_prefix'] = dto.sequence_prefix.trim().toUpperCase();
+    if (dto.default_account !== undefined) payload['default_account'] = dto.default_account.trim();
+    if (dto.currency !== undefined) payload['currency'] = dto.currency.trim().toUpperCase();
+    if (dto.is_active !== undefined) payload['is_active'] = dto.is_active;
+
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
+        }
+      } catch {
+        // Ignorer
+      }
+    }
+
+    if (token) {
+      try {
+        const res = await fetch(`/api/journals/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const resData = await res.json();
+        if (res.ok && resData.journal) {
+          const row = resData.journal;
+          const updated: Journal = {
+            id: String(row.id),
+            name: String(row.name),
+            type: (row.type as JournalType) || 'bank',
+            type_label: this.getTypeLabel(String(row.type || 'bank')),
+            ledger_type: String(row.ledger_type || ''),
+            sequence_prefix: String(row.sequence_prefix),
+            default_account: String(row.default_account),
+            currency: String(row.currency || 'XAF'),
+            is_active: typeof row.is_active === 'boolean' ? row.is_active : true,
+            selected: false,
+            created_at: String(row.created_at || ''),
+            updated_at: String(row.updated_at || new Date().toISOString()),
+          };
+
+          this._journals.update((list) =>
+            list.map((j) => (j.id === id ? updated : j))
+          );
+          this.notificationService.success(`Le journal « ${updated.name} » a été mis à jour avec succès.`, 'Journal modifié');
+          return updated;
+        } else {
+          const errMsg = resData.error || 'Impossible de mettre à jour le journal.';
+          this.notificationService.error(errMsg, 'Échec de modification');
+          return null;
+        }
+      } catch (err: unknown) {
+        console.error('Erreur API modification journal:', err);
         this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
         return null;
       }

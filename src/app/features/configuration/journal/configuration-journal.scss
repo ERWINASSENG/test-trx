@@ -131,6 +131,50 @@
           border: none;
         }
       }
+
+      // Ligne active en cours d'édition
+      .odoo-row-editing {
+        background-color: #eff6ff;
+        border-bottom: 2px solid var(--journal-accent);
+
+        td {
+          vertical-align: middle;
+          padding: 0.5rem 0.75rem;
+          font-size: 0.8125rem;
+          color: #123c6d;
+          border: none;
+        }
+      }
+    }
+  }
+
+  // Champs de saisie Odoo (100% plat, sans background, adaptatif)
+  .odoo-field-input,
+  input.odoo-field-input {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: var(--journal-text) !important;
+    padding: 2px 2px !important;
+    outline: none !important;
+    font-size: 0.8125rem !important;
+    font-family: inherit !important;
+    border-radius: 0 !important;
+
+    &::placeholder {
+      color: #94a3b8 !important;
+    }
+  }
+
+  // Soulignement actif fin
+  .odoo-active-underline,
+  input.odoo-active-underline {
+    border-bottom: 1px solid var(--journal-accent) !important;
+    border-radius: 0 !important;
+
+    &:focus {
+      border-bottom: 1px solid var(--journal-accent-hover) !important;
     }
   }
 
@@ -160,66 +204,81 @@
   }
 }
 
-:host-context(html.dark) .journal-page,
-:host-context([data-theme="dark"]) .journal-page {
-  --journal-accent: #7cb3ff;
-  --journal-accent-hover: #a6ccff;
-  --journal-surface: rgba(13, 31, 58, 0.82);
-  --journal-surface-muted: rgba(255, 255, 255, 0.05);
-  --journal-border: rgba(207, 227, 255, 0.14);
-  --journal-text: #f3f8ff;
-  background:
-    radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 26%),
-    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
-    #0a2342;
-  color: var(--journal-text);
+:host-context(html.dark),
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  .journal-page {
+    --journal-accent: #7cb3ff;
+    --journal-accent-hover: #a6ccff;
+    --journal-surface: rgba(13, 31, 58, 0.82);
+    --journal-surface-muted: rgba(255, 255, 255, 0.05);
+    --journal-border: rgba(207, 227, 255, 0.14);
+    --journal-text: #f3f8ff;
+    background:
+      radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 26%),
+      radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
+      #0a2342;
+    color: var(--journal-text);
 
-  .search-bar-odoo {
-    background-color: #0d1f3a;
-    border-color: #365477;
-  }
-
-  .view-btn-kanban {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #cfe3ff;
-
-    &:hover {
-      background-color: rgba(124, 179, 255, 0.16);
-      color: #ffffff;
+    .search-bar-odoo {
+      background-color: #0d1f3a;
+      border-color: #365477;
     }
-  }
 
-  .odoo-table {
-    .odoo-head-row {
-      border-bottom: 1px solid var(--journal-border);
-      background-color: var(--journal-surface-muted);
+    .view-btn-kanban {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: #cfe3ff;
 
-      th {
+      &:hover {
+        background-color: rgba(124, 179, 255, 0.16);
         color: #ffffff;
       }
     }
 
-    tbody {
-      .odoo-data-row {
-        border-bottom: 1px solid var(--journal-border);
-        background-color: var(--journal-surface);
+    .odoo-table {
+      background-color: transparent !important;
 
-        &:hover {
-          background-color: rgba(124, 179, 255, 0.12);
+      .odoo-head-row {
+        border-bottom-color: var(--journal-border);
+        background-color: var(--journal-surface-muted);
+
+        th {
+          color: #ffffff;
+        }
+      }
+
+      tbody {
+        .odoo-data-row {
+          border-bottom-color: var(--journal-border);
+          background-color: var(--journal-surface);
+
+          &:hover {
+            background-color: rgba(124, 179, 255, 0.12);
+          }
+
+          &.odoo-row-selected {
+            background-color: rgba(11, 94, 215, 0.28);
+          }
+
+          td {
+            color: #e6e8eb;
+          }
         }
 
-        &.odoo-row-selected {
-          background-color: rgba(11, 94, 215, 0.28);
-        }
+        .odoo-row-editing {
+          background-color: rgba(11, 94, 215, 0.22);
+          border-bottom-color: var(--journal-accent);
 
-        td {
-          color: #e6e8eb;
+          td {
+            color: #ffffff;
+          }
         }
       }
     }
-  }
 
-  .odoo-checkbox {
-    border-color: #7cb3ff;
+    .odoo-checkbox {
+      background: transparent;
+      border-color: #7cb3ff;
+    }
   }
 }

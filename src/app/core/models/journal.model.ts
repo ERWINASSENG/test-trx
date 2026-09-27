@@ -24,3 +24,13 @@ export interface CreateJournalDto {
   currency?: string;
   is_active?: boolean;
 }
+
+export interface UpdateJournalDto {
+  name?: string;
+  type?: JournalType;
+  ledger_type?: string;
+  sequence_prefix?: string;
+  default_account?: string;
+  currency?: string;
+  is_active?: boolean;
+}
