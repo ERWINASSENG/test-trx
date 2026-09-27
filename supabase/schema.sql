@@ -162,6 +162,14 @@ CREATE TABLE public.cashier_piece_counters (
   dernier_numero integer NOT NULL DEFAULT 0
 );
 
+-- journal_piece_counters (compteurs atomiques par journal et par année)
+CREATE TABLE public.journal_piece_counters (
+  journal_id uuid NOT NULL REFERENCES public.journals(id) ON DELETE CASCADE,
+  annee integer NOT NULL,
+  dernier_numero integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (journal_id, annee)
+);
+
 -- audit_logs
 CREATE TABLE public.audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -348,6 +356,65 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.assign_journal_entry_piece_comptable()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  prefix text;
+  annee_piece integer;
+  prochain_num integer;
+  candidat text;
+  existe boolean;
+BEGIN
+  -- Si une pièce est déjà fournie avec sa séquence, la conserver
+  IF NEW.piece_comptable IS NOT NULL AND btrim(NEW.piece_comptable) <> '' AND NEW.sequence_number IS NOT NULL AND NEW.sequence_number > 0 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(sequence_prefix, 'JRNL') INTO prefix
+  FROM public.journals WHERE id = NEW.journal_id;
+
+  IF prefix IS NULL THEN
+    prefix := 'JRNL';
+  END IF;
+
+  annee_piece := COALESCE(
+    NULLIF(substring(NEW.date::text from '^\d{4}'), '')::int,
+    NULLIF(substring(NEW.date::text from '\d{4}$'), '')::int,
+    EXTRACT(YEAR FROM now())::int
+  );
+
+  INSERT INTO public.journal_piece_counters (journal_id, annee, dernier_numero)
+  VALUES (NEW.journal_id, annee_piece, 0)
+  ON CONFLICT (journal_id, annee) DO NOTHING;
+
+  LOOP
+    UPDATE public.journal_piece_counters
+    SET dernier_numero = public.journal_piece_counters.dernier_numero + 1
+    WHERE journal_id = NEW.journal_id AND annee = annee_piece
+    RETURNING dernier_numero INTO prochain_num;
+
+    candidat := prefix || '/' || annee_piece || '/' || lpad(prochain_num::text, 5, '0');
+
+    SELECT EXISTS (
+      SELECT 1 FROM public.journal_entries
+      WHERE journal_id = NEW.journal_id AND piece_comptable = candidat
+    ) INTO existe;
+
+    IF NOT existe THEN
+      NEW.sequence_number := prochain_num;
+      NEW.piece_comptable := candidat;
+      EXIT;
+    END IF;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.assign_cashier_journal_id()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -431,6 +498,10 @@ CREATE TRIGGER trg_assign_cashier_journal_id
   BEFORE INSERT ON public.cashier_transactions
   FOR EACH ROW EXECUTE FUNCTION public.assign_cashier_journal_id();
 
+CREATE TRIGGER trg_assign_journal_entry_piece_comptable
+  BEFORE INSERT ON public.journal_entries
+  FOR EACH ROW EXECUTE FUNCTION public.assign_journal_entry_piece_comptable();
+
 -- ------------------------------------------------------------------
 -- RLS + privilèges
 -- ------------------------------------------------------------------
@@ -439,12 +510,13 @@ ALTER TABLE public.dossiers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.journal_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cashier_piece_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journal_piece_counters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cashier_transactions ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
-  public.journal_entries, public.cashier_piece_counters, public.audit_logs,
-  public.cashier_transactions
+  public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
+  public.audit_logs, public.cashier_transactions
   FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO authenticated;
@@ -455,8 +527,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.cashier_transactions TO aut
 GRANT SELECT ON TABLE public.audit_logs TO authenticated;
 
 GRANT ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
-  public.journal_entries, public.cashier_piece_counters, public.audit_logs,
-  public.cashier_transactions
+  public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
+  public.audit_logs, public.cashier_transactions
   TO service_role;
 
 -- profiles
@@ -483,9 +555,18 @@ CREATE POLICY profiles_update_policy ON public.profiles
     )
   );
 
--- dossiers
-CREATE POLICY dossiers_select_authenticated ON public.dossiers
-  FOR SELECT TO authenticated USING (true);
+-- dossiers (moindre privilège : admin, rôles opérationnels/comptables ou créateur)
+CREATE POLICY dossiers_select_by_role ON public.dossiers
+  FOR SELECT TO authenticated
+  USING (
+    public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = (SELECT auth.uid())
+        AND p.role IN ('admin', 'caissier', 'caissiere', 'manager', 'tresorier', 'comptable', 'rh')
+    )
+    OR created_by = (SELECT auth.uid())
+  );
 
 CREATE POLICY dossiers_insert_by_role ON public.dossiers
   FOR INSERT TO authenticated

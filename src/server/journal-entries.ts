@@ -1,5 +1,6 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
+import { writeAuditLog } from './audit-log';
 
 /**
  * Interface d'une écriture comptable dans un journal dédié
@@ -26,12 +27,6 @@ export interface JournalEntryRecord {
   created_at: string;
   updated_at: string;
 }
-
-/**
- * Cache mémoire de secours hermétique par journal au cas où la migration SQL
- * n'a pas encore été exécutée dans le projet Supabase distant.
- */
-const fallbackEntriesStore = new Map<string, JournalEntryRecord[]>();
 
 const ALLOWED_VIEW_ROLES = ['admin', 'tresorier', 'manager', 'comptable'];
 const ALLOWED_WRITE_ROLES = ['admin', 'tresorier'];
@@ -62,52 +57,47 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
     return;
   }
 
-  if (adminClient) {
-    try {
-      const { data, error } = await adminClient
-        .from('journal_entries')
-        .select('*')
-        .eq('journal_id', journalId)
-        .order('date', { ascending: true })
-        .order('sequence_number', { ascending: true });
-
-      if (!error && Array.isArray(data)) {
-        // Calcul du solde en temps réel propre à ce journal
-        const currentBalance = data.reduce((acc, row) => {
-          const val = Number(row.montant) || 0;
-          return acc + val;
-        }, 0);
-
-        res.json({
-          success: true,
-          journal_id: journalId,
-          count: data.length,
-          current_balance: currentBalance,
-          entries: data,
-        });
-        return;
-      }
-    } catch {
-      // Poursuite vers le cache isolé si la table distante n'est pas encore prête
-    }
+  if (!adminClient) {
+    res.status(503).json({
+      error: 'Service de base de données temporairement indisponible. Veuillez vérifier la configuration serveur.',
+    });
+    return;
   }
 
-  // Fallback sécurisé en mémoire isolé par journal
-  const list = fallbackEntriesStore.get(journalId) || [];
-  const currentBalance = list.reduce((acc, row) => acc + (Number(row.montant) || 0), 0);
+  try {
+    const { data, error } = await adminClient
+      .from('journal_entries')
+      .select('*')
+      .eq('journal_id', journalId)
+      .order('date', { ascending: true })
+      .order('sequence_number', { ascending: true });
 
-  res.json({
-    success: true,
-    journal_id: journalId,
-    count: list.length,
-    current_balance: currentBalance,
-    entries: list,
-  });
+    if (error) {
+      console.error(`[JOURNAL_ENTRIES] Erreur lecture des écritures du journal ${journalId}:`, error.message);
+      res.status(500).json({ error: `Erreur lors de la récupération des écritures : ${error.message}` });
+      return;
+    }
+
+    const entries = (data || []) as JournalEntryRecord[];
+    const currentBalance = entries.reduce((acc, row) => acc + (Number(row.montant) || 0), 0);
+
+    res.json({
+      success: true,
+      journal_id: journalId,
+      count: entries.length,
+      current_balance: currentBalance,
+      entries,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[JOURNAL_ENTRIES] Exception lecture des écritures:`, message);
+    res.status(500).json({ error: 'Erreur interne lors de la consultation du journal.' });
+  }
 };
 
 /**
  * POST /api/journals/:journalId/entries
- * Crée une écriture dans le journal avec garantie d'unicité et de séquençage strict
+ * Crée une écriture dans le journal avec garantie d'unicité, persistance stricte et traçabilité d'audit.
  */
 export const createJournalEntryHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
@@ -118,13 +108,21 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
     return;
   }
 
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string; email?: string } | undefined;
   const userRole = authenticatedUser?.role;
   const userId = authenticatedUser?.id;
+  const userEmail = authenticatedUser?.email;
 
-  // Strict RBAC : les managers n'ont PAS le droit de saisie
+  // Strict RBAC : seuls l'administrateur et le trésorier peuvent créer des écritures
   if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
     res.status(403).json({ error: 'Seuls le trésorier et l’administrateur peuvent saisir des écritures de journal.' });
+    return;
+  }
+
+  if (!adminClient) {
+    res.status(503).json({
+      error: 'Persistance impossible : le service Supabase n’est pas initialisé sur le serveur.',
+    });
     return;
   }
 
@@ -142,251 +140,332 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
     montant,
   } = req.body;
 
-  if (!libelle || !libelle.trim()) {
+  if (!libelle || typeof libelle !== 'string' || !libelle.trim()) {
     res.status(400).json({ error: 'Le libellé de l’opération est obligatoire.' });
     return;
   }
 
   const rawMontant = Number(montant);
   if (isNaN(rawMontant) || rawMontant === 0) {
-    res.status(400).json({ error: 'Le montant de l’opération doit être supérieur à zéro.' });
+    res.status(400).json({ error: 'Le montant de l’opération doit être un nombre non nul.' });
     return;
   }
 
   const effectiveCategory: 'entree' | 'sortie' = category === 'entree' ? 'entree' : 'sortie';
   const signedMontant = effectiveCategory === 'sortie' ? -Math.abs(rawMontant) : Math.abs(rawMontant);
-  const entryDate = date ? String(date).split('T')[0] : new Date().toISOString().split('T')[0];
+  const entryDate = date && typeof date === 'string' ? String(date).split('T')[0] : new Date().toISOString().split('T')[0];
   const year = entryDate.split('-')[0] || new Date().getFullYear().toString();
 
-  // 1. Récupération du préfixe de séquence du journal
-  let sequencePrefix = 'JRNL';
-  if (adminClient) {
-    try {
-      const { data: journalRow } = await adminClient
-        .from('journals')
-        .select('sequence_prefix')
-        .eq('id', journalId)
-        .maybeSingle();
+  try {
+    // 1. Récupération du préfixe de séquence du journal
+    const { data: journalRow, error: journalError } = await adminClient
+      .from('journals')
+      .select('id, sequence_prefix, is_active')
+      .eq('id', journalId)
+      .maybeSingle();
 
-      if (journalRow?.sequence_prefix) {
-        sequencePrefix = journalRow.sequence_prefix.toUpperCase();
-      }
-    } catch {
-      // Ignorer
+    if (journalError || !journalRow) {
+      res.status(404).json({ error: 'Journal comptable introuvable.' });
+      return;
     }
-  }
 
-  // 2. Calcul atomique du numéro de séquence au sein de ce journal
-  let nextSeq = 1;
-
-  if (adminClient) {
-    try {
-      const { data: maxRow } = await adminClient
-        .from('journal_entries')
-        .select('sequence_number')
-        .eq('journal_id', journalId)
-        .order('sequence_number', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (maxRow?.sequence_number) {
-        nextSeq = Number(maxRow.sequence_number) + 1;
-      }
-    } catch {
-      const memList = fallbackEntriesStore.get(journalId) || [];
-      const maxSeq = memList.reduce((max, e) => Math.max(max, e.sequence_number), 0);
-      nextSeq = maxSeq + 1;
+    if (journalRow.is_active === false) {
+      res.status(400).json({ error: 'Ce journal est désactivé. Aucune saisie n’est autorisée.' });
+      return;
     }
-  } else {
-    const memList = fallbackEntriesStore.get(journalId) || [];
-    const maxSeq = memList.reduce((max, e) => Math.max(max, e.sequence_number), 0);
-    nextSeq = maxSeq + 1;
-  }
 
-  // Formatage strict de la pièce comptable : ex: BNK1/2026/00001
-  const paddedSeq = String(nextSeq).padStart(5, '0');
-  const pieceComptable = `${sequencePrefix}/${year}/${paddedSeq}`;
+    const sequencePrefix = (journalRow.sequence_prefix || 'JRNL').toUpperCase();
 
-  const newEntry: JournalEntryRecord = {
-    id: `je-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    journal_id: journalId,
-    sequence_number: nextSeq,
-    piece_comptable: pieceComptable,
-    date: entryDate,
-    libelle: libelle.trim(),
-    service: service ? String(service).trim() : '',
-    type_description: type_description ? String(type_description).trim() : '',
-    category: effectiveCategory,
-    status: status === 'posted' ? 'posted' : 'draft',
-    no_dossier: no_dossier ? String(no_dossier).trim() : '',
-    partenaire: partenaire ? String(partenaire).trim() : '',
-    employee: employee ? String(employee).trim() : '',
-    quantity: Number(quantity) || 1,
-    montant: signedMontant,
-    created_by: userId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+    // 2. Calcul du numéro de séquence au sein du journal avec gestion des conflits
+    const { data: maxRow } = await adminClient
+      .from('journal_entries')
+      .select('sequence_number')
+      .eq('journal_id', journalId)
+      .order('sequence_number', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  // Insertion Supabase
-  if (adminClient) {
-    try {
-      const { data: inserted, error } = await adminClient
-        .from('journal_entries')
-        .insert({
-          journal_id: newEntry.journal_id,
-          sequence_number: newEntry.sequence_number,
-          piece_comptable: newEntry.piece_comptable,
-          date: newEntry.date,
-          libelle: newEntry.libelle,
-          service: newEntry.service,
-          type_description: newEntry.type_description,
-          category: newEntry.category,
-          status: newEntry.status,
-          no_dossier: newEntry.no_dossier,
-          partenaire: newEntry.partenaire,
-          employee: newEntry.employee,
-          quantity: newEntry.quantity,
-          montant: newEntry.montant,
-          created_by: newEntry.created_by,
-        })
-        .select()
-        .single();
+    const nextSeq = maxRow?.sequence_number ? Number(maxRow.sequence_number) + 1 : 1;
+    const paddedSeq = String(nextSeq).padStart(5, '0');
+    const pieceComptable = `${sequencePrefix}/${year}/${paddedSeq}`;
 
-      if (!error && inserted) {
-        res.status(201).json({
-          success: true,
-          message: 'Écriture comptable enregistrée avec succès dans le journal.',
-          entry: inserted,
+    // 3. Insertion en base de données avec contrôle d'intégrité
+    const { data: inserted, error: insertError } = await adminClient
+      .from('journal_entries')
+      .insert({
+        journal_id: journalId,
+        sequence_number: nextSeq,
+        piece_comptable: pieceComptable,
+        date: entryDate,
+        libelle: libelle.trim(),
+        service: service ? String(service).trim() : '',
+        type_description: type_description ? String(type_description).trim() : '',
+        category: effectiveCategory,
+        status: status === 'posted' ? 'posted' : 'draft',
+        no_dossier: no_dossier ? String(no_dossier).trim() : '',
+        partenaire: partenaire ? String(partenaire).trim() : '',
+        employee: employee ? String(employee).trim() : '',
+        quantity: Math.max(1, Number(quantity) || 1),
+        montant: signedMontant,
+        created_by: userId || null,
+      })
+      .select()
+      .single();
+
+    if (insertError || !inserted) {
+      console.error('[JOURNAL_ENTRIES] Échec de persistance de l’écriture comptable:', insertError?.message);
+      // Code 23505 = violation d'unicité (doublon de pièce comptable)
+      if (insertError?.code === '23505') {
+        res.status(409).json({
+          error: `Un enregistrement avec la pièce comptable ${pieceComptable} existe déjà dans ce journal. Veuillez réessayer.`,
         });
         return;
       }
-    } catch {
-      // En cas d'erreur DDL, stockage dans le fallback hermétique
+      res.status(500).json({
+        error: `Échec d'enregistrement de l'écriture en base : ${insertError?.message || 'Erreur inconnue'}`,
+      });
+      return;
     }
+
+    // 4. Audit Log systématique
+    await writeAuditLog(adminClient, {
+      userId: userId || null,
+      userEmail: userEmail || null,
+      userRole: userRole || null,
+      action: 'CREATE_JOURNAL_ENTRY',
+      entityType: 'journal_entry',
+      entityId: inserted.id,
+      details: {
+        journal_id: journalId,
+        piece_comptable: inserted.piece_comptable,
+        montant: inserted.montant,
+        category: inserted.category,
+        libelle: inserted.libelle,
+      },
+      ipAddress: req.ip || null,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Écriture comptable enregistrée avec succès dans le journal.',
+      entry: inserted,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[JOURNAL_ENTRIES] Exception lors de la création d’une écriture:', message);
+    res.status(500).json({ error: 'Erreur interne lors de la création de l’écriture comptable.' });
   }
-
-  // Stockage fallback hermétique par journal
-  const list = fallbackEntriesStore.get(journalId) || [];
-  list.push(newEntry);
-  fallbackEntriesStore.set(journalId, list);
-
-  res.status(201).json({
-    success: true,
-    message: 'Écriture comptable enregistrée avec succès.',
-    entry: newEntry,
-  });
 };
 
 /**
  * PUT/PATCH /api/journals/:journalId/entries/:id
- * Met à jour une écriture du journal
+ * Met à jour une écriture du journal via une liste blanche stricte de champs modifiables.
  */
 export const updateJournalEntryHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
   const journalId = extractParamString(req.params['journalId']);
   const entryId = extractParamString(req.params['id']);
 
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
+  if (!journalId || !entryId) {
+    res.status(400).json({ error: 'Identifiants du journal et de l’écriture requis.' });
+    return;
+  }
+
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string; email?: string } | undefined;
   const userRole = authenticatedUser?.role;
   const userId = authenticatedUser?.id;
+  const userEmail = authenticatedUser?.email;
 
   if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
     res.status(403).json({ error: 'Modification non autorisée.' });
     return;
   }
 
-  const updates = { ...req.body };
-  delete updates.id;
-  delete updates.journal_id;
-  delete updates.sequence_number; // Intégrité comptable : le numéro de séquence est immuable
-  delete updates.piece_comptable;  // Intégrité comptable : la pièce est immuable
-
-  if (updates.montant !== undefined && updates.category !== undefined) {
-    const raw = Math.abs(Number(updates.montant) || 0);
-    updates.montant = updates.category === 'sortie' ? -raw : raw;
-  }
-
-  if (adminClient) {
-    try {
-      let query = adminClient
-        .from('journal_entries')
-        .update(updates)
-        .eq('id', entryId)
-        .eq('journal_id', journalId);
-
-      // Si trésorier, restreindre à ses écritures
-      if (userRole === 'tresorier' && userId) {
-        query = query.eq('created_by', userId);
-      }
-
-      const { data, error } = await query.select().single();
-      if (!error && data) {
-        res.json({ success: true, entry: data });
-        return;
-      }
-    } catch {
-      // Ignorer
-    }
-  }
-
-  // Mise à jour fallback
-  const list = fallbackEntriesStore.get(journalId) || [];
-  const idx = list.findIndex((e) => e.id === entryId);
-  if (idx !== -1) {
-    list[idx] = { ...list[idx], ...updates, updated_at: new Date().toISOString() };
-    res.json({ success: true, entry: list[idx] });
+  if (!adminClient) {
+    res.status(503).json({ error: 'Base de données non accessible.' });
     return;
   }
 
-  res.status(404).json({ error: 'Écriture introuvable.' });
+  // 1. Liste blanche stricte des champs autorisés à la modification
+  const allowedUpdates: Record<string, unknown> = {};
+  const body = req.body || {};
+
+  if (typeof body.libelle === 'string' && body.libelle.trim()) {
+    allowedUpdates['libelle'] = body.libelle.trim();
+  }
+
+  if (typeof body.date === 'string' && body.date.trim()) {
+    allowedUpdates['date'] = body.date.split('T')[0];
+  }
+
+  if (body.service !== undefined) {
+    allowedUpdates['service'] = String(body.service || '').trim();
+  }
+
+  if (body.type_description !== undefined) {
+    allowedUpdates['type_description'] = String(body.type_description || '').trim();
+  }
+
+  if (body.no_dossier !== undefined) {
+    allowedUpdates['no_dossier'] = String(body.no_dossier || '').trim();
+  }
+
+  if (body.partenaire !== undefined) {
+    allowedUpdates['partenaire'] = String(body.partenaire || '').trim();
+  }
+
+  if (body.employee !== undefined) {
+    allowedUpdates['employee'] = String(body.employee || '').trim();
+  }
+
+  if (body.quantity !== undefined) {
+    allowedUpdates['quantity'] = Math.max(1, Number(body.quantity) || 1);
+  }
+
+  if (body.status !== undefined && ['draft', 'posted', 'cancelled'].includes(body.status)) {
+    allowedUpdates['status'] = body.status;
+  }
+
+  if (body.category !== undefined && ['entree', 'sortie'].includes(body.category)) {
+    allowedUpdates['category'] = body.category;
+  }
+
+  if (body.montant !== undefined) {
+    const raw = Math.abs(Number(body.montant) || 0);
+    const cat = allowedUpdates['category'] || body.category;
+    allowedUpdates['montant'] = cat === 'sortie' ? -raw : raw;
+  } else if (allowedUpdates['category'] !== undefined) {
+    // Si la catégorie change seule, réajuster le signe du montant existant
+    const { data: existing } = await adminClient
+      .from('journal_entries')
+      .select('montant')
+      .eq('id', entryId)
+      .maybeSingle();
+
+    if (existing) {
+      const raw = Math.abs(Number(existing.montant) || 0);
+      allowedUpdates['montant'] = allowedUpdates['category'] === 'sortie' ? -raw : raw;
+    }
+  }
+
+  if (Object.keys(allowedUpdates).length === 0) {
+    res.status(400).json({ error: 'Aucun champ valide à mettre à jour.' });
+    return;
+  }
+
+  allowedUpdates['updated_at'] = new Date().toISOString();
+
+  try {
+    let query = adminClient
+      .from('journal_entries')
+      .update(allowedUpdates)
+      .eq('id', entryId)
+      .eq('journal_id', journalId);
+
+    // Si trésorier, restreindre la mise à jour à ses propres écritures
+    if (userRole === 'tresorier' && userId) {
+      query = query.eq('created_by', userId);
+    }
+
+    const { data: updated, error: updateError } = await query.select().single();
+
+    if (updateError || !updated) {
+      res.status(404).json({
+        error: updateError?.message || 'Écriture introuvable ou modification non autorisée.',
+      });
+      return;
+    }
+
+    // Audit log
+    await writeAuditLog(adminClient, {
+      userId: userId || null,
+      userEmail: userEmail || null,
+      userRole: userRole || null,
+      action: 'UPDATE_JOURNAL_ENTRY',
+      entityType: 'journal_entry',
+      entityId: entryId,
+      details: {
+        journal_id: journalId,
+        updatedFields: Object.keys(allowedUpdates),
+      },
+      ipAddress: req.ip || null,
+    });
+
+    res.json({
+      success: true,
+      message: 'Écriture mise à jour avec succès.',
+      entry: updated,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[JOURNAL_ENTRIES] Exception mise à jour écriture:', message);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de l’écriture comptable.' });
+  }
 };
 
 /**
  * DELETE /api/journals/:journalId/entries/:id
- * Supprime une écriture du journal
+ * Supprime une écriture du journal avec audit log
  */
 export const deleteJournalEntryHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
   const journalId = extractParamString(req.params['journalId']);
   const entryId = extractParamString(req.params['id']);
 
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
+  if (!journalId || !entryId) {
+    res.status(400).json({ error: 'Identifiants du journal et de l’écriture requis.' });
+    return;
+  }
+
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string; email?: string } | undefined;
   const userRole = authenticatedUser?.role;
   const userId = authenticatedUser?.id;
+  const userEmail = authenticatedUser?.email;
 
   if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
     res.status(403).json({ error: 'Suppression non autorisée.' });
     return;
   }
 
-  if (adminClient) {
-    try {
-      let query = adminClient
-        .from('journal_entries')
-        .delete()
-        .eq('id', entryId)
-        .eq('journal_id', journalId);
-
-      if (userRole === 'tresorier' && userId) {
-        query = query.eq('created_by', userId);
-      }
-
-      const { error } = await query;
-      if (!error) {
-        res.json({ success: true, message: 'Écriture supprimée.' });
-        return;
-      }
-    } catch {
-      // Ignorer
-    }
+  if (!adminClient) {
+    res.status(503).json({ error: 'Base de données non disponible.' });
+    return;
   }
 
-  const list = fallbackEntriesStore.get(journalId) || [];
-  const nextList = list.filter((e) => e.id !== entryId);
-  fallbackEntriesStore.set(journalId, nextList);
+  try {
+    let query = adminClient
+      .from('journal_entries')
+      .delete()
+      .eq('id', entryId)
+      .eq('journal_id', journalId);
 
-  res.json({ success: true, message: 'Écriture supprimée.' });
+    if (userRole === 'tresorier' && userId) {
+      query = query.eq('created_by', userId);
+    }
+
+    const { error } = await query;
+    if (error) {
+      res.status(500).json({ error: `Erreur lors de la suppression : ${error.message}` });
+      return;
+    }
+
+    await writeAuditLog(adminClient, {
+      userId: userId || null,
+      userEmail: userEmail || null,
+      userRole: userRole || null,
+      action: 'DELETE_JOURNAL_ENTRY',
+      entityType: 'journal_entry',
+      entityId: entryId,
+      details: { journal_id: journalId },
+      ipAddress: req.ip || null,
+    });
+
+    res.json({ success: true, message: 'Écriture supprimée du journal avec succès.' });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[JOURNAL_ENTRIES] Exception suppression écriture:', message);
+    res.status(500).json({ error: 'Erreur lors de la suppression de l’écriture comptable.' });
+  }
 };
 
 /**
@@ -402,55 +481,54 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
     return;
   }
 
-  let entries: JournalEntryRecord[] = [];
+  if (!adminClient) {
+    res.status(503).json({ error: 'Service indisponible.' });
+    return;
+  }
 
-  if (adminClient) {
-    try {
-      const { data } = await adminClient
-        .from('journal_entries')
-        .select('*')
-        .eq('journal_id', journalId)
-        .order('date', { ascending: true })
-        .order('sequence_number', { ascending: true });
+  try {
+    const { data, error } = await adminClient
+      .from('journal_entries')
+      .select('*')
+      .eq('journal_id', journalId)
+      .order('date', { ascending: true })
+      .order('sequence_number', { ascending: true });
 
-      if (Array.isArray(data)) {
-        entries = data as JournalEntryRecord[];
-      }
-    } catch {
-      // Ignorer
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
     }
+
+    const entries = (data || []) as JournalEntryRecord[];
+    entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let runningBalance = 0;
+    const labels: string[] = [];
+    const balances: number[] = [];
+    const descriptions: string[] = [];
+
+    for (const entry of entries) {
+      runningBalance += Number(entry.montant) || 0;
+      const dateObj = new Date(entry.date);
+      const formatted = !isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+        : entry.date;
+
+      labels.push(formatted);
+      balances.push(runningBalance);
+      descriptions.push(entry.libelle);
+    }
+
+    res.json({
+      success: true,
+      journal_id: journalId,
+      current_balance: runningBalance,
+      labels,
+      balances,
+      descriptions,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
   }
-
-  if (entries.length === 0) {
-    entries = fallbackEntriesStore.get(journalId) || [];
-  }
-
-  // Tri chronologique rigoureux
-  entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  let runningBalance = 0;
-  const labels: string[] = [];
-  const balances: number[] = [];
-  const descriptions: string[] = [];
-
-  for (const entry of entries) {
-    runningBalance += Number(entry.montant) || 0;
-    const dateObj = new Date(entry.date);
-    const formatted = !isNaN(dateObj.getTime())
-      ? dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
-      : entry.date;
-
-    labels.push(formatted);
-    balances.push(runningBalance);
-    descriptions.push(entry.libelle);
-  }
-
-  res.json({
-    success: true,
-    journal_id: journalId,
-    current_balance: runningBalance,
-    labels,
-    balances,
-    descriptions,
-  });
 };

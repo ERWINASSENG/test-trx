@@ -50,13 +50,15 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'", 'https:', 'wss:'],
         frameAncestors: ["'self'", 'https://ai.studio', 'https://*.google.com', 'https://*.run.app'],
         objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
         upgradeInsecureRequests: process.env['NODE_ENV'] === 'production' ? [] : null,
       },
     },

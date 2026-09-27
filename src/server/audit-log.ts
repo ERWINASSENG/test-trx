@@ -4,7 +4,17 @@ export interface AuditLogEntry {
   userId?: string | null;
   userEmail?: string | null;
   userRole?: string | null;
-  action: 'CREATE_OPERATION' | 'UPDATE_OPERATION' | 'DELETE_OPERATION';
+  action:
+    | 'CREATE_OPERATION'
+    | 'UPDATE_OPERATION'
+    | 'DELETE_OPERATION'
+    | 'CREATE_JOURNAL'
+    | 'UPDATE_JOURNAL'
+    | 'DELETE_JOURNAL'
+    | 'CREATE_JOURNAL_ENTRY'
+    | 'UPDATE_JOURNAL_ENTRY'
+    | 'DELETE_JOURNAL_ENTRY'
+    | string;
   entityType?: string;
   entityId?: string | null;
   details?: Record<string, unknown>;
