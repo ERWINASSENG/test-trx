@@ -6,7 +6,7 @@
   width: 260px;
   min-width: 260px;
   background-color: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #bfd3ee;
   border-radius: 8px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
   padding: 12px 14px;
@@ -23,8 +23,8 @@
     width: 10px;
     height: 10px;
     background-color: #ffffff;
-    border-top: 1px solid #cbd5e1;
-    border-left: 1px solid #cbd5e1;
+    border-top: 1px solid #bfd3ee;
+    border-left: 1px solid #bfd3ee;
     transform: rotate(45deg);
   }
 
@@ -44,21 +44,21 @@
       height: 24px;
       background: transparent;
       border: none;
-      color: #64748b;
+      color: #35517a;
       border-radius: 4px;
       cursor: pointer;
       transition: background-color 0.15s ease, color 0.15s ease;
 
       &:hover {
         background-color: rgba(0, 0, 0, 0.06);
-        color: #0f172a;
+        color: #123c6d;
       }
     }
 
     .odoo-dp-title {
       font-size: 0.9375rem;
       font-weight: 600;
-      color: #0f172a;
+      color: #123c6d;
       letter-spacing: -0.01em;
       margin-left: 2px;
     }
@@ -88,7 +88,7 @@
       .odoo-dp-weekday-label {
         font-size: 0.8125rem;
         font-weight: 700;
-        color: #475569;
+        color: #35517a;
         text-align: center;
       }
     }
@@ -97,7 +97,7 @@
     .odoo-dp-week-num {
       font-size: 0.8125rem;
       font-weight: 700;
-      color: #0284c7; // Bleu cyan Odoo
+      color: #0b5ed7;
       text-align: left;
       padding-left: 2px;
     }
@@ -113,11 +113,16 @@
       border-radius: 50%;
       border: none;
       background: transparent;
-      color: #1e293b;
+      color: #17324f;
       font-size: 0.8125rem;
       font-weight: 500;
       cursor: pointer;
       transition: background-color 0.15s ease, transform 0.1s ease;
+
+      &:focus-visible {
+        outline: 2px solid #0b5ed7;
+        outline-offset: 1px;
+      }
 
       &:hover:not(.is-selected):not(.is-today) {
         background-color: rgba(0, 0, 0, 0.06);
@@ -129,9 +134,9 @@
         color: #94a3b8;
       }
 
-      // Jour sélectionné (pastille vert/teal Odoo)
+      // Jour sélectionné
       &.is-selected {
-        background-color: #008080 !important;
+        background-color: #0b5ed7 !important;
         color: #ffffff !important;
         font-weight: 600;
       }
@@ -149,12 +154,12 @@
 // Mode Sombre
 :host-context(html.dark) .odoo-datepicker-popover,
 :host-context([data-theme="dark"]) .odoo-datepicker-popover {
-  background-color: #2b2f38;
+  background-color: #0d1f3a;
   border-color: rgba(255, 255, 255, 0.15);
   box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.6), 0 10px 15px -5px rgba(0, 0, 0, 0.5);
 
   .odoo-popover-arrow {
-    background-color: #2b2f38;
+    background-color: #0d1f3a;
     border-top-color: rgba(255, 255, 255, 0.12);
     border-left-color: rgba(255, 255, 255, 0.12);
   }
@@ -182,11 +187,15 @@
     }
 
     .odoo-dp-week-num {
-      color: #38bdf8;
+      color: #8cc2ff;
     }
 
     .odoo-dp-day-cell {
       color: #e2e8f0;
+
+      &:focus-visible {
+        outline-color: #8cc2ff;
+      }
 
       &:hover:not(.is-selected):not(.is-today) {
         background-color: rgba(255, 255, 255, 0.12);

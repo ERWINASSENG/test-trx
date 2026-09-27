@@ -9,13 +9,13 @@
   tabindex="-1"
 >
   <div
-    class="bg-white dark:bg-[#2b2f33] rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+    class="bg-white dark:bg-[#0d1f3a] rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
     id="cashier-import-modal-container"
   >
     <!-- En-tête de la modale -->
     <header class="px-5 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50 dark:bg-white/5">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-[#00A09D]/15 text-[#00A09D] flex items-center justify-center">
+        <div class="w-8 h-8 rounded-lg bg-[#0b5ed7]/15 text-[#0b5ed7] dark:text-[#8cc2ff] flex items-center justify-center">
           <mat-icon class="!text-[20px] !w-5 !h-5 leading-none">upload_file</mat-icon>
         </div>
         <div>
@@ -42,16 +42,16 @@
     <!-- Corps principal -->
     <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
       <!-- Zone de téléchargement du modèle -->
-      <div class="flex items-center justify-between p-3 rounded-lg bg-[#00A09D]/10 border border-[#00A09D]/20 text-slate-700 dark:text-slate-200">
+      <div class="flex items-center justify-between p-3 rounded-lg bg-[#0b5ed7]/10 border border-[#0b5ed7]/20 text-slate-700 dark:text-slate-200">
         <div class="flex items-center gap-2">
-          <mat-icon class="text-[#00A09D] !text-[18px] !w-4.5 !h-4.5">description</mat-icon>
+          <mat-icon class="text-[#0b5ed7] dark:text-[#8cc2ff] !text-[18px] !w-4.5 !h-4.5">description</mat-icon>
           <span>Besoin du format standard ? Téléchargez le modèle vierge :</span>
         </div>
         <button
           type="button"
           id="btn-download-import-template"
           (click)="downloadTemplate()"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#00A09D] text-white font-medium hover:bg-[#008986] transition-colors cursor-pointer shadow-xs active:scale-95"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#0b5ed7] text-white font-medium hover:bg-[#084db1] transition-colors cursor-pointer shadow-xs active:scale-95"
         >
           <mat-icon class="!text-[15px] !w-4 !h-4">file_download</mat-icon>
           <span>Modèle Excel (.xlsx)</span>
@@ -77,21 +77,21 @@
           (dragleave)="onDragLeave($event)"
           (drop)="onDrop($event)"
           (click)="triggerFileInput()"
-          class="w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-[#00A09D]"
-          [class.border-[#00A09D]]="isDragging()"
-          [class.bg-[#00A09D]/5]="isDragging()"
+          class="w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-[#0b5ed7] dark:focus-visible:ring-[#8cc2ff]"
+          [class.border-[#0b5ed7]]="isDragging()"
+          [class.bg-[#0b5ed7]/5]="isDragging()"
           [class.border-slate-300]="!isDragging()"
           [class.dark:border-white/15]="!isDragging()"
-          [class.hover:border-[#00A09D]]="!isDragging()"
+          [class.hover:border-[#0b5ed7]]="!isDragging()"
           [class.hover:bg-slate-50]="!isDragging()"
           [class.dark:hover:bg-white/5]="!isDragging()"
         >
-          <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-[#00A09D]">
+          <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-[#0b5ed7] dark:group-hover:text-[#8cc2ff]">
             <mat-icon class="!text-[26px] !w-6.5 !h-6.5">cloud_upload</mat-icon>
           </div>
           <div>
             <p class="font-medium text-slate-800 dark:text-slate-200 text-sm">
-              Glissez-déposez votre fichier ici, ou <span class="text-[#00A09D] underline">parcourez vos dossiers</span>
+              Glissez-déposez votre fichier ici, ou <span class="text-[#0b5ed7] dark:text-[#8cc2ff] underline">parcourez vos dossiers</span>
             </p>
             <p class="text-slate-400 text-xs mt-0.5">Formats pris en charge : Excel (.xlsx, .xls) ou CSV</p>
           </div>
@@ -100,7 +100,7 @@
         <!-- Fichier sélectionné et analyse en cours / terminée -->
         <div class="p-3.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-9 h-9 rounded-md bg-[#00A09D]/15 text-[#00A09D] flex items-center justify-center shrink-0">
+            <div class="w-9 h-9 rounded-md bg-[#0b5ed7]/15 text-[#0b5ed7] dark:text-[#8cc2ff] flex items-center justify-center shrink-0">
               <mat-icon class="!text-[22px] !w-5.5 !h-5.5">table_view</mat-icon>
             </div>
             <div class="truncate">
@@ -109,7 +109,7 @@
               </p>
               @if (isParsing()) {
                 <p class="text-slate-400 text-xs flex items-center gap-1.5 mt-0.5">
-                  <span class="inline-block w-2.5 h-2.5 border-2 border-[#00A09D] border-t-transparent rounded-full animate-spin"></span>
+                  <span class="inline-block w-2.5 h-2.5 border-2 border-[#0b5ed7] dark:border-[#8cc2ff] border-t-transparent rounded-full animate-spin"></span>
                   Analyse du fichier en cours...
                 </p>
               } @else if (hasParsed()) {
@@ -218,7 +218,7 @@
         id="btn-confirm-import-data"
         (click)="confirmImport()"
         [disabled]="validRows().length === 0 || isParsing()"
-        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-[#00A09D] text-white hover:bg-[#008986] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer active:scale-95"
+        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-[#0b5ed7] text-white hover:bg-[#084db1] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer active:scale-95"
       >
         <mat-icon class="!text-[16px] !w-4 !h-4 leading-none">check</mat-icon>
         <span>Enregistrer dans la caisse ({{ validRows().length }})</span>

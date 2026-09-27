@@ -1,12 +1,28 @@
 // Styles spécifiques au module Caisse Transimex
 // Conforme au design épuré, minimaliste et fidèle à la vue liste Odoo ERP (Flat Tree View)
 
+:host {
+  display: block;
+}
+
 .cashier-page {
+  --accounting-accent: #0b5ed7;
+  --accounting-accent-hover: #084db1;
+  --accounting-surface: #ffffff;
+  --accounting-surface-muted: #f4f8ff;
+  --accounting-border: #d5e2f2;
+  --accounting-text: #123c6d;
   font-family: inherit;
-  color: var(--app-text);
+  color: var(--accounting-text);
   margin: 0;
   padding: 0;
   width: 100%;
+  min-height: calc(100vh - 50px);
+  background:
+    radial-gradient(circle at top right, rgba(11, 94, 215, 0.09), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.06), transparent 28%),
+    #edf5ff;
+  transition: background-color 0.2s ease, color 0.2s ease;
 
   // Désactivation globale des flèches montante/descendante (spinners)
   input[type="number"]::-webkit-outer-spin-button,
@@ -26,14 +42,14 @@
     width: 100%;
     margin: 0;
     border: none;
-    background: #ffffff;
+    background: var(--accounting-surface);
 
     .odoo-head-row {
-      border-bottom: 2px solid #cbd5e1;
-      background-color: #f8fafc;
+      border-bottom: 2px solid var(--accounting-border);
+      background-color: var(--accounting-surface-muted);
 
       th {
-        color: #1e293b;
+        color: var(--accounting-text);
         font-weight: 700;
         font-size: 0.8125rem;
         letter-spacing: 0;
@@ -48,37 +64,37 @@
 
     tbody {
       .odoo-data-row {
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--accounting-border);
         transition: background-color 0.12s ease;
-        background-color: #ffffff;
+        background-color: var(--accounting-surface);
 
         &:hover {
-          background-color: #f1f5f9;
+          background-color: #f2f7ff;
         }
 
         &.odoo-row-selected {
-          background-color: #ecfdf5;
+          background-color: #e8f1ff;
         }
 
         td {
           vertical-align: middle;
           padding: 0.625rem 0.75rem;
           font-size: 0.8125rem;
-          color: #1e293b;
+          color: #17324f;
           border: none;
         }
       }
 
       // Ligne active en cours d'édition / création
       .odoo-row-editing {
-        background-color: #f0fdf4;
-        border-bottom: 2px solid #008784;
+        background-color: #eff6ff;
+        border-bottom: 2px solid var(--accounting-accent);
 
         td {
           vertical-align: middle;
           padding: 0.5rem 0.75rem;
           font-size: 0.8125rem;
-          color: #0f172a;
+          color: #123c6d;
           border: none;
         }
       }
@@ -87,7 +103,7 @@
 
   // Checkbox Odoo ultra-discrète
   .odoo-checkbox {
-    accent-color: #008784;
+    accent-color: var(--accounting-accent);
     width: 0.95rem;
     height: 0.95rem;
     cursor: pointer;
@@ -130,11 +146,11 @@
   // Soulignement actif fin
   .odoo-active-underline,
   input.odoo-active-underline {
-    border-bottom: 1px solid var(--app-border, #00a09d) !important;
+    border-bottom: 1px solid var(--accounting-accent) !important;
     border-radius: 0 !important;
 
     &:focus {
-      border-bottom: 1px solid #00a09d !important;
+      border-bottom: 1px solid var(--accounting-accent-hover) !important;
     }
   }
 
@@ -148,11 +164,11 @@
     border-bottom: none !important;
   }
 
-  // Badge statut Odoo Comptabilisé
+  // Badge de statut positif
   .odoo-badge-posted {
-    background-color: #d1fae5;
-    color: #065f46;
-    border: 1px solid #a7f3d0;
+    background-color: #dbeafe;
+    color: #123c6d;
+    border: 1px solid #93c5fd;
     font-weight: 600;
     font-size: 0.75rem;
     padding: 0.2rem 0.75rem;
@@ -207,39 +223,50 @@
 :host-context(.dark),
 :host-context([data-theme="dark"]) {
   .cashier-page {
+    --accounting-accent: #7cb3ff;
+    --accounting-accent-hover: #a6ccff;
+    --accounting-surface: rgba(13, 31, 58, 0.82);
+    --accounting-surface-muted: rgba(255, 255, 255, 0.05);
+    --accounting-border: rgba(207, 227, 255, 0.14);
+    --accounting-text: #f3f8ff;
+    background:
+      radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 26%),
+      radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
+      #0a2342;
+
     .odoo-table {
       background-color: transparent !important;
 
       .odoo-head-row {
-        border-bottom-color: #383f45;
-        background-color: transparent;
+        border-bottom-color: var(--accounting-border);
+        background-color: var(--accounting-surface-muted);
 
         th {
-          color: #f8fafc;
+          color: #f3f8ff;
         }
       }
 
       tbody {
         .odoo-data-row {
-          border-bottom-color: #2b3038;
-          background-color: transparent;
+          border-bottom-color: var(--accounting-border);
+          background-color: var(--accounting-surface);
 
           &:hover {
-            background-color: rgba(255, 255, 255, 0.04);
+            background-color: rgba(124, 179, 255, 0.12);
           }
 
           &.odoo-row-selected {
-            background-color: rgba(0, 160, 157, 0.15);
+            background-color: rgba(11, 94, 215, 0.28);
           }
 
           td {
-            color: #f8fafc;
+            color: #e5efff;
           }
         }
 
         .odoo-row-editing {
-          background-color: rgba(0, 160, 157, 0.1);
-          border-bottom-color: #00a09d;
+          background-color: rgba(11, 94, 215, 0.2);
+          border-bottom-color: var(--accounting-accent);
 
           td {
             color: #ffffff;
@@ -250,13 +277,13 @@
 
     .odoo-checkbox {
       background: transparent;
-      border-color: #475569;
+      border-color: #7cb3ff;
     }
 
     .odoo-badge-posted {
-      background-color: #00a09d;
+      background-color: #1d4ed8;
       color: #ffffff;
-      border: none;
+      border: 1px solid #7cb3ff;
     }
 
     .odoo-badge-draft {

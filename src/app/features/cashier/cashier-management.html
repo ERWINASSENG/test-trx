@@ -78,12 +78,12 @@
               <button
                 type="button"
                 (click)="toggleSort('date')"
-                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors"
+                class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
                 title="Trier par date"
               >
                 <span>Date</span>
                 @if (sortField() === 'date') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
@@ -93,12 +93,12 @@
               <button
                 type="button"
                 (click)="toggleSort('pieceComptable')"
-                class="inline-flex items-center gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors"
+                class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
                 title="Trier par numéro séquentiel de pièce comptable"
               >
                 <span>Pièce comptable</span>
                 @if (sortField() === 'pieceComptable') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
@@ -117,12 +117,12 @@
               <button
                 type="button"
                 (click)="toggleSort('montant')"
-                class="inline-flex items-center justify-end gap-1 font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors w-full"
+                class="inline-flex items-center justify-end gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors w-full"
                 title="Trier par montant"
               >
                 <span>Montant</span>
                 @if (sortField() === 'montant') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-emerald-600 dark:text-emerald-400">
+                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
                     {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                   </mat-icon>
                 }
@@ -170,7 +170,7 @@
 
               <!-- Pièce comptable (Cyan/Teal pendant la création) -->
               <td class="py-2 px-3 whitespace-nowrap align-middle">
-                <span class="text-[#00a09d] dark:text-[#2dd4bf] font-medium text-xs">
+                <span class="text-[#0b5ed7] dark:text-[#8cc2ff] font-medium text-xs">
                   {{ transactionForm.get('libelle')?.value ? nextPieceComptable() : '' }}
                 </span>
               </td>
@@ -330,7 +330,7 @@
 
                   <!-- Pièce comptable (Cyan/Teal pendant l'édition active) -->
                   <td class="py-2 px-3 whitespace-nowrap align-middle">
-                    <span class="text-[#00a09d] dark:text-[#2dd4bf] font-medium text-xs">
+                    <span class="text-[#0b5ed7] dark:text-[#8cc2ff] font-medium text-xs">
                       {{ getOdooSequence(tx) }}
                     </span>
                   </td>

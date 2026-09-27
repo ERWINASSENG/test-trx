@@ -9,7 +9,7 @@
 
         <!-- GAUCHE : Bouton Nouveau violet Odoo + Titre "Journaux ⚙" -->
         <div class="cp-left flex items-center gap-3 shrink-0" id="journal-cp-actions-left">
-          <!-- Bouton Nouveau Odoo officiel violet (#714B67) -->
+          <!-- Action principale -->
           <button
             type="button"
             (click)="openCreateModal()"
@@ -37,12 +37,12 @@
             <!-- BARRE DE SÉLECTION ODOO STYLE (Badge sélection + Bouton Actions) -->
             <div class="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150" id="journal-cp-selection-bar">
               <!-- Badge [ N sélectionné(s) ✕ ] -->
-              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#00A09D]/15 text-[#00A09D] border border-[#00A09D] shadow-2xs select-none" id="journal-cp-selection-badge">
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-[#0b5ed7]/10 text-[#0b5ed7] dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff] border border-[#0b5ed7]/30 dark:border-[#7cb3ff]/40 shadow-2xs select-none" id="journal-cp-selection-badge">
                 <span>{{ selectedJournalsCount() }} sélectionné(s)</span>
                 <button
                   type="button"
                   (click)="clearSelection()"
-                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#00A09D]/30 text-[#00A09D] transition-colors cursor-pointer flex items-center justify-center font-bold"
+                  class="ml-0.5 p-0.5 rounded-full hover:bg-[#0b5ed7]/15 dark:hover:bg-[#7cb3ff]/20 text-[#0b5ed7] dark:text-[#a6ccff] transition-colors cursor-pointer flex items-center justify-center font-bold"
                   title="Annuler la sélection"
                   aria-label="Annuler la sélection">
                   <mat-icon class="!text-[13px] !w-3.5 !h-3.5 leading-none">close</mat-icon>
@@ -56,9 +56,9 @@
                   (click)="toggleActionsMenu($event)"
                   class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95 bg-white dark:bg-[#252830] text-slate-800 dark:text-white border border-slate-300 dark:border-[#3e4354] hover:bg-slate-50 dark:hover:bg-[#2c303c]"
                   [class.ring-2]="isActionsMenuOpen()"
-                  [class.ring-[#00A09D]/40]="isActionsMenuOpen()"
+                  [class.ring-[#0b5ed7]/40]="isActionsMenuOpen()"
                   id="journal-cp-btn-odoo-actions">
-                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#00A09D]">settings</mat-icon>
+                  <mat-icon class="!text-[15px] !w-4 !h-4 text-[#0b5ed7] dark:text-[#8cc2ff]">settings</mat-icon>
                   <span>Actions</span>
                 </button>
 
@@ -156,7 +156,7 @@
             </button>
           </div>
 
-          <!-- Sélecteurs de Vue Odoo : Bouton Liste vert sarcelle/cyan Odoo (#008784) + Bouton Kanban -->
+          <!-- Sélecteurs de vue -->
           <div class="flex items-center gap-1.5" id="journal-cp-view-switchers">
             <!-- Bouton Liste ACTIF -->
             <button
@@ -257,7 +257,7 @@
                   class="cursor-pointer inline-flex items-center justify-center p-0.5 rounded transition-transform active:scale-90"
                   [title]="journal.is_active ? 'Désactiver' : 'Activer'">
                   @if (journal.is_active) {
-                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#00A09D]">check_box</mat-icon>
+                    <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-[#0b5ed7] dark:text-[#8cc2ff]">check_box</mat-icon>
                   } @else {
                     <mat-icon class="!text-[18px] !w-4.5 !h-4.5 text-slate-400 dark:text-slate-600">check_box_outline_blank</mat-icon>
                   }
@@ -280,10 +280,10 @@
   <!-- MODAL DE CRÉATION DE JOURNAL ODOO -->
   @if (isCreateModalOpen()) {
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div class="w-full max-w-lg bg-white dark:bg-[#252830] border border-slate-200 dark:border-[#383d4c] rounded-lg shadow-2xl overflow-hidden flex flex-col text-slate-800 dark:text-[#e6e8eb]">
+      <div class="w-full max-w-lg bg-white dark:bg-[#0d1f3a] border border-slate-200 dark:border-white/10 rounded-lg shadow-2xl overflow-hidden flex flex-col text-slate-800 dark:text-[#e6e8eb]">
         
         <!-- En-tête Modal Odoo -->
-        <div class="flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-[#20232b] border-b border-slate-200 dark:border-[#343846]">
+        <div class="flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-[#0a2342] border-b border-slate-200 dark:border-white/10">
           <h2 class="text-sm font-semibold text-slate-900 dark:text-white tracking-wide">Créer un Journal Comptable</h2>
           <button
             type="button"
@@ -306,7 +306,7 @@
               type="text"
               formControlName="name"
               placeholder="Ex: Ventes, Achats, Banque Afriland"
-              class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#191b22] border border-slate-300 dark:border-[#3e4354] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#00A09D] text-xs" />
+              class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#102542] border border-slate-300 dark:border-[#365477] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#0b5ed7] dark:focus:border-[#7cb3ff] text-xs" />
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -316,7 +316,7 @@
               <select
                 id="jnl_modal_type"
                 formControlName="type"
-                class="w-full px-2.5 py-2 rounded bg-slate-50 dark:bg-[#191b22] border border-slate-300 dark:border-[#3e4354] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#00A09D] text-xs">
+                class="w-full px-2.5 py-2 rounded bg-slate-50 dark:bg-[#102542] border border-slate-300 dark:border-[#365477] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#0b5ed7] dark:focus:border-[#7cb3ff] text-xs">
                 <option value="sale">Ventes</option>
                 <option value="purchase">Achats</option>
                 <option value="bank">Banque</option>
@@ -335,7 +335,7 @@
                 type="text"
                 formControlName="sequence_prefix"
                 placeholder="Ex: INV, BILL, BNK1, MISC, CSH1"
-                class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#191b22] border border-slate-300 dark:border-[#3e4354] text-slate-900 dark:text-white uppercase font-mono focus:outline-hidden focus:border-[#00A09D] text-xs" />
+                class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#102542] border border-slate-300 dark:border-[#365477] text-slate-900 dark:text-white uppercase font-mono focus:outline-hidden focus:border-[#0b5ed7] dark:focus:border-[#7cb3ff] text-xs" />
             </div>
           </div>
 
@@ -349,7 +349,7 @@
               type="text"
               formControlName="default_account"
               placeholder="Ex: 701100 Vente de marchandises dans la région"
-              class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#191b22] border border-slate-300 dark:border-[#3e4354] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#00A09D] text-xs" />
+              class="w-full px-3 py-2 rounded bg-slate-50 dark:bg-[#102542] border border-slate-300 dark:border-[#365477] text-slate-900 dark:text-white focus:outline-hidden focus:border-[#0b5ed7] dark:focus:border-[#7cb3ff] text-xs" />
           </div>
 
           <!-- Pied de modal : Actions -->
@@ -357,7 +357,7 @@
             <button
               type="button"
               (click)="closeCreateModal()"
-              class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#2c303c] dark:hover:bg-[#383d4c] text-slate-700 dark:text-[#c2c7d2] rounded font-medium cursor-pointer transition-colors">
+              class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#173458] dark:hover:bg-[#20466f] text-slate-700 dark:text-[#cfe3ff] rounded font-medium cursor-pointer transition-colors">
               Annuler
             </button>
             <button

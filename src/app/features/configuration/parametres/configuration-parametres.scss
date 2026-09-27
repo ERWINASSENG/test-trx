@@ -1,3 +1,18 @@
 :host {
   display: block;
+  width: 100%;
+  min-height: calc(100vh - 50px);
+  background:
+    radial-gradient(circle at top right, rgba(11, 94, 215, 0.09), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.06), transparent 28%),
+    #edf5ff;
+  transition: background-color 0.2s ease;
+}
+
+:host-context(html.dark),
+:host-context([data-theme="dark"]) {
+  background:
+    radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
+    #0a2342;
 }
