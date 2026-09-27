@@ -95,6 +95,69 @@ export class JournalService {
     this._journals().filter((j) => j.is_active)
   );
 
+  // Permissions d'accès aux journaux
+  // Seuls admin, tresorier et manager peuvent consulter les journaux
+  public readonly canViewJournals = computed(() => {
+    const role = this.authService.currentRole();
+    return role === 'admin' || role === 'tresorier' || role === 'manager';
+  });
+
+  // Seul le trésorier et l'administrateur sont autorisés à créer ou supprimer des journaux
+  public readonly canCreateJournal = computed(() => {
+    const role = this.authService.currentRole();
+    return role === 'admin' || role === 'tresorier';
+  });
+
+  public readonly canManageJournals = computed(() => {
+    const role = this.authService.currentRole();
+    return role === 'admin' || role === 'tresorier';
+  });
+
+  // Indique si l'utilisateur consulte en lecture seule (les managers)
+  public readonly isManagerReadOnly = computed(() => {
+    return this.authService.currentRole() === 'manager';
+  });
+
+  public getJournalById(id: string): Journal | undefined {
+    return this._journals().find((j) => j.id === id);
+  }
+
+  public getJournalBalance(journalId: string): number {
+    const transactions = this.cashierService.allTransactions();
+    if (journalId === this.defaultNativeCashJournal.id || journalId === 'native-caisse-principal' || journalId === 'CSH1') {
+      return transactions
+        .filter(
+          (t) =>
+            (!t.journalId && !t.journal_id) ||
+            t.journalId === 'native-caisse-principal' ||
+            t.journal_id === 'native-caisse-principal' ||
+            t.journalId === 'CSH1' ||
+            t.journal_id === 'CSH1' ||
+            t.pieceComptable?.startsWith('CSH1')
+        )
+        .reduce((sum, t) => sum + (Number(t.montant) || 0), 0);
+    }
+    return transactions
+      .filter((t) => t.journalId === journalId || t.journal_id === journalId)
+      .reduce((sum, t) => sum + (Number(t.montant) || 0), 0);
+  }
+
+  public getJournalTransactionCount(journalId: string): number {
+    const transactions = this.cashierService.allTransactions();
+    if (journalId === this.defaultNativeCashJournal.id || journalId === 'native-caisse-principal' || journalId === 'CSH1') {
+      return transactions.filter(
+        (t) =>
+          (!t.journalId && !t.journal_id) ||
+          t.journalId === 'native-caisse-principal' ||
+          t.journal_id === 'native-caisse-principal' ||
+          t.journalId === 'CSH1' ||
+          t.journal_id === 'CSH1' ||
+          t.pieceComptable?.startsWith('CSH1')
+      ).length;
+    }
+    return transactions.filter((t) => t.journalId === journalId || t.journal_id === journalId).length;
+  }
+
   constructor() {
     // Initialise avec le journal natif de caisse pour garantir qu'aucune rupture n'arrive
     this._journals.set([this.defaultNativeCashJournal]);
@@ -144,46 +207,111 @@ export class JournalService {
   }
 
   /**
-   * Charge les journaux depuis Supabase (table `journals`).
+   * Charge les journaux depuis l'API backend sécurisée /api/journals
+   * Seuls admin, tresorier et manager y ont accès.
    */
   public async loadJournals(): Promise<void> {
-    const client = this.supabaseService.supabase;
-    if (!client) return;
+    // Si l'utilisateur n'est pas autorisé à voir les journaux, restreindre au journal de caisse natif
+    if (!this.canViewJournals()) {
+      this._journals.set([this.defaultNativeCashJournal]);
+      return;
+    }
 
     try {
       this._isLoading.set(true);
-      const { data, error } = await client
-        .from('journals')
-        .select('*')
-        .order('created_at', { ascending: true });
 
-      if (error) {
-        if (this._journals().length === 0) {
-          this._journals.set([this.defaultNativeCashJournal]);
+      // Récupération du jeton d'authentification
+      let token = this.authService.token();
+      if (!token && this.supabaseService.supabase) {
+        try {
+          const { data } = await this.supabaseService.supabase.auth.getSession();
+          if (data.session?.access_token) {
+            token = data.session.access_token;
+          }
+        } catch {
+          // Ignorer
         }
-        return;
       }
 
-      if (data && data.length > 0) {
-        const mapped: Journal[] = data.map((row: Record<string, unknown>) => ({
-          id: String(row['id'] ?? ''),
-          name: String(row['name'] ?? ''),
-          type: (row['type'] as JournalType) || 'cash',
-          type_label: this.getTypeLabel(String(row['type'] ?? '')),
-          ledger_type: String(row['ledger_type'] ?? ''),
-          sequence_prefix: String(row['sequence_prefix'] ?? ''),
-          default_account: String(row['default_account'] ?? ''),
-          currency: String(row['currency'] ?? 'XAF'),
-          is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
-          selected: false,
-          created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
-          updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
-        }));
+      // Canal 1 : API Express Serveur-Relais (droits élevés service_role)
+      if (token) {
+        try {
+          const res = await fetch('/api/journals', {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-        const hasNative = mapped.some((j) => j.sequence_prefix === 'CSH1' || j.id === this.defaultNativeCashJournal.id);
-        this._journals.set(hasNative ? mapped : [this.defaultNativeCashJournal, ...mapped]);
-      } else {
-        this._journals.set([this.defaultNativeCashJournal]);
+          if (res.ok) {
+            const resJson = await res.json();
+            const serverList = resJson.journals;
+            if (Array.isArray(serverList) && serverList.length > 0) {
+              const mapped: Journal[] = serverList.map((row: Record<string, unknown>) => ({
+                id: String(row['id'] ?? ''),
+                name: String(row['name'] ?? ''),
+                type: (row['type'] as JournalType) || 'cash',
+                type_label: this.getTypeLabel(String(row['type'] ?? '')),
+                ledger_type: String(row['ledger_type'] ?? ''),
+                sequence_prefix: String(row['sequence_prefix'] ?? ''),
+                default_account: String(row['default_account'] ?? ''),
+                currency: String(row['currency'] ?? 'XAF'),
+                is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
+                selected: false,
+                created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
+                updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
+              }));
+
+              const hasNative = mapped.some((j) => j.sequence_prefix === 'CSH1' || j.id === this.defaultNativeCashJournal.id);
+              this._journals.set(hasNative ? mapped : [this.defaultNativeCashJournal, ...mapped]);
+              return;
+            } else if (Array.isArray(serverList) && serverList.length === 0) {
+              this._journals.set([this.defaultNativeCashJournal]);
+              return;
+            }
+          }
+        } catch (apiErr) {
+          console.warn('[JOURNAL] API Express /api/journals indisponible:', apiErr);
+        }
+      }
+
+      // Canal 2 : Repli Supabase direct si disponible
+      const client = this.supabaseService.supabase;
+      if (client) {
+        const { data, error } = await client
+          .from('journals')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          if (this._journals().length === 0) {
+            this._journals.set([this.defaultNativeCashJournal]);
+          }
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const mapped: Journal[] = data.map((row: Record<string, unknown>) => ({
+            id: String(row['id'] ?? ''),
+            name: String(row['name'] ?? ''),
+            type: (row['type'] as JournalType) || 'cash',
+            type_label: this.getTypeLabel(String(row['type'] ?? '')),
+            ledger_type: String(row['ledger_type'] ?? ''),
+            sequence_prefix: String(row['sequence_prefix'] ?? ''),
+            default_account: String(row['default_account'] ?? ''),
+            currency: String(row['currency'] ?? 'XAF'),
+            is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
+            selected: false,
+            created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
+            updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
+          }));
+
+          const hasNative = mapped.some((j) => j.sequence_prefix === 'CSH1' || j.id === this.defaultNativeCashJournal.id);
+          this._journals.set(hasNative ? mapped : [this.defaultNativeCashJournal, ...mapped]);
+        } else {
+          this._journals.set([this.defaultNativeCashJournal]);
+        }
       }
     } catch (err) {
       console.warn('Fallback local pour les journaux comptables:', err);
@@ -196,58 +324,102 @@ export class JournalService {
   }
 
   /**
-   * Enregistre un nouveau journal comptable
+   * Enregistre un nouveau journal comptable via l'API sécurisée /api/journals
+   * Strictement réservé à l'administrateur et au trésorier.
    */
-  public async createJournal(dto: CreateJournalDto): Promise<boolean> {
-    const client = this.supabaseService.supabase;
+  public async createJournal(dto: CreateJournalDto): Promise<Journal | null> {
+    if (!this.canCreateJournal()) {
+      this.notificationService.error(
+        'Seul le trésorier et l’administrateur sont autorisés à créer de nouveaux journaux.',
+        'Action non autorisée'
+      );
+      return null;
+    }
 
-    const newJournal: Journal = {
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `jnl-${Date.now()}`,
+    const payload = {
       name: dto.name.trim(),
       type: dto.type,
-      type_label: this.getTypeLabel(dto.type),
       ledger_type: dto.ledger_type || '',
       sequence_prefix: dto.sequence_prefix.trim().toUpperCase(),
       default_account: dto.default_account.trim(),
       currency: dto.currency || 'XAF',
       is_active: dto.is_active ?? true,
-      selected: false,
-      created_at: new Date().toISOString(),
     };
 
-    this._journals.update((list) => [...list, newJournal]);
-
-    if (client) {
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
       try {
-        const { error } = await client.from('journals').insert([
-          {
-            id: newJournal.id,
-            name: newJournal.name,
-            type: newJournal.type,
-            ledger_type: newJournal.ledger_type,
-            sequence_prefix: newJournal.sequence_prefix,
-            default_account: newJournal.default_account,
-            currency: newJournal.currency,
-            is_active: newJournal.is_active,
-          },
-        ]);
-
-        if (error) {
-          console.warn('Sauvegarde distante du journal indisponible:', error.message);
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
         }
-      } catch (err) {
-        console.warn('Erreur réseau lors de la persistance du journal:', err);
+      } catch {
+        // Ignorer
       }
     }
 
-    this.notificationService.success(`Le journal « ${newJournal.name} » a été créé avec succès.`, 'Journal créé');
-    return true;
+    // Sauvegarde via API Express
+    if (token) {
+      try {
+        const res = await fetch('/api/journals', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const resData = await res.json();
+        if (res.ok && resData.journal) {
+          const row = resData.journal;
+          const inserted: Journal = {
+            id: String(row.id),
+            name: String(row.name),
+            type: (row.type as JournalType) || payload.type,
+            type_label: this.getTypeLabel(String(row.type || payload.type)),
+            ledger_type: String(row.ledger_type || ''),
+            sequence_prefix: String(row.sequence_prefix),
+            default_account: String(row.default_account),
+            currency: String(row.currency || 'XAF'),
+            is_active: typeof row.is_active === 'boolean' ? row.is_active : true,
+            selected: false,
+            created_at: String(row.created_at || new Date().toISOString()),
+          };
+
+          this._journals.update((list) => [...list, inserted]);
+          this.notificationService.success(`Le journal « ${inserted.name} » a été créé avec succès.`, 'Journal créé');
+          return inserted;
+        } else {
+          const errMsg = resData.error || 'Impossible de créer le journal.';
+          this.notificationService.error(errMsg, 'Échec de création');
+          return null;
+        }
+      } catch (err: unknown) {
+        console.error('Erreur API création journal:', err);
+        this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+        return null;
+      }
+    }
+
+    this.notificationService.error('Session expirée ou non autorisée.', 'Authentification requise');
+    return null;
   }
 
   /**
    * Supprime les journaux sélectionnés (protège le journal natif de caisse)
+   * Strictement réservé à l'administrateur et au trésorier.
    */
   public async deleteSelectedJournals(): Promise<boolean> {
+    if (!this.canManageJournals()) {
+      this.notificationService.error(
+        'Seul le trésorier et l’administrateur sont autorisés à supprimer des journaux.',
+        'Action non autorisée'
+      );
+      return false;
+    }
+
     const selected = this._journals().filter((j) => j.selected);
     if (selected.length === 0) return false;
 
@@ -262,22 +434,51 @@ export class JournalService {
       return false;
     }
 
-    const deleteIds = toDelete.map((j) => j.id);
-
-    // Mise à jour locale
-    this._journals.update((list) => list.filter((j) => !deleteIds.includes(j.id)));
-
-    const client = this.supabaseService.supabase;
-    if (client) {
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
       try {
-        await client.from('journals').delete().in('id', deleteIds);
-      } catch (e) {
-        console.warn('Erreur suppression distante journaux:', e);
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
+        }
+      } catch {
+        // Ignorer
       }
     }
 
-    this.notificationService.success(`${toDelete.length} journal(s) supprimé(s) avec succès.`, 'Suppression terminée');
-    return true;
+    let deletedCount = 0;
+    const deleteIds: string[] = [];
+
+    for (const journal of toDelete) {
+      if (token) {
+        try {
+          const res = await fetch(`/api/journals/${journal.id}`, {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (res.ok) {
+            deletedCount++;
+            deleteIds.push(journal.id);
+          } else {
+            const json = await res.json();
+            this.notificationService.error(json.error || `Impossible de supprimer ${journal.name}`, 'Erreur suppression');
+          }
+        } catch {
+          // Ignorer erreur unitaire
+        }
+      }
+    }
+
+    if (deleteIds.length > 0) {
+      this._journals.update((list) => list.filter((j) => !deleteIds.includes(j.id)));
+      this.notificationService.success(`${deletedCount} journal(s) supprimé(s) avec succès.`, 'Suppression terminée');
+      return true;
+    }
+
+    return false;
   }
 
   /**

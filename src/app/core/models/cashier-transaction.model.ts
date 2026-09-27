@@ -12,7 +12,6 @@ export type CashierOperationType = Service; // Rétrocompatibilité
 
 export interface CashierTransaction {
   id: string;
-  journalId?: string | null;
   pieceComptable?: string; // Référence séquentielle Odoo (ex: CSH1/2026/00001)
   date: string; // Format DD/MM/YYYY
   libelle: string; // Ex: "Carburant", "Frais généraux"
@@ -34,6 +33,8 @@ export interface CashierTransaction {
   selected?: boolean; // Case à cocher de sélection
   createdBy?: string; // UUID du créateur (auth.uid() / profiles.id)
   employeeId?: string; // Référence forte vers profiles.id
+  journalId?: string | null; // Identifiant du journal comptable de rattachement
+  journal_id?: string | null; // Alias direct vers la colonne Supabase
   createdAt?: string; // Date de création ISO
   updatedAt?: string; // Date de modification ISO
 }

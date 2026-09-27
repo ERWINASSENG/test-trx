@@ -1,24 +1,30 @@
 <div class="space-y-6" id="dashboard-manager-view">
   <!-- Grille des cartes du tableau de bord (2 cartes par ligne sur desktop) -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="dashboard-manager-grid">
-    <!-- Carte Caisse -->
-    <div class="bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
+    <!-- Carte Caisse Principale -->
+    <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
       
       <!-- En-tête de la carte Caisse -->
       <div>
-        <!-- Ligne 1 : Caisse -->
-        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50" id="caisse-title">
-          Caisse
-        </h2>
+        <!-- Ligne 1 : Titre Caisse -->
+        <div class="flex items-center justify-between">
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50" id="caisse-title">
+            Caisse Principale
+          </h2>
+          <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-[#0b5ed7] dark:text-[#8cc2ff] border border-blue-200/50 dark:border-blue-800/50">
+            CSH1 • Espèces
+          </span>
+        </div>
 
         <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
         <div class="flex items-center justify-between gap-3 mt-1.5 pb-2.5 border-b border-slate-100 dark:border-white/10" id="caisse-subline">
           <!-- Transactions à gauche -->
           <a
-            routerLink="/caisse"
-            class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00a09d] dark:hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1"
+            [routerLink]="['/caisse']"
+            [queryParams]="{ journalId: 'native-caisse-principal' }"
+            class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
             id="caisse-transactions-link"
-            title="Consulter les transactions">
+            title="Consulter les transactions de caisse">
             <span>Transactions</span>
             <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
           </a>
@@ -26,7 +32,7 @@
           <!-- Solde à droite -->
           <div class="flex items-baseline gap-1.5" id="caisse-balance-container">
             <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
-            <span class="text-sm sm:text-base font-bold tracking-tight" [class]="currentBalance() >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'" id="caisse-balance-value">
+            <span class="text-sm sm:text-base font-bold tracking-tight" [class]="currentBalance() >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'" id="caisse-balance-value">
               {{ formatCurrency(currentBalance()) }}
             </span>
           </div>
@@ -45,9 +51,9 @@
       </div>
     </div>
 
-    <!-- Journaux additionnels créés dans Configuration > Journaux avec caractéristiques identiques -->
+    <!-- Cartes des Journaux Additionnels (Banques, etc.) avec isolation stricte et propre courbe Chart.js -->
     @for (journal of additionalJournals(); track journal.id) {
-      <div class="bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+      <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" [id]="'journal-card-' + journal.id">
         <!-- En-tête de la carte Journal -->
         <div>
           <!-- Ligne 1 : Nom du journal & badge de type -->
@@ -55,7 +61,7 @@
             <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50">
               {{ journal.name }}
             </h2>
-            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50">
+            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-[#0b5ed7] dark:text-[#8cc2ff] border border-blue-200/50 dark:border-blue-800/50">
               {{ journal.sequence_prefix }} • {{ journal.type_label || journal.type }}
             </span>
           </div>
@@ -64,9 +70,10 @@
           <div class="flex items-center justify-between gap-3 mt-1.5 pb-2.5 border-b border-slate-100 dark:border-white/10">
             <!-- Transactions à gauche -->
             <a
-              routerLink="/caisse"
-              class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00a09d] dark:hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1"
-              title="Consulter les écritures">
+              [routerLink]="['/caisse']"
+              [queryParams]="{ journalId: journal.id }"
+              class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
+              title="Consulter les écritures de ce journal">
               <span>Transactions</span>
               <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
             </a>
@@ -74,24 +81,25 @@
             <!-- Solde à droite -->
             <div class="flex items-baseline gap-1.5">
               <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
-              <span class="text-sm sm:text-base font-bold tracking-tight text-blue-700 dark:text-blue-400">
-                0 FCFA
+              <span
+                class="text-sm sm:text-base font-bold tracking-tight"
+                [class]="getJournalBalance(journal.id) >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'">
+                {{ formatCurrency(getJournalBalance(journal.id)) }}
               </span>
             </div>
           </div>
         </div>
 
-        <!-- Ligne 3 : Espace graphique identique -->
-        <div class="relative w-full h-48 sm:h-52 mt-2 flex flex-col items-center justify-center rounded-xl bg-slate-50/50 dark:bg-black/15 border border-dashed border-slate-200 dark:border-white/5">
-          <div class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 text-center px-4">
-            <mat-icon class="!w-6 !h-6 !text-[24px]">insights</mat-icon>
-            <span class="text-xs font-medium text-slate-600 dark:text-slate-300">{{ journal.default_account }}</span>
-            <span class="text-[11px]">Journal actif • En attente d'écritures</span>
-          </div>
+        <!-- Ligne 3 : Courbe Chart.js native du journal -->
+        <div class="relative w-full h-48 sm:h-52 mt-2" [id]="'journal-chart-wrapper-' + journal.id">
+          <canvas
+            [id]="'chart-canvas-' + journal.id"
+            class="w-full h-full block"
+            [attr.aria-label]="'Courbe d\'évolution du solde pour le journal ' + journal.name"
+            role="img">
+          </canvas>
         </div>
       </div>
     }
   </div>
 </div>
-
-

@@ -19,6 +19,14 @@ import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
 import { getOperationsHandler } from './server/cashier.read';
+import { createJournalHandler, deleteJournalHandler, getJournalsHandler } from './server/journals';
+import {
+  createJournalEntryHandler,
+  deleteJournalEntryHandler,
+  getJournalChartDataHandler,
+  getJournalEntriesHandler,
+  updateJournalEntryHandler,
+} from './server/journal-entries';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -409,6 +417,7 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       quantity,
       montant,
       date: dateToStore,
+      journal_id: payload.journal_id || payload.journalId || null,
     };
 
     console.log(`[AUDIT CASHIER] Création opération par [${authenticatedUser?.email || callerId || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) : Montant=${montant}, Libellé="${libelle}", Pièce="${candidatePiece || 'auto'}"`);
@@ -961,8 +970,8 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
 
 // Déclaration des routes de caisse sécurisées par RBAC strict (lecture réservée aux rôles financiers et encadrement)
 const cashierReadRoles: UserRole[] = ['admin', 'manager', 'caissiere', 'comptable', 'tresorier'];
-const cashierWriteRoles: UserRole[] = ['admin', 'caissiere', 'manager', 'comptable'];
-const cashierDeleteRoles: UserRole[] = ['admin', 'caissiere'];
+const cashierWriteRoles: UserRole[] = ['admin', 'caissiere', 'tresorier', 'manager', 'comptable'];
+const cashierDeleteRoles: UserRole[] = ['admin', 'caissiere', 'tresorier'];
 const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transactions'];
 
 cashierOperationAliases.forEach((path) => {
@@ -990,6 +999,38 @@ cashierOperationAliases.forEach((path) => {
   app.delete(`${path}/:id`, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);
   app.delete(path, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);
 });
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ENDPOINTS API JOURNAUX COMPTABLES
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Consultation : admin, tresorier, manager (lecture seule pour manager)
+ * Création et suppression : strictement réservées à admin et tresorier
+ */
+const journalViewRoles: UserRole[] = ['admin', 'tresorier', 'manager'];
+const journalManageRoles: UserRole[] = ['admin', 'tresorier'];
+
+app.get('/api/journals', requireAuth, requireRole(journalViewRoles), getJournalsHandler);
+app.post('/api/journals', requireAuth, requireRole(journalManageRoles), createJournalHandler);
+app.delete('/api/journals/:id', requireAuth, requireRole(journalManageRoles), deleteJournalHandler);
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ENDPOINTS API ÉCRITURES DE JOURNAUX (BANQUES, ETC.) — HERMÉTIQUES & DÉDIÉES
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Isolation stricte : ne modifie ni n'impacte la table cashier_transactions.
+ * Consultation : admin, tresorier, manager, comptable (manager = lecture seule)
+ * Saisie et suppression : strictement réservées à admin et tresorier
+ */
+const journalEntriesViewRoles: UserRole[] = ['admin', 'tresorier', 'manager', 'comptable'];
+const journalEntriesWriteRoles: UserRole[] = ['admin', 'tresorier'];
+
+app.get('/api/journals/:journalId/entries', requireAuth, requireRole(journalEntriesViewRoles), getJournalEntriesHandler);
+app.get('/api/journals/:journalId/chart-data', requireAuth, requireRole(journalEntriesViewRoles), getJournalChartDataHandler);
+app.post('/api/journals/:journalId/entries', requireAuth, requireRole(journalEntriesWriteRoles), createJournalEntryHandler);
+app.put('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), updateJournalEntryHandler);
+app.patch('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), updateJournalEntryHandler);
+app.delete('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), deleteJournalEntryHandler);
 
 /**
  * Example Express Rest API endpoints can be defined here.

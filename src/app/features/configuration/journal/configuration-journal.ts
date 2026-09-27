@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { JournalService } from '../../../core/services/journal.service';
 import { Journal, JournalType } from '../../../core/models/journal.model';
@@ -25,6 +26,7 @@ import { Journal, JournalType } from '../../../core/models/journal.model';
 })
 export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   public readonly journalService = inject(JournalService);
+  private readonly router = inject(Router);
   private readonly elementRef = inject(ElementRef);
 
   // Signaux réactifs pour la synchronisation des données et du layout Odoo
@@ -36,6 +38,9 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   public readonly hasPrevPage = this.journalService.hasPrevPage;
   public readonly hasNextPage = this.journalService.hasNextPage;
   public readonly totalJournalsCount = computed(() => this.journalService.journals().length);
+  public readonly canCreateJournal = this.journalService.canCreateJournal;
+  public readonly canManageJournals = this.journalService.canManageJournals;
+  public readonly isManagerReadOnly = this.journalService.isManagerReadOnly;
 
   // États locaux de l'interface
   public readonly isActionsMenuOpen = signal<boolean>(false);
@@ -161,19 +166,25 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
     this.isSubmitting.set(true);
     try {
       const val = this.journalForm.getRawValue();
-      const success = await this.journalService.createJournal({
+      const created = await this.journalService.createJournal({
         name: val.name,
         type: val.type,
         sequence_prefix: val.sequence_prefix,
         default_account: val.default_account,
       });
 
-      if (success) {
+      if (created) {
         this.closeCreateModal();
+        // Bascule directe dans l'écran de caisse / saisie d'opérations configuré sur ce nouveau journal
+        this.router.navigate(['/caisse'], { queryParams: { journalId: created.id } });
       }
     } finally {
       this.isSubmitting.set(false);
     }
+  }
+
+  public openJournalTransactions(journal: Journal): void {
+    this.router.navigate(['/caisse'], { queryParams: { journalId: journal.id } });
   }
 
   public toggleActive(id: string): void {
