@@ -6,15 +6,21 @@
 .app-launcher {
   min-height: calc(100vh - 50px);
   padding: 24px 16px 36px;
-  background-color: var(--app-bg, #eef1f5);
-  color: var(--app-text, #1e293b);
+  background:
+    radial-gradient(circle at top right, rgba(13, 110, 253, 0.12), transparent 25%),
+    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
+    #edf5ff;
+  color: #123c6d;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 :host-context(html.dark) .app-launcher,
 :host-context([data-theme="dark"]) .app-launcher {
-  background-color: #1e2227;
-  color: #ebebeb;
+  background:
+    radial-gradient(circle at top right, rgba(13, 110, 253, 0.16), transparent 25%),
+    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.12), transparent 28%),
+    #0a2342;
+  color: #f3f8ff;
 }
 
 .launcher-search-accessible {
@@ -90,7 +96,7 @@
   padding: 6px 4px;
   border-radius: 12px;
   background: transparent;
-  color: #0f172a;
+  color: #123c6d;
   text-align: center;
   text-decoration: none;
   transition: transform 150ms ease;
@@ -115,8 +121,13 @@
 }
 
 .launcher-tile:focus-visible {
-  outline: 2px solid #00A09D;
+  outline: 2px solid #0b5ed7;
   outline-offset: 2px;
+}
+
+:host-context(html.dark) .launcher-tile:focus-visible,
+:host-context([data-theme="dark"]) .launcher-tile:focus-visible {
+  outline-color: #7cb3ff;
 }
 
 .launcher-tile-icon {
@@ -126,15 +137,23 @@
   flex: 0 0 70px;
   place-items: center;
   border-radius: 12px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(11, 94, 215, 0.14);
   color: #fff;
-  box-shadow: none;
+  box-shadow: 0 10px 18px -12px rgba(9, 35, 74, 0.25);
   transition: transform 150ms ease;
+}
+
+:host-context(html.dark) .launcher-tile-icon,
+:host-context([data-theme="dark"]) .launcher-tile-icon {
+  background: rgba(7, 20, 36, 0.48);
+  border-color: rgba(124, 179, 255, 0.25);
+  box-shadow: 0 10px 18px -12px rgba(0, 0, 0, 0.5);
 }
 
 .launcher-tile:hover .launcher-tile-icon {
   transform: translateY(-2px);
-  box-shadow: none;
+  box-shadow: 0 14px 22px -12px rgba(11, 94, 215, 0.4);
 }
 
 .launcher-tile-icon img {
@@ -148,7 +167,7 @@
   overflow: hidden;
   max-width: 100%;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 20px;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
@@ -158,14 +177,14 @@
   width: min(100%, 540px);
   margin: 0 auto;
   padding: 24px 8px;
-  color: #64748b;
+  color: #35517a;
   font-size: 14px;
   text-align: center;
 }
 
 :host-context(html.dark) .launcher-empty,
 :host-context([data-theme="dark"]) .launcher-empty {
-  color: #94a3b8;
+  color: #cfe3ff;
 }
 
 @media (min-width: 768px) {
