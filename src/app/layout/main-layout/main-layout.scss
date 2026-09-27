@@ -6,11 +6,24 @@
 }
 
 .layout-container {
+  --app-bg: #edf5ff;
+  --app-surface: #ffffff;
+  --app-surface-muted: #e4efff;
+  --app-surface-hover: #e7f0ff;
+  --app-border: #bfd3ee;
+  --app-text: #123c6d;
+  --app-text-muted: #35517a;
+  --app-text-subtle: #617d9e;
+  --odoo-text-teal: #0b5ed7;
+  --odoo-primary-purple: #0b5ed7;
+  --odoo-primary-purple-hover: #084db1;
+  --odoo-bg-search: #f7faff;
   --brand-accent: #0b5ed7;
   --brand-accent-hover: #084db1;
   --brand-focus: #0b5ed7;
   --brand-action: #0b5ed7;
   --brand-action-hover: #084db1;
+  --brand-red: #d52b1e;
   display: flex;
   flex-direction: column;
   background-color: var(--app-bg, #f8fafc);
@@ -21,11 +34,24 @@
 
 :host-context(html.dark) .layout-container,
 :host-context([data-theme="dark"]) .layout-container {
+  --app-bg: #0a2342;
+  --app-surface: #0d1f3a;
+  --app-surface-muted: #123c6d;
+  --app-surface-hover: rgba(124, 179, 255, 0.12);
+  --app-border: rgba(207, 227, 255, 0.16);
+  --app-text: #f3f8ff;
+  --app-text-muted: #d6e8ff;
+  --app-text-subtle: #a9c4e5;
+  --odoo-text-teal: #8cc2ff;
+  --odoo-primary-purple: #1d4ed8;
+  --odoo-primary-purple-hover: #2563eb;
+  --odoo-bg-search: #102542;
   --brand-accent: #8cc2ff;
   --brand-accent-hover: #a6ccff;
   --brand-focus: #8cc2ff;
   --brand-action: #1d4ed8;
   --brand-action-hover: #2563eb;
+  --brand-red: #ed5143;
 }
 
 /* ========================================================================= */
@@ -35,7 +61,7 @@
   display: flex;
   flex-direction: column;
   background-color: var(--app-surface, #ffffff);
-  border-bottom: 1px solid var(--app-border, #e2e8f0);
+  border-bottom: 2px solid var(--brand-red);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   color: var(--app-text, #0f172a);
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -146,6 +172,10 @@
   }
 }
 
+#app-topbar {
+  border-bottom: 2px solid var(--brand-red) !important;
+}
+
 @keyframes dropdownFadeIn {
   from {
     opacity: 0;
@@ -163,7 +193,7 @@
 .control-panel {
   display: flex;
   flex-direction: column;
-  background-color: var(--app-surface, #ffffff);
+  background-color: var(--app-surface-muted, #e4efff);
   border-bottom: 1px solid var(--app-border, #e2e8f0);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   color: var(--app-text, #0f172a);
@@ -287,6 +317,11 @@
       outline-offset: 1px;
     }
   }
+}
+
+#app-control-panel {
+  background-color: var(--app-surface-muted) !important;
+  border-color: var(--app-border) !important;
 }
 
 .layout-container.apps-home {
