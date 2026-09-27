@@ -2,7 +2,7 @@
   <!-- Grille des cartes du tableau de bord (2 cartes par ligne sur desktop) -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="dashboard-manager-grid">
     <!-- Carte Caisse -->
-    <div class="bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
+    <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
       
       <!-- En-tête de la carte Caisse -->
       <div>
@@ -16,7 +16,7 @@
           <!-- Transactions à gauche -->
           <a
             routerLink="/caisse"
-            class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00a09d] dark:hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1"
+            class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
             id="caisse-transactions-link"
             title="Consulter les transactions">
             <span>Transactions</span>
@@ -47,7 +47,7 @@
 
     <!-- Journaux additionnels créés dans Configuration > Journaux avec caractéristiques identiques -->
     @for (journal of additionalJournals(); track journal.id) {
-      <div class="bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+      <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
         <!-- En-tête de la carte Journal -->
         <div>
           <!-- Ligne 1 : Nom du journal & badge de type -->
@@ -65,7 +65,7 @@
             <!-- Transactions à gauche -->
             <a
               routerLink="/caisse"
-              class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00a09d] dark:hover:text-[#00c4c0] transition-colors cursor-pointer inline-flex items-center gap-1"
+              class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
               title="Consulter les écritures">
               <span>Transactions</span>
               <mat-icon class="!text-[14px] !w-[14px] !h-[14px] text-slate-400 dark:text-slate-400">arrow_forward</mat-icon>
