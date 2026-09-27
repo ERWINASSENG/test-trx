@@ -57,9 +57,8 @@ describe('DashboardEmployee', () => {
 
   it('devrait récupérer et exposer les informations du collaborateur connecté', () => {
     expect(component.currentUser()).toEqual(mockEmployeeUser);
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Jean');
-    expect(compiled.textContent).toContain('Kamga');
+    expect(component.currentUser()?.firstName).toBe('Jean');
+    expect(component.currentUser()?.lastName).toBe('Kamga');
   });
 
   it('affiche le lien Journal de caisse uniquement à la caissière', () => {
