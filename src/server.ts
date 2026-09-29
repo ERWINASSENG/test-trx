@@ -1018,8 +1018,8 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
 
 // Déclaration des routes de caisse sécurisées par RBAC strict (lecture réservée aux rôles financiers et encadrement)
 const cashierReadRoles: UserRole[] = ['admin', 'manager', 'caissiere', 'comptable', 'tresorier'];
-const cashierWriteRoles: UserRole[] = ['admin', 'caissiere', 'tresorier', 'manager', 'comptable'];
-const cashierDeleteRoles: UserRole[] = ['admin', 'caissiere', 'tresorier'];
+const cashierWriteRoles: UserRole[] = ['admin', 'caissiere'];
+const cashierDeleteRoles: UserRole[] = ['admin', 'caissiere'];
 const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transactions'];
 
 cashierOperationAliases.forEach((path) => {
@@ -1032,7 +1032,7 @@ cashierOperationAliases.forEach((path) => {
   app.patch(`${path}/status`, requireAuth, requireRole(cashierWriteRoles), updateOperationsStatusHandler);
 });
 
-// Écriture : réservée aux Administrateurs, Caissières, Managers et Comptables
+// Écriture dans la caisse native : réservée aux Administrateurs et Caissières
 cashierOperationAliases.forEach((path) => {
   app.post(path, requireAuth, requireRole(cashierWriteRoles), saveOperationHandler);
 });
@@ -1042,7 +1042,7 @@ cashierOperationAliases.forEach((path) => {
   app.patch(`${path}/:id`, requireAuth, requireRole(cashierWriteRoles), updateOperationHandler);
 });
 
-// Suppression : autorisée pour les Administrateurs et Caissières (vérification stricte de propriété dans deleteOperationsHandler)
+// Suppression dans la caisse native : réservée aux Administrateurs et Caissières
 cashierOperationAliases.forEach((path) => {
   app.delete(`${path}/:id`, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);
   app.delete(path, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);

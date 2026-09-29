@@ -77,10 +77,25 @@ export class MainLayout {
     return url ? url.includes('/configuration') || url.includes('/settings') : false;
   });
 
-  // Droit d'édition en caisse et journaux (admin, caissière et trésorier - managers en consultation seule)
+  // La caisse native est éditable par admin/caissière; un trésorier ne modifie que ses journaux.
   public readonly canEditCaisse = computed(() => {
     const role = this.authService.currentRole();
-    return role === 'admin' || role === 'caissiere' || role === 'tresorier';
+    const journalId = this.cashierService.activeJournalId();
+    const isNativeCashJournal =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+
+    if (role === 'admin') return true;
+    if (isNativeCashJournal) return role === 'caissiere';
+    if (role !== 'tresorier') return false;
+
+    const currentUserId = this.authService.currentUser()?.id;
+    return Boolean(
+      currentUserId &&
+      this.journalService.journals().some((journal) => journal.id === journalId && journal.created_by === currentUserId)
+    );
   });
 
   // Nom dynamique du journal actif (Caisse Principale ou journal personnalisé)
@@ -251,6 +266,7 @@ export class MainLayout {
   }
 
   public async onDeleteSelectedAction(): Promise<void> {
+    if (!this.canEditCaisse()) return;
     const count = this.selectedTransactionsCount();
     if (count === 0 || this.isDeleting()) return;
     this.isDeleting.set(true);
@@ -281,12 +297,14 @@ export class MainLayout {
   }
 
   public async onDuplicateAction(): Promise<void> {
+    if (!this.canEditCaisse()) return;
     if (this.selectedTransactionsCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.duplicateSelected();
   }
 
   public async onResetToDraftAction(): Promise<void> {
+    if (!this.canEditCaisse()) return;
     if (this.selectedTransactionsCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.resetSelectedToDraft();
@@ -310,6 +328,7 @@ export class MainLayout {
   }
 
   public onNouveau(): void {
+    if (!this.canEditCaisse()) return;
     if (!this.router.url.includes('/caisse')) {
       void this.router.navigate(['/caisse']);
     }
@@ -317,6 +336,7 @@ export class MainLayout {
   }
 
   public onOpenImportModal(): void {
+    if (!this.canEditCaisse()) return;
     if (!this.router.url.includes('/caisse')) {
       void this.router.navigate(['/caisse']);
     }
@@ -325,6 +345,7 @@ export class MainLayout {
 
   public async onImportConfirmed(rows: ParsedImportRow[]): Promise<void> {
     this.cashierService.closeImportModal();
+    if (!this.canEditCaisse()) return;
     const result = await this.cashierService.importTransactions(rows);
     if (result.insertedCount > 0) {
       this.notificationService.success(

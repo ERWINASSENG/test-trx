@@ -6,6 +6,9 @@ import { CashierService } from '../../core/services/cashier.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { Journal } from '../../core/models/journal.model';
+import { CashierTransaction } from '../../core/models/cashier-transaction.model';
+import { UserProfile, UserRole } from '../../core/models/auth.model';
 import { vi } from 'vitest';
 
 describe('CashierManagement', () => {
@@ -14,9 +17,22 @@ describe('CashierManagement', () => {
   let service: CashierService;
   let notificationService: NotificationService;
   let originalFetch: typeof globalThis.fetch;
+  const createUser = (role: UserRole, id = 'usr-1'): UserProfile => ({
+    id,
+    email: `${id}@transmex.cm`,
+    firstName: 'Test',
+    lastName: 'User',
+    role,
+    isActive: true,
+    createdAt: '2026-09-29T00:00:00.000Z',
+  });
+  let currentUser = signal<UserProfile | null>(createUser('caissiere'));
+  let currentRole = signal<UserRole>('caissiere');
 
   beforeEach(async () => {
     originalFetch = globalThis.fetch;
+    currentUser = signal<UserProfile | null>(createUser('caissiere'));
+    currentRole = signal<UserRole>('caissiere');
     await TestBed.configureTestingModule({
       imports: [CashierManagement],
       providers: [
@@ -27,11 +43,11 @@ describe('CashierManagement', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: signal({ id: 'usr-1', email: 'caissiere@transmex.cm', role: 'caissiere' }),
+            currentUser,
             token: signal('mock-jwt-token'),
             waitForSession: vi.fn().mockResolvedValue(undefined),
             isAuthenticated: signal(true),
-            currentRole: signal('caissiere'),
+            currentRole,
             isAdmin: signal(false),
             isManager: signal(false),
             isTresorier: signal(false),
@@ -97,6 +113,46 @@ describe('CashierManagement', () => {
     expect(component.pagedTransactions().length).toBe(0);
     expect(component.currentBalance()).toBe(0);
     expect(component.paginationLabel()).toBe('00-00 / 00');
+  });
+
+  it('réserve les lignes éditables aux caissières sur CSH1 et aux trésoriers sur leurs journaux', () => {
+    const treasurer = createUser('tresorier', 'treasurer-1');
+    currentUser.set(treasurer);
+    currentRole.set('tresorier');
+
+    const cashTransaction = {
+      id: 'cash-entry',
+      date: '2026-09-29',
+      libelle: 'Caisse native',
+      category: 'entree',
+      montant: 100,
+      journalId: 'native-caisse-principal',
+    } as CashierTransaction;
+    expect(component.canEdit()).toBe(false);
+    expect(component.canEditTransaction(cashTransaction)).toBe(false);
+
+    const ownJournal: Journal = {
+      id: 'journal-owned',
+      name: 'Journal du trésorier',
+      type: 'bank',
+      sequence_prefix: 'BANKT',
+      default_account: 'TEST',
+      currency: 'XAF',
+      is_active: true,
+      created_by: treasurer.id,
+    };
+    const journalState = component.journalService as unknown as {
+      _journals: { set: (journals: Journal[]) => void };
+    };
+    journalState._journals.set([ownJournal]);
+    vi.spyOn(service, 'loadJournalEntries').mockResolvedValue(undefined);
+    service.setActiveJournal(ownJournal.id, ownJournal.sequence_prefix);
+
+    expect(component.canEdit()).toBe(true);
+    expect(component.canEditTransaction({ ...cashTransaction, journalId: ownJournal.id, createdBy: 'another-user' })).toBe(true);
+
+    journalState._journals.set([{ ...ownJournal, created_by: 'another-user' }]);
+    expect(component.canEdit()).toBe(false);
   });
 
   it('devrait ouvrir et fermer la ligne de saisie horizontale inline', () => {

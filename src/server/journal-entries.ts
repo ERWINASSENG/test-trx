@@ -1,6 +1,7 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
 import { writeAuditLog } from './audit-log';
+import { authorizeJournalOwnerWrite } from './journal-access';
 
 /**
  * Interface d'une écriture comptable dans un journal dédié
@@ -123,6 +124,12 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
     res.status(503).json({
       error: 'Persistance impossible : le service Supabase n’est pas initialisé sur le serveur.',
     });
+    return;
+  }
+
+  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
+  if (!writeAuthorization.authorized) {
+    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
     return;
   }
 
@@ -286,6 +293,12 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
     return;
   }
 
+  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
+  if (!writeAuthorization.authorized) {
+    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
+    return;
+  }
+
   // 1. Liste blanche stricte des champs autorisés à la modification
   const allowedUpdates: Record<string, unknown> = {};
   const body = req.body || {};
@@ -362,11 +375,6 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
       .eq('id', entryId)
       .eq('journal_id', journalId);
 
-    // Si trésorier, restreindre la mise à jour à ses propres écritures
-    if (userRole === 'tresorier' && userId) {
-      query = query.eq('created_by', userId);
-    }
-
     const { data: updated, error: updateError } = await query.select().single();
 
     if (updateError || !updated) {
@@ -432,16 +440,18 @@ export const deleteJournalEntryHandler = async (req: express.Request, res: expre
     return;
   }
 
+  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
+  if (!writeAuthorization.authorized) {
+    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
+    return;
+  }
+
   try {
     let query = adminClient
       .from('journal_entries')
       .delete()
       .eq('id', entryId)
       .eq('journal_id', journalId);
-
-    if (userRole === 'tresorier' && userId) {
-      query = query.eq('created_by', userId);
-    }
 
     const { error } = await query;
     if (error) {

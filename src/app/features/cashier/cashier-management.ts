@@ -136,11 +136,28 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // Permissions : Seuls admin, caissiere et tresorier peuvent créer/modifier/supprimer
-  public readonly canEdit = computed(() => {
-    const role = this.authService.currentUser()?.role;
-    return role === 'admin' || role === 'caissiere' || role === 'tresorier';
-  });
+  private canWriteToJournal(journalId: string | null | undefined): boolean {
+    const role = this.authService.currentRole();
+    const activeJournalId = this.cashierService.activeJournalId();
+    const targetJournalId = journalId ?? activeJournalId;
+    const isNativeCaisse =
+      !targetJournalId ||
+      targetJournalId === 'native-caisse-principal' ||
+      targetJournalId === 'CSH1' ||
+      (targetJournalId === activeJournalId && this.cashierService.activeJournalPrefix() === 'CSH1');
+
+    if (role === 'admin') return true;
+    if (isNativeCaisse) return role === 'caissiere';
+    if (role !== 'tresorier') return false;
+
+    const currentUserId = this.authService.currentUser()?.id;
+    return Boolean(
+      currentUserId &&
+      this.journalService.journals().some((journal) => journal.id === targetJournalId && journal.created_by === currentUserId)
+    );
+  }
+
+  public readonly canEdit = computed(() => this.canWriteToJournal(this.activeJournalId()));
 
   /**
    * Vérifie si l'utilisateur actuel a le droit d'éditer une transaction spécifique.
@@ -151,8 +168,11 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public canEditTransaction(tx: CashierTransaction): boolean {
     const user = this.authService.currentUser();
     if (!user) return false;
-    if (user.role === 'admin') return true;
-    if (user.role !== 'caissiere' && user.role !== 'tresorier') return false;
+
+    const transactionJournalId = tx.journalId ?? tx.journal_id ?? 'native-caisse-principal';
+    if (!this.canWriteToJournal(transactionJournalId)) return false;
+    if (user.role === 'admin' || user.role === 'tresorier') return true;
+    if (user.role !== 'caissiere') return false;
     // Si la ligne n'a pas encore de créateur spécifié (rétrocompatibilité), autoriser
     if (!tx.createdBy) return true;
     return tx.createdBy === user.id;

@@ -120,11 +120,13 @@ CREATE TABLE public.journals (
   default_account text NOT NULL,
   currency varchar(10) NOT NULL DEFAULT 'XAF',
   is_active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_journals_is_active ON public.journals (is_active);
 CREATE INDEX idx_journals_type ON public.journals (type);
+CREATE INDEX idx_journals_created_by ON public.journals (created_by);
 
 -- journal_entries (écritures des journaux autres que la Caisse Principale, ex. Banques)
 CREATE TABLE public.journal_entries (
@@ -520,10 +522,7 @@ REVOKE ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals
   FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.dossiers TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.journals TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.journal_entries TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.cashier_transactions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.dossiers, public.journals TO authenticated;
 GRANT SELECT ON TABLE public.audit_logs TO authenticated;
 
 GRANT ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
@@ -591,64 +590,181 @@ CREATE POLICY dossiers_delete_admin_only ON public.dossiers
     WHERE profiles.id = (SELECT auth.uid()) AND profiles.role = 'admin'
   ));
 
--- journals (écriture restreinte à admin + trésorier uniquement)
+-- journals: un trésorier ne gère que les journaux qu'il a créés.
 CREATE POLICY journals_select_authenticated ON public.journals
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO authenticated
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = (SELECT auth.uid())
+          AND p.is_active IS TRUE
+          AND p.role IN ('tresorier', 'manager')
+      )
+    )
+  );
 
 CREATE POLICY journals_insert_management ON public.journals
   FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ));
+  WITH CHECK (
+    public.is_active_user()
+    AND created_by = (SELECT auth.uid())
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = (SELECT auth.uid())
+          AND p.is_active IS TRUE
+          AND p.role = 'tresorier'
+      )
+    )
+  );
 
 CREATE POLICY journals_update_management ON public.journals
   FOR UPDATE TO authenticated
-  USING (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ))
-  WITH CHECK (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        created_by = (SELECT auth.uid())
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+      )
+    )
+  )
+  WITH CHECK (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        created_by = (SELECT auth.uid())
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+      )
+    )
+  );
 
 CREATE POLICY journals_delete_admin ON public.journals
   FOR DELETE TO authenticated
-  USING (public.is_admin() AND sequence_prefix <> 'CSH1');
+  USING (public.is_active_user() AND public.is_admin() AND sequence_prefix <> 'CSH1');
 
--- journal_entries (lecture : trésorier/manager/admin ; écriture : trésorier/admin)
+-- journal_entries: les écritures d'un trésorier sont limitées à ses journaux.
 CREATE POLICY journal_entries_select_by_role ON public.journal_entries
   FOR SELECT TO authenticated
-  USING (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role IN ('tresorier', 'manager')
-  ));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = (SELECT auth.uid())
+          AND p.is_active IS TRUE
+          AND p.role IN ('tresorier', 'manager')
+      )
+    )
+  );
 
 CREATE POLICY journal_entries_insert_by_role ON public.journal_entries
   FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ));
+  WITH CHECK (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        created_by = (SELECT auth.uid())
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+        AND EXISTS (
+          SELECT 1 FROM public.journals j
+          WHERE j.id = journal_entries.journal_id
+            AND j.created_by = (SELECT auth.uid())
+            AND j.is_active IS TRUE
+            AND j.sequence_prefix <> 'CSH1'
+        )
+      )
+    )
+  );
 
 CREATE POLICY journal_entries_update_by_role ON public.journal_entries
   FOR UPDATE TO authenticated
-  USING (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ))
-  WITH CHECK (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+        AND EXISTS (
+          SELECT 1 FROM public.journals j
+          WHERE j.id = journal_entries.journal_id
+            AND j.created_by = (SELECT auth.uid())
+            AND j.sequence_prefix <> 'CSH1'
+        )
+      )
+    )
+  )
+  WITH CHECK (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+        AND EXISTS (
+          SELECT 1 FROM public.journals j
+          WHERE j.id = journal_entries.journal_id
+            AND j.created_by = (SELECT auth.uid())
+            AND j.sequence_prefix <> 'CSH1'
+        )
+      )
+    )
+  );
 
 CREATE POLICY journal_entries_delete_by_role ON public.journal_entries
   FOR DELETE TO authenticated
-  USING (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role = 'tresorier'
-  ));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'tresorier'
+        )
+        AND EXISTS (
+          SELECT 1 FROM public.journals j
+          WHERE j.id = journal_entries.journal_id
+            AND j.created_by = (SELECT auth.uid())
+            AND j.sequence_prefix <> 'CSH1'
+        )
+      )
+    )
+  );
 
 CREATE POLICY journal_entries_service_role_all ON public.journal_entries
   FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -668,19 +784,74 @@ CREATE POLICY cashier_transactions_select_by_role ON public.cashier_transactions
 
 CREATE POLICY cashier_transactions_insert_by_role ON public.cashier_transactions
   FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid()) AND p.role IN ('caissier', 'caissiere', 'manager')
-  ));
+  WITH CHECK (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        created_by = (SELECT auth.uid())
+        AND (employee_id IS NULL OR employee_id = (SELECT auth.uid()))
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'caissiere'
+        )
+      )
+    )
+  );
 
 CREATE POLICY cashier_transactions_update_own_or_admin ON public.cashier_transactions
   FOR UPDATE TO authenticated
-  USING (public.is_admin() OR created_by = (SELECT auth.uid()) OR employee_id = (SELECT auth.uid()))
-  WITH CHECK (public.is_admin() OR created_by = (SELECT auth.uid()) OR employee_id = (SELECT auth.uid()));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        COALESCE(created_by, employee_id) = (SELECT auth.uid())
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'caissiere'
+        )
+      )
+    )
+  )
+  WITH CHECK (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        created_by = (SELECT auth.uid())
+        AND (employee_id IS NULL OR employee_id = (SELECT auth.uid()))
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'caissiere'
+        )
+      )
+    )
+  );
 
 CREATE POLICY cashier_transactions_delete_own_or_admin ON public.cashier_transactions
   FOR DELETE TO authenticated
-  USING (public.is_admin() OR created_by = (SELECT auth.uid()) OR employee_id = (SELECT auth.uid()));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR (
+        COALESCE(created_by, employee_id) = (SELECT auth.uid())
+        AND EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = (SELECT auth.uid())
+            AND p.is_active IS TRUE
+            AND p.role = 'caissiere'
+        )
+      )
+    )
+  );
 
 -- audit_logs
 CREATE POLICY audit_logs_admin_select ON public.audit_logs

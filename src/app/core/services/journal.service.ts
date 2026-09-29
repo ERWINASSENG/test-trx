@@ -259,6 +259,7 @@ export class JournalService {
                 currency: String(row['currency'] ?? 'XAF'),
                 is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
                 selected: false,
+                created_by: typeof row['created_by'] === 'string' ? row['created_by'] : undefined,
                 created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
                 updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
               }));
@@ -303,6 +304,7 @@ export class JournalService {
             currency: String(row['currency'] ?? 'XAF'),
             is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
             selected: false,
+            created_by: typeof row['created_by'] === 'string' ? row['created_by'] : undefined,
             created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
             updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
           }));

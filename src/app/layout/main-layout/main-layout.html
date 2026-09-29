@@ -603,7 +603,7 @@
   </main>
 
   <!-- Modale d'importation Excel / CSV de caisse -->
-  @if (cashierService.isImportModalOpen()) {
+  @if (cashierService.isImportModalOpen() && canEditCaisse()) {
     <app-cashier-import-modal
       (dismissModal)="cashierService.closeImportModal()"
       (importConfirmed)="onImportConfirmed($event)"

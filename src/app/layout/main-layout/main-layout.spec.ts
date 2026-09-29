@@ -4,9 +4,12 @@ import { signal } from '@angular/core';
 import { MainLayout } from './main-layout';
 import { AuthService } from '../../core/services/auth.service';
 import { CashierService } from '../../core/services/cashier.service';
+import { Journal } from '../../core/models/journal.model';
+import { JournalService } from '../../core/services/journal.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { ThemeService } from '../../core/services/theme.service';
-import { UserProfile } from '../../core/models/auth.model';
+import { UserProfile, UserRole } from '../../core/models/auth.model';
+import { vi } from 'vitest';
 
 describe('MainLayout Component', () => {
   let component: MainLayout;
@@ -24,8 +27,13 @@ describe('MainLayout Component', () => {
     createdAt: new Date().toISOString(),
   };
 
+  let currentUser = signal<UserProfile | null>(mockUser);
+  let currentRole = signal<UserRole>(mockUser.role);
+
   beforeEach(() => {
     logoutCalled = false;
+    currentUser = signal<UserProfile | null>(mockUser);
+    currentRole = signal<UserRole>(mockUser.role);
     TestBed.configureTestingModule({
       imports: [MainLayout],
       providers: [
@@ -39,7 +47,9 @@ describe('MainLayout Component', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: signal<UserProfile | null>(mockUser),
+            currentUser,
+            currentRole,
+            token: signal('mock-jwt-token'),
             logout: () => {
               logoutCalled = true;
               return Promise.resolve();
@@ -134,6 +144,44 @@ describe('MainLayout Component', () => {
     expect(cashierService.isAddingRow()).toBe(false);
     component.onNouveau();
     expect(cashierService.isAddingRow()).toBe(true);
+  });
+
+  it('réserve l’écriture dans la caisse native à admin et caissiere', () => {
+    expect(component.canEditCaisse()).toBe(true);
+
+    currentRole.set('caissiere');
+    expect(component.canEditCaisse()).toBe(true);
+
+    currentRole.set('tresorier');
+    expect(component.canEditCaisse()).toBe(false);
+  });
+
+  it('autorise le trésorier uniquement sur ses journaux personnalisés', () => {
+    const treasurer = { ...mockUser, id: 'treasurer-1', role: 'tresorier' as const };
+    currentUser.set(treasurer);
+    currentRole.set('tresorier');
+
+    const journalService = TestBed.inject(JournalService) as unknown as {
+      _journals: { set: (journals: Journal[]) => void };
+    };
+    const ownJournal: Journal = {
+      id: 'journal-own',
+      name: 'Journal du trésorier',
+      type: 'bank',
+      sequence_prefix: 'BANKT',
+      default_account: 'TEST',
+      currency: 'XAF',
+      is_active: true,
+      created_by: treasurer.id,
+    };
+    journalService._journals.set([ownJournal]);
+
+    vi.spyOn(cashierService, 'loadJournalEntries').mockResolvedValue(undefined);
+    cashierService.setActiveJournal(ownJournal.id, ownJournal.sequence_prefix);
+    expect(component.canEditCaisse()).toBe(true);
+
+    journalService._journals.set([{ ...ownJournal, created_by: 'another-user' }]);
+    expect(component.canEditCaisse()).toBe(false);
   });
 
   it('devrait renvoyer le libellé correct pour chaque rôle', () => {

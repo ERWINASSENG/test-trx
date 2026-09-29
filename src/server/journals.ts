@@ -16,6 +16,47 @@ const ALLOWED_VIEW_ROLES = ['admin', 'tresorier', 'manager'];
  */
 const ALLOWED_MANAGE_ROLES = ['admin', 'tresorier'];
 
+type JournalManageAuthorization =
+  | { authorized: true }
+  | { authorized: false; status: number; error: string };
+
+const authorizeJournalManagement = async (
+  adminClient: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  journalId: string,
+  userRole: string,
+  userId: string | undefined
+): Promise<JournalManageAuthorization> => {
+  if (!userId) {
+    return { authorized: false, status: 401, error: 'Utilisateur non identifié.' };
+  }
+  if (userRole === 'admin') return { authorized: true };
+  if (userRole !== 'tresorier') {
+    return { authorized: false, status: 403, error: 'Gestion non autorisée pour ce journal.' };
+  }
+
+  try {
+    const { data: journal, error } = await adminClient
+      .from('journals')
+      .select('created_by, sequence_prefix')
+      .eq('id', journalId)
+      .maybeSingle();
+
+    if (error) {
+      return { authorized: false, status: 500, error: 'Impossible de vérifier le propriétaire du journal.' };
+    }
+    if (!journal) {
+      return { authorized: false, status: 404, error: 'Journal comptable introuvable.' };
+    }
+    if (journal.sequence_prefix?.toUpperCase() === 'CSH1' || journal.created_by !== userId) {
+      return { authorized: false, status: 403, error: 'Le trésorier ne peut gérer que ses propres journaux.' };
+    }
+
+    return { authorized: true };
+  } catch {
+    return { authorized: false, status: 500, error: 'Impossible de vérifier le propriétaire du journal.' };
+  }
+};
+
 /**
  * GET /api/journals
  * Récupère la liste de tous les journaux comptables enregistrés
@@ -40,7 +81,7 @@ export const getJournalsHandler = async (req: express.Request, res: express.Resp
   try {
     const { data, error } = await adminClient
       .from('journals')
-      .select('id, name, type, ledger_type, sequence_prefix, default_account, currency, is_active, created_at, updated_at')
+      .select('id, name, type, ledger_type, sequence_prefix, default_account, currency, is_active, created_by, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -61,7 +102,6 @@ export const getJournalsHandler = async (req: express.Request, res: express.Resp
     res.status(500).json({ error: msg });
   }
 };
-
 /**
  * POST /api/journals
  * Crée un nouveau journal comptable (strictement réservé à admin et tresorier)
@@ -75,11 +115,17 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
 
   const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
   const userRole = authenticatedUser?.role;
+  const userId = authenticatedUser?.id;
 
   if (!userRole || !ALLOWED_MANAGE_ROLES.includes(userRole)) {
     res.status(403).json({
       error: 'Accès interdit : seuls les administrateurs et les trésoriers ont le droit de créer des journaux.',
     });
+    return;
+  }
+
+  if (!userId) {
+    res.status(401).json({ error: 'Utilisateur non identifié. Création du journal refusée.' });
     return;
   }
 
@@ -134,6 +180,7 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
           default_account,
           currency,
           is_active,
+          created_by: userId,
         },
       ])
       .select()
@@ -170,6 +217,7 @@ export const updateJournalHandler = async (req: express.Request, res: express.Re
 
   const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
   const userRole = authenticatedUser?.role;
+  const userId = authenticatedUser?.id;
 
   if (!userRole || !ALLOWED_MANAGE_ROLES.includes(userRole)) {
     res.status(403).json({
@@ -307,6 +355,7 @@ export const deleteJournalHandler = async (req: express.Request, res: express.Re
 
   const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
   const userRole = authenticatedUser?.role;
+  const userId = authenticatedUser?.id;
 
   if (!userRole || !ALLOWED_MANAGE_ROLES.includes(userRole)) {
     res.status(403).json({

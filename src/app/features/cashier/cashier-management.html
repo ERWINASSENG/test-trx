@@ -140,7 +140,7 @@
         </thead>
         <tbody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
           <!-- LIGNE D'AJOUT RAPIDE STYLE ODOO (INLINE EDITABLE FLAT SANS BOX) -->
-          @if (isAddingRow()) {
+          @if (isAddingRow() && canEdit()) {
             <tr class="odoo-row-editing" id="inline-add-row" [formGroup]="transactionForm" (keydown)="onAddKeydown($event)">
               <!-- Checkbox -->
               <td class="py-2 px-3 text-center align-middle">
@@ -295,7 +295,7 @@
             </tr>
           } @else {
             @for (tx of pagedTransactions(); track trackByTxId($index, tx)) {
-              @if (editingTxId() === tx.id) {
+              @if (editingTxId() === tx.id && canEditTransaction(tx)) {
                 <!-- LIGNE EN COURS DE MODIFICATION (INLINE EDIT ODOO FLAT SANS BOX) -->
                 <tr
                   class="odoo-row-editing"
