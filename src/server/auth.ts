@@ -32,24 +32,23 @@ const getBearerToken = (req: express.Request): string => {
 export async function resolveServerRole(
   supabaseAdmin: SupabaseClient,
   user: { id: string; email?: string | null; app_metadata?: Record<string, unknown> }
-): Promise<UserRole> {
+): Promise<UserRole | null> {
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError || !profile || profile.is_active !== true) {
+    return null;
+  }
+
   const email = (user.email || '').toLowerCase().trim();
   if (email && getAdminEmailsFromEnv().includes(email)) {
     return 'admin';
   }
 
-  const appRole = normalizeUserRole(user.app_metadata?.['role'] as string);
-  if (appRole !== 'employe') {
-    return appRole;
-  }
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  return profile?.role ? normalizeUserRole(profile.role) : 'employe';
+  return normalizeUserRole(profile.role);
 }
 
 export async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
@@ -75,6 +74,11 @@ export async function requireAuth(req: express.Request, res: express.Response, n
 
     const user = data.user;
     const resolvedRole = await resolveServerRole(supabaseAdmin, user);
+    if (!resolvedRole) {
+      res.status(403).json({ error: 'Compte inactif ou profil utilisateur indisponible.' });
+      return;
+    }
+
     (req as unknown as Record<string, unknown>)['user'] = {
       id: user.id,
       email: user.email,

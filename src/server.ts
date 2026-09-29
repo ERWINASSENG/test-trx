@@ -341,8 +341,13 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       return;
     }
 
-    if (isNaN(montant)) {
-      res.status(400).json({ error: 'Le montant de l’opération doit être un nombre valide.' });
+    if (payload.category !== undefined && !['entree', 'sortie'].includes(payload.category)) {
+      res.status(400).json({ error: 'La catégorie de l’opération est invalide.' });
+      return;
+    }
+
+    if (!Number.isFinite(montant) || montant === 0) {
+      res.status(400).json({ error: 'Le montant de l’opération doit être un nombre fini différent de zéro.' });
       return;
     }
 
@@ -484,34 +489,34 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
     }
 
     const updateData: Record<string, unknown> = {};
+    const { data: existingRow, error: fetchError } = await adminClient
+      .from('cashier_transactions')
+      .select('created_by, employee_id, category, montant')
+      .eq('id', targetId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('Erreur vérification droits updateOperationHandler:', fetchError.message);
+      res.status(500).json({ error: 'Erreur lors de la vérification des autorisations sur l’opération.' });
+      return;
+    }
+    if (!existingRow) {
+      res.status(404).json({ error: 'Opération introuvable' });
+      return;
+    }
 
     // RÈGLE MÉTIER : chacun ne modifie que ce qu'il a lui-même enregistré.
     // Un manager ne peut pas modifier une opération saisie par un caissier, et un
     // caissier ne peut pas modifier celle d'un collègue. Seul un admin déroge à la règle.
     // (Miroir applicatif de la policy RLS "cashier_transactions_update_own_or_admin".)
     if (authenticatedUser?.role !== 'admin') {
-      const { data: existingRow, error: fetchError } = await adminClient
-        .from('cashier_transactions')
-        .select('created_by, employee_id')
-        .eq('id', targetId)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error('Erreur vérification droits updateOperationHandler:', fetchError.message);
-        res.status(500).json({ error: 'Erreur lors de la vérification des autorisations sur l’opération.' });
-        return;
-      }
-      if (!existingRow) {
-        res.status(404).json({ error: 'Opération introuvable' });
-        return;
-      }
       const creator = String(existingRow.created_by || existingRow.employee_id || '').trim();
       const userEmail = (authenticatedUser?.email || '').toLowerCase().trim();
       const callerId = authenticatedUser?.id;
       const matchesId = callerId && creator === callerId;
       const matchesEmail = userEmail && creator.toLowerCase() === userEmail;
 
-      if (creator && !matchesId && !matchesEmail) {
+      if (!creator || (!matchesId && !matchesEmail)) {
         res.status(403).json({ error: 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.' });
         return;
       }
@@ -540,12 +545,22 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       updateData['type_description'] = payload.typeDescription ?? payload.type_description ?? null;
     }
 
+    if (payload.category !== undefined && !['entree', 'sortie'].includes(payload.category)) {
+      res.status(400).json({ error: 'La catégorie de l’opération est invalide.' });
+      return;
+    }
+
+    const effectiveCategory = payload.category !== undefined ? payload.category : existingRow.category;
     if (payload.category !== undefined) {
-      updateData['category'] = payload.category === 'sortie' ? 'sortie' : 'entree';
+      updateData['category'] = effectiveCategory;
     }
 
     if (payload.status !== undefined) {
-      updateData['status'] = payload.status === 'posted' ? 'posted' : (payload.status === 'cancelled' ? 'cancelled' : 'draft');
+      if (!['draft', 'posted', 'cancelled'].includes(payload.status)) {
+        res.status(400).json({ error: 'Le statut de l’opération est invalide.' });
+        return;
+      }
+      updateData['status'] = payload.status;
     }
 
     if (payload.noDossier !== undefined || payload.no_dossier !== undefined || payload.matriculeVehicule !== undefined || payload.matricule_vehicule !== undefined) {
@@ -594,11 +609,18 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
 
     if (payload.montant !== undefined) {
       const montant = Number(payload.montant);
-      if (isNaN(montant)) {
-        res.status(400).json({ error: 'Le montant de l’opération doit être un nombre valide' });
+      if (!Number.isFinite(montant) || montant === 0) {
+        res.status(400).json({ error: 'Le montant de l’opération doit être un nombre fini différent de zéro.' });
         return;
       }
-      updateData['montant'] = montant;
+      updateData['montant'] = effectiveCategory === 'sortie' ? -Math.abs(montant) : Math.abs(montant);
+    } else if (payload.category !== undefined) {
+      const montant = Math.abs(Number(existingRow.montant));
+      if (!Number.isFinite(montant) || montant === 0) {
+        res.status(400).json({ error: 'Le montant existant doit être corrigé avant de changer la catégorie.' });
+        return;
+      }
+      updateData['montant'] = effectiveCategory === 'sortie' ? -montant : montant;
     }
 
     if (payload.date !== undefined && payload.date) {
@@ -824,6 +846,10 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
       res.status(400).json({ error: 'Aucun identifiant fourni pour la duplication' });
       return;
     }
+    if (bodyIds.length > 100 || bodyIds.some((targetId: unknown) => typeof targetId !== 'string' || !targetId) || new Set(bodyIds).size !== bodyIds.length) {
+      res.status(400).json({ error: 'La duplication accepte au maximum 100 identifiants distincts et valides.' });
+      return;
+    }
 
     // Récupération des transactions originales
     const { data: originalRows, error: fetchErr } = await adminClient
@@ -835,6 +861,10 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
       res.status(404).json({ error: 'Aucune opération trouvée pour duplication' });
       return;
     }
+    if (originalRows.length !== bodyIds.length) {
+      res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
+      return;
+    }
 
     // Contrôle d'appartenance pour les rôles non-admin : on ne peut dupliquer que ses propres opérations
     if (userRole !== 'admin') {
@@ -843,9 +873,8 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
         return;
       }
       const unauthorizedRows = originalRows.filter((r) => {
-        const creator = r.created_by || r.employee_id;
-        if (!creator) return false; // Tolérance pour les lignes historiques sans auteur
-        return creator !== callerId;
+        const creator = String(r.created_by || r.employee_id || '').trim();
+        return !creator || creator !== callerId;
       });
       if (unauthorizedRows.length > 0) {
         res.status(403).json({
@@ -913,12 +942,21 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
     const userRole = authenticatedUser?.role;
 
     const bodyIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    const newStatus = req.body?.status === 'posted' ? 'posted' : (req.body?.status === 'cancelled' ? 'cancelled' : 'draft');
+    const requestedStatus = req.body?.status;
 
     if (bodyIds.length === 0) {
       res.status(400).json({ error: 'Aucun identifiant fourni' });
       return;
     }
+    if (bodyIds.length > 100 || bodyIds.some((targetId: unknown) => typeof targetId !== 'string' || !targetId) || new Set(bodyIds).size !== bodyIds.length) {
+      res.status(400).json({ error: 'La modification accepte au maximum 100 identifiants distincts et valides.' });
+      return;
+    }
+    if (!['draft', 'posted', 'cancelled'].includes(requestedStatus)) {
+      res.status(400).json({ error: 'Le statut demandé est invalide.' });
+      return;
+    }
+    const newStatus = requestedStatus;
 
     // Contrôle d'appartenance pour les non-admins : interdiction de changer le statut des opérations créées par un tiers
     if (userRole !== 'admin') {
@@ -936,11 +974,14 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
         res.status(500).json({ error: 'Impossible de vérifier la propriété des opérations' });
         return;
       }
+      if (rowsToCheck.length !== bodyIds.length) {
+        res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
+        return;
+      }
 
       const unauthorizedRows = rowsToCheck.filter((r) => {
-        const creator = r.created_by || r.employee_id;
-        if (!creator) return false;
-        return creator !== callerId;
+        const creator = String(r.created_by || r.employee_id || '').trim();
+        return !creator || creator !== callerId;
       });
 
       if (unauthorizedRows.length > 0) {
