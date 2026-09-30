@@ -109,7 +109,7 @@ export class AccessControlCenter {
   }
 
   public scopeDraft(permissionKey: string): string {
-    return this.permissionScopeDrafts()[permissionKey] || '{"type":"all","version":1}';
+    return this.permissionScopeDrafts()[permissionKey] || '';
   }
 
   public onScopeDraftInput(permissionKey: string, event: Event): void {
@@ -233,6 +233,7 @@ export class AccessControlCenter {
       return;
     }
     await this.accessControl.loadUserAccess(userId);
+    await this.accessControl.loadUsers();
     this.userRoleDraft.set('');
     this.feedback.set('Rôle attribué.');
   }
@@ -246,6 +247,7 @@ export class AccessControlCenter {
       return;
     }
     await this.accessControl.loadUserAccess(userId);
+    await this.accessControl.loadUsers();
     this.feedback.set('Rôle retiré.');
   }
 

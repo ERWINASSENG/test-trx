@@ -6,7 +6,7 @@ import { SupabaseService } from './supabase.service';
 describe('UserService', () => {
   let service: UserService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     TestBed.configureTestingModule({
       providers: [
         UserService,
@@ -22,7 +22,7 @@ describe('UserService', () => {
     });
 
     localStorage.clear();
-    const mockUsers = [
+    const serverUsers = [
       {
         id: 'usr-1',
         email: 'karim.meziani@transmex.com',
@@ -46,12 +46,11 @@ describe('UserService', () => {
         createdAt: new Date().toISOString(),
       },
     ];
-    localStorage.setItem('transmex_users_store', JSON.stringify(mockUsers));
-    service = TestBed.inject(UserService);
-
-    // Mock global fetch for backend /api/system/collaborators
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/system/collaborators')) {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/system/collaborators') && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ users: serverUsers }) });
+      }
+      if (url.includes('/api/system/collaborators') && init?.method === 'POST') {
         return Promise.resolve({
           ok: true,
           status: 201,
@@ -70,8 +69,24 @@ describe('UserService', () => {
           }),
         });
       }
+      if (url.includes('/api/system/collaborators/') && init?.method === 'PATCH') {
+        const userId = url.split('/').pop();
+        const payload = JSON.parse(String(init.body || '{}')) as Partial<typeof serverUsers[number]>;
+        const user = serverUsers.find((candidate) => candidate.id === userId);
+        if (user) Object.assign(user, payload);
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
+      }
+      if (url.includes('/api/system/collaborators/') && init?.method === 'DELETE') {
+        const userId = url.split('/').pop();
+        const index = serverUsers.findIndex((candidate) => candidate.id === userId);
+        if (index >= 0) serverUsers.splice(index, 1);
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     }));
+
+    service = TestBed.inject(UserService);
+    await service.loadInitialUsers();
   });
 
   afterEach(() => {

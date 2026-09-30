@@ -136,7 +136,7 @@ export const listAccessUsersHandler = async (req: express.Request, res: express.
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 200;
   const { data, error } = await adminClient
     .from('profiles')
-    .select('id, email, first_name, last_name, role, is_active')
+    .select('id, email, first_name, last_name, is_active')
     .order('last_name', { ascending: true })
     .limit(limit);
 
@@ -146,7 +146,54 @@ export const listAccessUsersHandler = async (req: express.Request, res: express.
     return;
   }
 
-  res.json({ users: data || [] });
+  const userIds = (data || []).map((user) => user.id);
+  const { data: assignments, error: assignmentsError } = userIds.length > 0
+    ? await adminClient
+      .from('access_user_roles')
+      .select('user_id, role_id, expires_at')
+      .in('user_id', userIds)
+    : { data: [], error: null };
+
+  if (assignmentsError) {
+    console.error('Impossible de lire les affectations des utilisateurs:', assignmentsError.message);
+    res.status(500).json({ error: 'Impossible de charger les rôles des utilisateurs.' });
+    return;
+  }
+
+  const roleIds = [...new Set((assignments || []).map((assignment) => assignment.role_id))];
+  const { data: roles, error: rolesError } = roleIds.length > 0
+    ? await adminClient
+      .from('access_roles')
+      .select('id, role_key, label, description, is_system, is_active, created_at, updated_at')
+      .in('id', roleIds)
+    : { data: [], error: null };
+
+  if (rolesError) {
+    console.error('Impossible de lire les rôles affectés:', rolesError.message);
+    res.status(500).json({ error: 'Impossible de charger les rôles des utilisateurs.' });
+    return;
+  }
+
+  const rolesById = new Map((roles || []).map((role) => [role.id, role]));
+  const assignmentsByUserId = new Map<string, Array<Record<string, unknown>>>();
+  for (const assignment of assignments || []) {
+    const userAssignments = assignmentsByUserId.get(assignment.user_id) || [];
+    const role = rolesById.get(assignment.role_id);
+    if (role) {
+      userAssignments.push({
+        role,
+        expires_at: assignment.expires_at,
+      });
+    }
+    assignmentsByUserId.set(assignment.user_id, userAssignments);
+  }
+
+  res.json({
+    users: (data || []).map((user) => ({
+      ...user,
+      roles: assignmentsByUserId.get(user.id) || [],
+    })),
+  });
 };
 
 export const getRolePermissionsHandler = async (req: express.Request, res: express.Response): Promise<void> => {

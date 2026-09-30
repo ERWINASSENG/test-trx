@@ -143,6 +143,13 @@
               <button type="button" class="user-item" [class.selected]="selectedUserId() === user.id" (click)="selectUser(user)">
                 <span class="user-item-name">{{ user.firstName }} {{ user.lastName }}</span>
                 <span class="user-item-email">{{ user.email }}</span>
+                <span class="user-item-roles" aria-label="Rôles affectés">
+                  @for (assignment of user.roles; track assignment.role.id) {
+                    <span class="role-chip">{{ assignment.role.label }}</span>
+                  } @empty {
+                    <span class="role-chip role-chip-empty">Aucun rôle affecté</span>
+                  }
+                </span>
                 @if (!user.isActive) { <span class="inactive-mark">Inactif</span> }
               </button>
             </li>

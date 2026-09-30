@@ -237,6 +237,31 @@ h3 {
   font-size: 11px;
 }
 
+.user-item-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 6px;
+  border: 1px solid var(--access-line);
+  border-radius: 999px;
+  background: var(--access-surface);
+  color: var(--access-blue);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.role-chip-empty {
+  color: var(--access-subtle);
+  font-weight: 500;
+}
+
 .system-mark,
 .inactive-mark,
 .status-mark,

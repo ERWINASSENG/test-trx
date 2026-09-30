@@ -41,8 +41,11 @@ export interface AccessControlUser {
   email: string;
   firstName: string;
   lastName: string;
-  legacyRole: string;
   isActive: boolean;
+  roles: Array<{
+    role: AccessRole;
+    expiresAt: string | null;
+  }>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -138,8 +141,15 @@ export class AccessControlService {
       email: String(user['email'] ?? ''),
       firstName: String(user['first_name'] ?? ''),
       lastName: String(user['last_name'] ?? ''),
-      legacyRole: String(user['role'] ?? ''),
       isActive: user['is_active'] === true,
+      roles: Array.isArray(user['roles'])
+        ? user['roles']
+          .filter((assignment): assignment is Record<string, unknown> => Boolean(assignment && typeof assignment === 'object'))
+          .map((assignment) => ({
+            role: this.mapRole((assignment['role'] || {}) as Record<string, unknown>),
+            expiresAt: typeof assignment['expires_at'] === 'string' ? assignment['expires_at'] : null,
+          }))
+        : [],
     })));
     this._error.set(null);
   }
@@ -270,7 +280,7 @@ export class AccessControlService {
     return {
       roleId: String(row['role_id'] ?? row['roleId'] ?? ''),
       permissionKey: String(row['permission_key'] ?? row['permissionKey'] ?? ''),
-      scope: (row['scope'] || { type: 'all', version: 1 }) as AccessRolePermission['scope'],
+      scope: row['scope'] as AccessRolePermission['scope'],
       grantedBy: typeof (row['granted_by'] ?? row['grantedBy']) === 'string'
         ? String(row['granted_by'] ?? row['grantedBy'])
         : null,
@@ -295,20 +305,22 @@ export class AccessControlService {
         userId: String(assignment['user_id'] ?? ''),
         roleId: String(assignment['role_id'] ?? ''),
         assignedBy: typeof assignment['assigned_by'] === 'string' ? assignment['assigned_by'] : null,
-        assignmentSource: assignment['assignment_source'] === 'legacy_profile' ? 'legacy_profile' : 'admin',
+        assignmentSource: assignment['assignment_source'] as AccessUserRole['assignmentSource'],
         createdAt: String(assignment['created_at'] ?? ''),
         expiresAt: typeof assignment['expires_at'] === 'string' ? assignment['expires_at'] : null,
         role: assignment['role'] && typeof assignment['role'] === 'object'
           ? this.mapRole(assignment['role'] as Record<string, unknown>)
           : null,
-        roleKey: String((assignment['role'] as Record<string, unknown> | undefined)?.['role_key'] ?? ''),
+        roleKey: typeof (assignment['role'] as Record<string, unknown> | undefined)?.['role_key'] === 'string'
+          ? String((assignment['role'] as Record<string, unknown>)['role_key'])
+          : '',
       })),
       overrides: overrides.map((override) => ({
         id: String(override['id'] ?? ''),
         userId: String(override['user_id'] ?? ''),
         permissionKey: String(override['permission_key'] ?? ''),
-        effect: override['effect'] === 'deny' ? 'deny' : 'allow',
-        scope: (override['scope'] || { type: 'all', version: 1 }) as AccessPermissionOverride['scope'],
+        effect: override['effect'] as PermissionEffect,
+        scope: override['scope'] as AccessPermissionOverride['scope'],
         reason: String(override['reason'] ?? ''),
         grantedBy: String(override['granted_by'] ?? ''),
         createdAt: String(override['created_at'] ?? ''),
