@@ -2589,6 +2589,27 @@ BEGIN
         RAISE EXCEPTION 'Active role or user profile not found' USING ERRCODE = 'P0002';
       END IF;
 
+      IF target_role_key <> 'admin' AND EXISTS (
+        SELECT 1
+        FROM public.access_user_roles ur
+        JOIN public.access_roles r ON r.id = ur.role_id
+        WHERE ur.user_id = target_user_id
+          AND r.role_key = 'admin'
+          AND (ur.expires_at IS NULL OR ur.expires_at > now())
+          AND (
+            SELECT count(*)
+            FROM public.access_user_roles active_admins
+            JOIN public.access_roles admin_roles ON admin_roles.id = active_admins.role_id
+            WHERE admin_roles.role_key = 'admin'
+              AND (active_admins.expires_at IS NULL OR active_admins.expires_at > now())
+          ) <= 1
+      ) THEN
+        RAISE EXCEPTION 'Cannot replace the last administrator assignment' USING ERRCODE = '42501';
+      END IF;
+
+      DELETE FROM public.access_user_roles
+      WHERE user_id = target_user_id AND role_id <> target_role_id;
+
       INSERT INTO public.access_user_roles (user_id, role_id, assigned_by, assignment_source, expires_at)
       VALUES (target_user_id, target_role_id, p_actor_user_id, 'admin', NULLIF(payload->>'expiresAt', '')::timestamptz)
       ON CONFLICT (user_id, role_id) DO UPDATE

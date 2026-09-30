@@ -14,10 +14,17 @@ export const getJournalsHandler = async (req: express.Request, res: express.Resp
   }
 
   try {
-    const { data, error } = await adminClient
+    const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string } | undefined;
+    let query = adminClient
       .from('journals')
       .select('id, name, type, ledger_type, sequence_prefix, default_account, currency, is_active, created_by, created_at, updated_at')
       .order('created_at', { ascending: true });
+
+    if (authenticatedUser?.role === 'caissiere') {
+      query = query.eq('sequence_prefix', 'CSH1');
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[API JOURNAUX] Erreur lecture Supabase:', error);

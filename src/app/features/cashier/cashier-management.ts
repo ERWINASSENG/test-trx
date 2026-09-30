@@ -109,7 +109,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public readonly availableJournals = computed(() => [
     { id: 'native-caisse-principal', name: 'Caisse Principale', sequence_prefix: 'CSH1' },
-    ...this.journalService.journals().filter((j) => j.id !== 'native-caisse-principal' && j.sequence_prefix !== 'CSH1'),
+    ...(this.authService.currentRole() === 'caissiere'
+      ? []
+      : this.journalService.journals().filter((j) => j.id !== 'native-caisse-principal' && j.sequence_prefix !== 'CSH1')),
   ]);
 
   public readonly activeJournalName = computed<string>(() => {

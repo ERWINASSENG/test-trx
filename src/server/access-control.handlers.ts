@@ -29,7 +29,8 @@ const runAccessMutation = async (
   req: express.Request,
   res: express.Response,
   operation: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  afterMutation?: (data: unknown) => Promise<void>
 ): Promise<void> => {
   const actorUserId = actorIdFromRequest(req);
   if (!actorUserId) {
@@ -53,6 +54,16 @@ const runAccessMutation = async (
     if (error) {
       sendMutationError(res, error);
       return;
+    }
+
+    if (afterMutation) {
+      try {
+        await afterMutation(data);
+      } catch (cleanupError) {
+        console.error('Échec de la synchronisation finale du contrôle d’accès:', cleanupError);
+        res.status(500).json({ error: 'Le rôle a été attribué mais la synchronisation des anciens rôles a échoué.' });
+        return;
+      }
     }
 
     res.status(200).json({ success: true, data });
@@ -348,12 +359,32 @@ export const replaceRolePermissionsHandler = (req: express.Request, res: express
   });
 };
 
-export const assignAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> =>
-  runAccessMutation(req, res, 'user.role.assign', {
-    userId: req.params['userId'],
-    roleId: req.body?.roleId,
-    expiresAt: req.body?.expiresAt,
-  });
+export const assignAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> => {
+  const userId = req.params['userId'];
+  const roleId = req.body?.roleId;
+  const adminClient = getSupabaseAdmin();
+
+  if (!userId || typeof roleId !== 'string' || !roleId) {
+    res.status(400).json({ error: 'Utilisateur et rôle sont obligatoires.' });
+    return Promise.resolve();
+  }
+
+  return runAccessMutation(
+    req,
+    res,
+    'user.role.assign',
+    { userId, roleId, expiresAt: req.body?.expiresAt },
+    async () => {
+      if (!adminClient) throw new Error('Service Supabase indisponible.');
+      const { error } = await adminClient
+        .from('access_user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .neq('role_id', roleId);
+      if (error) throw error;
+    }
+  );
+};
 
 export const revokeAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> =>
   runAccessMutation(req, res, 'user.role.revoke', {
