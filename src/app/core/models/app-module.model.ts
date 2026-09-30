@@ -1,4 +1,4 @@
-import { UserRole } from './auth.model';
+import { EffectivePermission } from './access-control.model';
 
 export interface AppModule {
   id: string;
@@ -7,7 +7,7 @@ export interface AppModule {
   route: string;
   icon: string;
   accent: string;
-  allowedRoles: readonly UserRole[];
+  permissionKey: string;
 }
 
 export const APP_MODULES: readonly AppModule[] = [
@@ -18,7 +18,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/dashboard',
     icon: '/assets/module-icons/board.svg',
     accent: '#714b67',
-    allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
+    permissionKey: 'dashboard.view',
   },
   {
     id: 'comptabilite',
@@ -27,7 +27,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/caisse',
     icon: '/assets/module-icons/accountant.svg',
     accent: '#008f8c',
-    allowedRoles: ['admin', 'manager', 'caissiere', 'comptable'],
+    permissionKey: 'cashier.read',
   },
   {
     id: 'personnel',
@@ -36,7 +36,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/personnel',
     icon: '/assets/module-icons/hr.svg',
     accent: '#b45309',
-    allowedRoles: ['admin'],
+    permissionKey: 'hr.read',
   },
   {
     id: 'administration',
@@ -45,14 +45,24 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/admin/view',
     icon: '/assets/module-icons/settings.svg',
     accent: '#475569',
-    allowedRoles: ['admin'],
+    permissionKey: 'configuration.read',
+  },
+  {
+    id: 'access-control',
+    label: 'Gestion des accès',
+    description: 'Gérer les rôles, permissions et accès utilisateurs',
+    route: '/admin/access-control',
+    icon: '/assets/module-icons/access-control.svg',
+    accent: '#b42336',
+    permissionKey: 'access.roles.read',
   },
 ];
 
-export function isAppModuleVisibleToRole(module: AppModule, role: UserRole): boolean {
-  return (
-    role === 'admin' ||
-    module.allowedRoles.includes(role) ||
-    (role === 'tresorier' && module.allowedRoles.includes('manager'))
-  );
+export function isAppModuleVisibleToPermissions(
+  module: AppModule,
+  permissions: readonly EffectivePermission[]
+): boolean {
+  const matchingPermissions = permissions.filter((permission) => permission.permissionKey === module.permissionKey);
+  if (matchingPermissions.some((permission) => permission.effect === 'deny')) return false;
+  return matchingPermissions.some((permission) => permission.effect === 'allow');
 }

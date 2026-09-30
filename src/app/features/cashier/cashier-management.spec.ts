@@ -5,6 +5,7 @@ import { CashierManagement } from './cashier-management';
 import { CashierService } from '../../core/services/cashier.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { Journal } from '../../core/models/journal.model';
 import { CashierTransaction } from '../../core/models/cashier-transaction.model';
@@ -40,6 +41,17 @@ describe('CashierManagement', () => {
         CashierService,
         SupabaseService,
         NotificationService,
+        {
+          provide: AccessControlService,
+          useValue: {
+            hasPermission: vi.fn((permission: string) =>
+              permission.startsWith('cashier.') && (currentRole() === 'admin' || currentRole() === 'caissiere')
+            ),
+            hasPermissionForResource: vi.fn((_permission: string, resource: { ownerUserId?: string }) => resource.ownerUserId === 'treasurer-1'),
+            effectivePermissions: signal([]),
+            loadMyPermissions: vi.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: AuthService,
           useValue: {

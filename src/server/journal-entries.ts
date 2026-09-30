@@ -1,7 +1,6 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
 import { writeAuditLog } from './audit-log';
-import { authorizeJournalOwnerWrite } from './journal-access';
 
 /**
  * Interface d'une écriture comptable dans un journal dédié
@@ -29,9 +28,6 @@ export interface JournalEntryRecord {
   updated_at: string;
 }
 
-const ALLOWED_VIEW_ROLES = ['admin', 'tresorier', 'manager', 'comptable'];
-const ALLOWED_WRITE_ROLES = ['admin', 'tresorier'];
-
 const extractParamString = (val: unknown): string => {
   if (Array.isArray(val)) return String(val[0] || '');
   return val ? String(val) : '';
@@ -47,14 +43,6 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
 
   if (!journalId) {
     res.status(400).json({ error: 'Identifiant du journal requis' });
-    return;
-  }
-
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string; id?: string } | undefined;
-  const userRole = authenticatedUser?.role;
-
-  if (!userRole || !ALLOWED_VIEW_ROLES.includes(userRole)) {
-    res.status(403).json({ error: 'Accès non autorisé aux écritures de ce journal.' });
     return;
   }
 
@@ -114,22 +102,10 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
   const userId = authenticatedUser?.id;
   const userEmail = authenticatedUser?.email;
 
-  // Strict RBAC : seuls l'administrateur et le trésorier peuvent créer des écritures
-  if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
-    res.status(403).json({ error: 'Seuls le trésorier et l’administrateur peuvent saisir des écritures de journal.' });
-    return;
-  }
-
   if (!adminClient) {
     res.status(503).json({
       error: 'Persistance impossible : le service Supabase n’est pas initialisé sur le serveur.',
     });
-    return;
-  }
-
-  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
-  if (!writeAuthorization.authorized) {
-    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
     return;
   }
 
@@ -283,19 +259,8 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
   const userId = authenticatedUser?.id;
   const userEmail = authenticatedUser?.email;
 
-  if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
-    res.status(403).json({ error: 'Modification non autorisée.' });
-    return;
-  }
-
   if (!adminClient) {
     res.status(503).json({ error: 'Base de données non accessible.' });
-    return;
-  }
-
-  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
-  if (!writeAuthorization.authorized) {
-    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
     return;
   }
 
@@ -430,19 +395,8 @@ export const deleteJournalEntryHandler = async (req: express.Request, res: expre
   const userId = authenticatedUser?.id;
   const userEmail = authenticatedUser?.email;
 
-  if (!userRole || !ALLOWED_WRITE_ROLES.includes(userRole)) {
-    res.status(403).json({ error: 'Suppression non autorisée.' });
-    return;
-  }
-
   if (!adminClient) {
     res.status(503).json({ error: 'Base de données non disponible.' });
-    return;
-  }
-
-  const writeAuthorization = await authorizeJournalOwnerWrite(adminClient, journalId, userRole, userId);
-  if (!writeAuthorization.authorized) {
-    res.status(writeAuthorization.status).json({ error: writeAuthorization.error });
     return;
   }
 

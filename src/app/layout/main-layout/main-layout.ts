@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter, map } from 'rxjs/operators';
 import { MatIconModule } from '@angular/material/icon';
 import { ROLE_DEFINITIONS, UserRole } from '../../core/models/auth.model';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CashierService } from '../../core/services/cashier.service';
 import { ThemeService } from '../../core/services/theme.service';
@@ -17,7 +18,7 @@ export interface NavOption {
   label: string;
   route: string;
   icon?: string;
-  allowedRoles: UserRole[];
+  permissionKey: string;
 }
 
 @Component({
@@ -33,6 +34,7 @@ export interface NavOption {
 })
 export class MainLayout {
   public readonly authService = inject(AuthService);
+  public readonly accessControl = inject(AccessControlService);
   public readonly cashierService = inject(CashierService);
   public readonly themeService = inject(ThemeService);
   public readonly notificationService = inject(NotificationService);
@@ -79,7 +81,6 @@ export class MainLayout {
 
   // La caisse native est éditable par admin/caissière; un trésorier ne modifie que ses journaux.
   public readonly canEditCaisse = computed(() => {
-    const role = this.authService.currentRole();
     const journalId = this.cashierService.activeJournalId();
     const isNativeCashJournal =
       !journalId ||
@@ -87,15 +88,12 @@ export class MainLayout {
       journalId === 'CSH1' ||
       this.cashierService.activeJournalPrefix() === 'CSH1';
 
-    if (role === 'admin') return true;
-    if (isNativeCashJournal) return role === 'caissiere';
-    if (role !== 'tresorier') return false;
+    if (isNativeCashJournal) return this.accessControl.hasPermission('cashier.create');
 
-    const currentUserId = this.authService.currentUser()?.id;
-    return Boolean(
-      currentUserId &&
-      this.journalService.journals().some((journal) => journal.id === journalId && journal.created_by === currentUserId)
-    );
+    const activeJournal = this.journalService.journals().find((journal) => journal.id === journalId);
+    return this.accessControl.hasPermissionForResource('journal_entries.create', {
+      ownerUserId: activeJournal?.created_by,
+    });
   });
 
   // Nom dynamique du journal actif (Caisse Principale ou journal personnalisé)
@@ -108,11 +106,7 @@ export class MainLayout {
     return found ? found.name : 'Journal';
   });
 
-  // Droit de consultation des journaux (admin, tresorier, manager)
-  public readonly canViewJournals = computed(() => {
-    const role = this.authService.currentRole();
-    return role === 'admin' || role === 'tresorier' || role === 'manager';
-  });
+  public readonly canViewJournals = computed(() => this.accessControl.hasPermission('journals.read'));
 
   // Synchronisation pagination et état avec le module Caisse
   public readonly paginationLabel = computed(() => this.cashierService.paginationLabel());
@@ -122,52 +116,49 @@ export class MainLayout {
   // Pour rétrocompatibilité
   public readonly isSidebarOpen = this.isMenuOpen;
 
-  // Menu de navigation principal Transimex avec contrôle d'accès RBAC
+  // Le menu suit les permissions effectives; il ne constitue pas la barrière d’accès serveur.
   private readonly allMenuItems: NavOption[] = [
     {
       id: 'dashboard',
       label: 'Tableau de bord',
       route: '/dashboard',
       icon: 'dashboard',
-      allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
+      permissionKey: 'dashboard.view',
     },
     {
       id: 'caisse',
       label: 'Caisse',
       route: '/caisse',
       icon: 'point_of_sale',
-      allowedRoles: ['admin', 'caissiere', 'comptable', 'tresorier', 'manager'],
+      permissionKey: 'cashier.read',
     },
     {
       id: 'personnel',
       label: 'Personnel & RH',
       route: '/personnel',
       icon: 'badge',
-      allowedRoles: ['admin'],
+      permissionKey: 'hr.read',
     },
     {
-      id: 'administration',
-      label: 'Paramètres Système',
-      route: '/administration',
+      id: 'access-control',
+      label: 'Gestion des accès',
+      route: '/admin/access-control',
       icon: 'admin_panel_settings',
-      allowedRoles: ['admin'],
+      permissionKey: 'access.roles.read',
     },
     {
       id: 'configuration',
       label: 'Configuration',
       route: '/configuration',
       icon: 'settings',
-      allowedRoles: ['admin', 'manager', 'caissiere', 'employe', 'tresorier', 'comptable'],
+      permissionKey: 'configuration.read',
     },
   ];
 
   public readonly visibleMenuItems = computed<NavOption[]>(() => {
     const user = this.currentUser();
     if (!user) return [];
-    return this.allMenuItems.filter((item) =>
-      item.allowedRoles.includes(user.role) ||
-      (user.role === 'tresorier' && item.allowedRoles.includes('manager'))
-    );
+    return this.allMenuItems.filter((item) => this.accessControl.hasPermission(item.permissionKey));
   });
 
   public roleLabel(role: UserRole | undefined): string {

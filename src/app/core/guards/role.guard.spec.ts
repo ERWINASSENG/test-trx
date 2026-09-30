@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
 import { roleGuard } from './role.guard';
 import { AuthService } from '../services/auth.service';
+import { AccessControlService } from '../services/access-control.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
@@ -11,6 +12,10 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
   };
   let routerMock: {
     createUrlTree: ReturnType<typeof vi.fn>;
+  };
+  let accessControlMock: {
+    loadMyPermissions: ReturnType<typeof vi.fn>;
+    hasPermission: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -26,16 +31,21 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
         toString: () => '/dashboard?unauthorized=1',
       } as unknown as UrlTree)),
     };
+    accessControlMock = {
+      loadMyPermissions: vi.fn().mockResolvedValue(undefined),
+      hasPermission: vi.fn().mockReturnValue(false),
+    };
 
     TestBed.configureTestingModule({
       providers: [
         { provide: AuthService, useValue: authServiceMock },
         { provide: Router, useValue: routerMock },
+        { provide: AccessControlService, useValue: accessControlMock },
       ],
     });
   });
 
-  it('devrait autoriser l’accès si aucun rôle spécifique n’est exigé dans data.roles', async () => {
+  it('devrait autoriser l’accès si aucune permission spécifique n’est exigée', async () => {
     const routeSnapshot = {
       data: {},
     } as unknown as ActivatedRouteSnapshot;
@@ -50,15 +60,16 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     expect(result).toBe(true);
   });
 
-  it('devrait autoriser l’accès si l’utilisateur a le rôle admin (cas nominal)', async () => {
+  it('devrait autoriser l’accès si la permission serveur est accordée', async () => {
     authServiceMock.currentUser.mockReturnValue({
       id: 'admin-1',
       email: 'admin@transmex.cm',
       role: 'admin',
     });
 
+    accessControlMock.hasPermission.mockReturnValue(true);
     const routeSnapshot = {
-      data: { roles: ['admin'] },
+      data: { permission: 'access.roles.read' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;
@@ -71,15 +82,16 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     expect(result).toBe(true);
   });
 
-  it('devrait autoriser le rôle trésorier sur une route réservée aux managers', async () => {
+  it('devrait charger les permissions avant de décider', async () => {
     authServiceMock.currentUser.mockReturnValue({
       id: 'tresorier-1',
       email: 'tresorier@transmex.cm',
       role: 'tresorier',
     });
 
+    accessControlMock.hasPermission.mockReturnValue(true);
     const routeSnapshot = {
-      data: { roles: ['manager'] },
+      data: { permission: 'journals.read' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;
@@ -92,7 +104,7 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     expect(result).toBe(true);
   });
 
-  it('devrait bloquer et rediriger vers /dashboard si l’utilisateur a le rôle employé ou opérateur', async () => {
+  it('devrait bloquer et rediriger vers /forbidden sans permission', async () => {
     authServiceMock.currentUser.mockReturnValue({
       id: 'user-2',
       email: 'operateur@transmex.cm',
@@ -100,7 +112,7 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     });
 
     const routeSnapshot = {
-      data: { roles: ['admin'] },
+      data: { permission: 'access.roles.read' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;
@@ -110,17 +122,17 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     );
 
     expect(authServiceMock.waitForSession).toHaveBeenCalled();
-    expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/dashboard'], {
-      queryParams: { unauthorized: '1' },
+    expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/forbidden'], {
+      queryParams: { permission: 'access.roles.read' },
     });
     expect(result).not.toBe(true);
   });
 
-  it('devrait bloquer et rediriger vers /dashboard si aucun utilisateur n’est connecté', async () => {
+  it('devrait bloquer et rediriger si aucune session n’est connectée', async () => {
     authServiceMock.currentUser.mockReturnValue(null);
 
     const routeSnapshot = {
-      data: { roles: ['admin'] },
+      data: { permission: 'access.roles.read' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;
@@ -130,8 +142,8 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     );
 
     expect(authServiceMock.waitForSession).toHaveBeenCalled();
-    expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/dashboard'], {
-      queryParams: { unauthorized: '1' },
+    expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/forbidden'], {
+      queryParams: { permission: 'access.roles.read' },
     });
     expect(result).not.toBe(true);
   });

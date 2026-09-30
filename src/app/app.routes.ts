@@ -40,33 +40,57 @@ export const routes: Routes = [
         path: 'apps',
         loadComponent: () =>
           import('./features/app-launcher/app-launcher').then((m) => m.AppLauncher),
+        canActivate: [roleGuard],
+        data: { permission: 'apps.view' },
         title: 'Transmex - Applications',
       },
       {
         path: 'dashboard',
         loadComponent: () =>
           import('./features/dashboard/dashboard').then((m) => m.Dashboard),
+        canActivate: [roleGuard],
+        data: { permission: 'dashboard.view' },
         title: 'Transmex - Tableau de Bord',
       },
       {
         path: 'admin/users',
         loadComponent: () =>
-          import('./features/admin/users/users-management').then(
-            (m) => m.UsersManagement
+          import('./features/admin/access-control/access-control').then(
+            (m) => m.AccessControlCenter
           ),
         canActivate: [roleGuard],
-        data: { roles: ['admin'] },
-        title: 'Transmex - Administration & Rôles',
+        data: { permission: 'access.users.read' },
+        title: 'Transmex - Gestion des accès',
       },
       {
         path: 'admin/view',
         loadComponent: () =>
-          import('./features/admin/users/users-management').then(
-            (m) => m.UsersManagement
+          import('./features/admin/access-control/access-control').then(
+            (m) => m.AccessControlCenter
           ),
         canActivate: [roleGuard],
-        data: { roles: ['admin'] },
-        title: 'Transmex - Administration',
+        data: { permission: 'access.roles.read' },
+        title: 'Transmex - Gestion des accès',
+      },
+      {
+        path: 'admin/access-control',
+        loadComponent: () =>
+          import('./features/admin/access-control/access-control').then(
+            (m) => m.AccessControlCenter
+          ),
+        canActivate: [roleGuard],
+        data: { permission: 'access.roles.read' },
+        title: 'Transmex - Gestion des accès',
+      },
+      {
+        path: 'admin/access-control',
+        loadComponent: () =>
+          import('./features/admin/access-control/access-control').then(
+            (m) => m.AccessControlCenter
+          ),
+        canActivate: [roleGuard],
+        data: { permission: 'access.roles.read' },
+        title: 'Transmex - Gestion des accès',
       },
       {
         path: 'admin',
@@ -83,7 +107,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/hr/hr-management').then((m) => m.HrManagement),
         canActivate: [roleGuard],
-        data: { roles: ['admin'] },
+        data: { permission: 'hr.read' },
         title: 'Transmex - Ressources Humaines',
       },
       {
@@ -98,7 +122,7 @@ export const routes: Routes = [
             (m) => m.CashierManagement
           ),
         canActivate: [roleGuard],
-        data: { roles: ['admin', 'manager', 'caissiere', 'comptable', 'tresorier'] },
+        data: { permission: 'cashier.read' },
         title: 'Transmex - Caisse',
       },
       {
@@ -112,6 +136,8 @@ export const routes: Routes = [
           import('./features/configuration/parametres/configuration-parametres').then(
             (m) => m.ConfigurationParametresComponent
           ),
+        canActivate: [roleGuard],
+        data: { permission: 'configuration.read' },
         title: 'Transmex - Paramètres',
       },
       {
@@ -121,7 +147,7 @@ export const routes: Routes = [
             (m) => m.ConfigurationJournalComponent
           ),
         canActivate: [roleGuard],
-        data: { roles: ['admin', 'tresorier', 'manager'] },
+        data: { permission: 'journals.read' },
         title: 'Transmex - Journaux',
       },
       {
@@ -133,6 +159,8 @@ export const routes: Routes = [
         path: 'profile',
         loadComponent: () =>
           import('./features/profile/profile').then((m) => m.Profile),
+        canActivate: [roleGuard],
+        data: { permission: 'profile.read' },
         title: 'Transmex - Mon Profil & Sécurité',
       },
     ],

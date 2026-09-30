@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { MainLayout } from './main-layout';
 import { AuthService } from '../../core/services/auth.service';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { CashierService } from '../../core/services/cashier.service';
 import { Journal } from '../../core/models/journal.model';
 import { JournalService } from '../../core/services/journal.service';
@@ -29,11 +30,27 @@ describe('MainLayout Component', () => {
 
   let currentUser = signal<UserProfile | null>(mockUser);
   let currentRole = signal<UserRole>(mockUser.role);
+  let effectivePermissions = signal([
+    { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+  ]);
 
   beforeEach(() => {
     logoutCalled = false;
     currentUser = signal<UserProfile | null>(mockUser);
     currentRole = signal<UserRole>(mockUser.role);
+    effectivePermissions = signal([
+      { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    ]);
     TestBed.configureTestingModule({
       imports: [MainLayout],
       providers: [
@@ -60,6 +77,19 @@ describe('MainLayout Component', () => {
           provide: SupabaseService,
           useValue: { isConfigured: () => false, supabase: null },
         },
+        {
+          provide: AccessControlService,
+          useValue: {
+            effectivePermissions,
+            hasPermission: (permission: string) => {
+              if (permission === 'cashier.create') return currentRole() === 'admin' || currentRole() === 'caissiere';
+              return effectivePermissions().some((item) => item.permissionKey === permission && item.effect === 'allow');
+            },
+            hasPermissionForResource: (_permission: string, resource: { ownerUserId?: string }) =>
+              resource.ownerUserId === currentUser()?.id,
+            loadMyPermissions: vi.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     });
 
@@ -77,7 +107,7 @@ describe('MainLayout Component', () => {
     const items = component.visibleMenuItems();
     expect(items.length).toBeGreaterThan(0);
     expect(items.some((i) => i.route === '/dashboard')).toBe(true);
-    expect(items.some((i) => i.route === '/administration')).toBe(true);
+    expect(items.some((i) => i.route === '/admin/access-control')).toBe(true);
     expect(items.some((i) => i.route === '/configuration')).toBe(true);
   });
 

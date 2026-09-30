@@ -10,8 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
-import { UserRole } from './app/core/models/auth.model';
-import { getSupabaseAdmin, requireAdmin, requireAuth, requireRole } from './server/auth';
+import { getSupabaseAdmin, requireAuth } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { formatPersistedPieceComptable, normalizeDateToDay } from './server/cashier.utils';
 import { updateCurrentUserProfileHandler } from './server/profile';
@@ -32,6 +31,24 @@ import {
   getJournalEntriesHandler,
   updateJournalEntryHandler,
 } from './server/journal-entries';
+import {
+  assignAccessRoleHandler,
+  createAccessRoleHandler,
+  deleteAccessRoleHandler,
+  getMyAccessPermissionsHandler,
+  getRolePermissionsHandler,
+  getUserAccessHandler,
+  listAccessUsersHandler,
+  listAccessAuditHandler,
+  listAccessPermissionsHandler,
+  listAccessRolesHandler,
+  replaceRolePermissionsHandler,
+  revokeAccessRoleHandler,
+  revokeUserPermissionOverrideHandler,
+  setUserPermissionOverrideHandler,
+  updateAccessRoleHandler,
+} from './server/access-control.handlers';
+import { requirePermission, resolveJournalOwnerContext } from './server/access-control';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -149,7 +166,7 @@ app.get('/api/config', getSupabaseConfigHandler);
 const collaboratorCollectionAliases = ['/api/system/collaborators', '/api/admin/users'];
 
 collaboratorCollectionAliases.forEach((path) => {
-  app.get(path, requireAdmin, getCollaboratorsHandler);
+  app.get(path, requireAuth, requirePermission('users.read'), getCollaboratorsHandler);
 });
 
 /**
@@ -205,23 +222,23 @@ app.post('/api/auth/sync-role', requireAuth, async (req: express.Request, res: e
 });
 
 collaboratorCollectionAliases.forEach((path) => {
-  app.post(path, requireAdmin, createCollaboratorHandler);
+  app.post(path, requireAuth, requirePermission('users.create'), createCollaboratorHandler);
 });
 
 /**
  * Modification d'un compte collaborateur (synchronisation auth.app_metadata + public.profiles)
  */
-app.patch('/api/profile/me', requireAuth, updateCurrentUserProfileHandler);
+app.patch('/api/profile/me', requireAuth, requirePermission('profile.update'), updateCurrentUserProfileHandler);
 
 collaboratorCollectionAliases.forEach((path) => {
-  app.patch(`${path}/:id`, requireAdmin, updateCollaboratorHandler);
+  app.patch(`${path}/:id`, requireAuth, requirePermission('users.update'), updateCollaboratorHandler);
 });
 
 /**
  * Suppression d'un compte collaborateur (auth.users + public.profiles).
  */
 collaboratorCollectionAliases.forEach((path) => {
-  app.delete(`${path}/:id`, requireAdmin, deleteCollaboratorHandler);
+  app.delete(`${path}/:id`, requireAuth, requirePermission('users.delete'), deleteCollaboratorHandler);
 });
 
 /**
@@ -1016,36 +1033,30 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
   }
 };
 
-// Déclaration des routes de caisse sécurisées par RBAC strict (lecture réservée aux rôles financiers et encadrement)
-const cashierReadRoles: UserRole[] = ['admin', 'manager', 'caissiere', 'comptable', 'tresorier'];
-const cashierWriteRoles: UserRole[] = ['admin', 'caissiere'];
-const cashierDeleteRoles: UserRole[] = ['admin', 'caissiere'];
+// Caisse native : chaque route exige une permission du catalogue serveur.
 const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transactions'];
 
 cashierOperationAliases.forEach((path) => {
-  app.get(path, requireAuth, requireRole(cashierReadRoles), getOperationsHandler);
-});
-
-// Actions en masse (Duplication & Changement de statut)
-cashierOperationAliases.forEach((path) => {
-  app.post(`${path}/duplicate`, requireAuth, requireRole(cashierWriteRoles), duplicateOperationsHandler);
-  app.patch(`${path}/status`, requireAuth, requireRole(cashierWriteRoles), updateOperationsStatusHandler);
-});
-
-// Écriture dans la caisse native : réservée aux Administrateurs et Caissières
-cashierOperationAliases.forEach((path) => {
-  app.post(path, requireAuth, requireRole(cashierWriteRoles), saveOperationHandler);
+  app.get(path, requireAuth, requirePermission('cashier.read'), getOperationsHandler);
 });
 
 cashierOperationAliases.forEach((path) => {
-  app.put(`${path}/:id`, requireAuth, requireRole(cashierWriteRoles), updateOperationHandler);
-  app.patch(`${path}/:id`, requireAuth, requireRole(cashierWriteRoles), updateOperationHandler);
+  app.post(`${path}/duplicate`, requireAuth, requirePermission('cashier.duplicate'), duplicateOperationsHandler);
+  app.patch(`${path}/status`, requireAuth, requirePermission('cashier.status_update'), updateOperationsStatusHandler);
 });
 
-// Suppression dans la caisse native : réservée aux Administrateurs et Caissières
 cashierOperationAliases.forEach((path) => {
-  app.delete(`${path}/:id`, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);
-  app.delete(path, requireAuth, requireRole(cashierDeleteRoles), deleteOperationsHandler);
+  app.post(path, requireAuth, requirePermission('cashier.create'), saveOperationHandler);
+});
+
+cashierOperationAliases.forEach((path) => {
+  app.put(`${path}/:id`, requireAuth, requirePermission('cashier.update'), updateOperationHandler);
+  app.patch(`${path}/:id`, requireAuth, requirePermission('cashier.update'), updateOperationHandler);
+});
+
+cashierOperationAliases.forEach((path) => {
+  app.delete(`${path}/:id`, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
+  app.delete(path, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
 });
 
 /**
@@ -1055,14 +1066,11 @@ cashierOperationAliases.forEach((path) => {
  * Consultation : admin, tresorier, manager (lecture seule pour manager)
  * Création et suppression : strictement réservées à admin et tresorier
  */
-const journalViewRoles: UserRole[] = ['admin', 'tresorier', 'manager'];
-const journalManageRoles: UserRole[] = ['admin', 'tresorier'];
-
-app.get('/api/journals', requireAuth, requireRole(journalViewRoles), getJournalsHandler);
-app.post('/api/journals', requireAuth, requireRole(journalManageRoles), createJournalHandler);
-app.put('/api/journals/:id', requireAuth, requireRole(journalManageRoles), updateJournalHandler);
-app.patch('/api/journals/:id', requireAuth, requireRole(journalManageRoles), updateJournalHandler);
-app.delete('/api/journals/:id', requireAuth, requireRole(journalManageRoles), deleteJournalHandler);
+app.get('/api/journals', requireAuth, requirePermission('journals.read'), getJournalsHandler);
+app.post('/api/journals', requireAuth, requirePermission('journals.create'), createJournalHandler);
+app.put('/api/journals/:id', requireAuth, requirePermission('journals.update', resolveJournalOwnerContext), updateJournalHandler);
+app.patch('/api/journals/:id', requireAuth, requirePermission('journals.update', resolveJournalOwnerContext), updateJournalHandler);
+app.delete('/api/journals/:id', requireAuth, requirePermission('journals.delete', resolveJournalOwnerContext), deleteJournalHandler);
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -1072,15 +1080,29 @@ app.delete('/api/journals/:id', requireAuth, requireRole(journalManageRoles), de
  * Consultation : admin, tresorier, manager, comptable (manager = lecture seule)
  * Saisie et suppression : strictement réservées à admin et tresorier
  */
-const journalEntriesViewRoles: UserRole[] = ['admin', 'tresorier', 'manager', 'comptable'];
-const journalEntriesWriteRoles: UserRole[] = ['admin', 'tresorier'];
+app.get('/api/journals/:journalId/entries', requireAuth, requirePermission('journal_entries.read'), getJournalEntriesHandler);
+app.get('/api/journals/:journalId/chart-data', requireAuth, requirePermission('journal_entries.chart_read'), getJournalChartDataHandler);
+app.post('/api/journals/:journalId/entries', requireAuth, requirePermission('journal_entries.create', resolveJournalOwnerContext), createJournalEntryHandler);
+app.put('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
+app.patch('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
+app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.delete', resolveJournalOwnerContext), deleteJournalEntryHandler);
 
-app.get('/api/journals/:journalId/entries', requireAuth, requireRole(journalEntriesViewRoles), getJournalEntriesHandler);
-app.get('/api/journals/:journalId/chart-data', requireAuth, requireRole(journalEntriesViewRoles), getJournalChartDataHandler);
-app.post('/api/journals/:journalId/entries', requireAuth, requireRole(journalEntriesWriteRoles), createJournalEntryHandler);
-app.put('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), updateJournalEntryHandler);
-app.patch('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), updateJournalEntryHandler);
-app.delete('/api/journals/:journalId/entries/:id', requireAuth, requireRole(journalEntriesWriteRoles), deleteJournalEntryHandler);
+// Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
+app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);
+app.get('/api/access-control/roles', requireAuth, requirePermission('access.roles.read'), listAccessRolesHandler);
+app.post('/api/access-control/roles', requireAuth, requirePermission('access.roles.manage'), createAccessRoleHandler);
+app.patch('/api/access-control/roles/:roleId', requireAuth, requirePermission('access.roles.manage'), updateAccessRoleHandler);
+app.delete('/api/access-control/roles/:roleId', requireAuth, requirePermission('access.roles.manage'), deleteAccessRoleHandler);
+app.get('/api/access-control/permissions', requireAuth, requirePermission('access.permissions.read'), listAccessPermissionsHandler);
+app.get('/api/access-control/roles/:roleId/permissions', requireAuth, requirePermission('access.roles.read'), getRolePermissionsHandler);
+app.put('/api/access-control/roles/:roleId/permissions', requireAuth, requirePermission('access.permissions.assign'), replaceRolePermissionsHandler);
+app.get('/api/access-control/users', requireAuth, requirePermission('access.users.read'), listAccessUsersHandler);
+app.get('/api/access-control/users/:userId', requireAuth, requirePermission('access.users.read'), getUserAccessHandler);
+app.post('/api/access-control/users/:userId/roles', requireAuth, requirePermission('access.users.assign_roles'), assignAccessRoleHandler);
+app.delete('/api/access-control/users/:userId/roles/:roleId', requireAuth, requirePermission('access.users.assign_roles'), revokeAccessRoleHandler);
+app.put('/api/access-control/users/:userId/overrides', requireAuth, requirePermission('access.users.override'), setUserPermissionOverrideHandler);
+app.delete('/api/access-control/users/:userId/overrides/:overrideId', requireAuth, requirePermission('access.users.override'), revokeUserPermissionOverrideHandler);
+app.get('/api/access-control/audit', requireAuth, requirePermission('access.audit.read'), listAccessAuditHandler);
 
 /**
  * Example Express Rest API endpoints can be defined here.
