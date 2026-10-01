@@ -2,6 +2,7 @@ import express from 'express';
 import { UserRole } from '../app/core/models/auth.model';
 import { normalizeUserRole } from '../app/core/utils/role.utils';
 import { getSupabaseAdmin } from './auth';
+import { syncUserAccessRole } from './access-role-sync';
 
 export const createCollaboratorHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const {
@@ -113,6 +114,8 @@ export const createCollaboratorHandler = async (req: express.Request, res: expre
       });
       return;
     }
+
+    await syncUserAccessRole(adminClient, authUserId, computedRole, authUserId, 'legacy_profile');
 
     res.status(201).json({
       user: {

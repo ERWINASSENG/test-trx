@@ -1,6 +1,7 @@
 import express from 'express';
 import { normalizeUserRole } from '../app/core/utils/role.utils';
 import { getSupabaseAdmin } from './auth';
+import { syncUserAccessRole } from './access-role-sync';
 
 export const updateCollaboratorHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const rawUserId = req.params['id'];
@@ -11,6 +12,7 @@ export const updateCollaboratorHandler = async (req: express.Request, res: expre
   }
 
   const { firstName, lastName, role, department, phone, isActive } = req.body;
+  const normalizedRole = role !== undefined ? normalizeUserRole(role) : undefined;
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY non configurée' });
@@ -29,7 +31,7 @@ export const updateCollaboratorHandler = async (req: express.Request, res: expre
     if (userEmail) profileUpdates['email'] = userEmail;
     if (firstName !== undefined) profileUpdates['first_name'] = firstName;
     if (lastName !== undefined) profileUpdates['last_name'] = lastName;
-    if (role !== undefined) profileUpdates['role'] = normalizeUserRole(role);
+    if (normalizedRole !== undefined) profileUpdates['role'] = normalizedRole;
     if (department !== undefined) profileUpdates['department'] = department;
     if (phone !== undefined) profileUpdates['phone'] = phone;
     if (isActive !== undefined) profileUpdates['is_active'] = isActive;
@@ -45,7 +47,7 @@ export const updateCollaboratorHandler = async (req: express.Request, res: expre
     }
 
     const authUpdates: Record<string, unknown> = {};
-    if (role !== undefined) authUpdates['app_metadata'] = { role: normalizeUserRole(role) };
+    if (normalizedRole !== undefined) authUpdates['app_metadata'] = { role: normalizedRole };
     if (firstName !== undefined || lastName !== undefined) {
       authUpdates['user_metadata'] = {
         first_name: firstName,
@@ -60,6 +62,10 @@ export const updateCollaboratorHandler = async (req: express.Request, res: expre
         res.status(500).json({ error: 'Impossible de synchroniser les autorisations du collaborateur.' });
         return;
       }
+    }
+
+    if (normalizedRole !== undefined) {
+      await syncUserAccessRole(adminClient, userId, normalizedRole, userId, 'legacy_profile');
     }
 
     res.json({ success: true, message: 'Collaborateur mis à jour avec succès' });

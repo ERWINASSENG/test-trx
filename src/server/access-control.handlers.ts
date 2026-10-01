@@ -1,6 +1,7 @@
 import express from 'express';
 import { isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
 import { getSupabaseAdmin } from './auth';
+import { isCanonicalAccessRoleKey, syncUserAccessRole } from './access-role-sync';
 
 const actorIdFromRequest = (req: express.Request): string | null => {
   const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
@@ -359,29 +360,57 @@ export const replaceRolePermissionsHandler = (req: express.Request, res: express
   });
 };
 
-export const assignAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> => {
-  const userId = req.params['userId'];
+export const assignAccessRoleHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const rawUserId = req.params['userId'];
+  const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
   const roleId = req.body?.roleId;
   const adminClient = getSupabaseAdmin();
 
   if (!userId || typeof roleId !== 'string' || !roleId) {
     res.status(400).json({ error: 'Utilisateur et rôle sont obligatoires.' });
-    return Promise.resolve();
+    return;
   }
 
-  return runAccessMutation(
+  if (!adminClient) {
+    res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
+    return;
+  }
+
+  const { data: role, error: roleError } = await adminClient
+    .from('access_roles')
+    .select('role_key')
+    .eq('id', roleId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (roleError || !role || !isCanonicalAccessRoleKey(role.role_key)) {
+    res.status(400).json({ error: 'Ce rôle ne peut pas être synchronisé avec le profil legacy.' });
+    return;
+  }
+
+  await runAccessMutation(
     req,
     res,
     'user.role.assign',
     { userId, roleId, expiresAt: req.body?.expiresAt },
-    async () => {
-      if (!adminClient) throw new Error('Service Supabase indisponible.');
-      const { error } = await adminClient
-        .from('access_user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .neq('role_id', roleId);
-      if (error) throw error;
+    async (data) => {
+      const roleKey = (data as { roleKey?: unknown } | null)?.roleKey;
+      if (typeof roleKey !== 'string') throw new Error('La réponse de la mutation ne contient pas de rôle valide.');
+
+      const actorUserId = actorIdFromRequest(req);
+      await syncUserAccessRole(adminClient, userId, roleKey, actorUserId, 'admin');
+
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .update({ role: roleKey, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (profileError) throw profileError;
+
+      const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
+      if (authReadError) throw authReadError;
+      const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, {
+        app_metadata: { ...(authUser.user?.app_metadata || {}), role: roleKey },
+      });
+      if (authUpdateError) throw authUpdateError;
     }
   );
 };
