@@ -1,37 +1,6 @@
 import express from 'express';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { formatPersistedPieceComptable, normalizeDateToDay } from './cashier.utils';
+import { formatPersistedPieceComptable } from './cashier.utils';
 import { getSupabaseAdmin } from './auth';
-
-let datesMigrationPromise: Promise<void> | null = null;
-
-async function ensureCashierDatesMigrated(adminClient: SupabaseClient): Promise<void> {
-  if (!datesMigrationPromise) {
-    datesMigrationPromise = (async () => {
-      try {
-        const { data: slashRows, error } = await adminClient
-          .from('cashier_transactions')
-          .select('id, date')
-          .like('date', '%/%')
-          .limit(2000);
-
-        if (error || !slashRows || slashRows.length === 0) return;
-
-        console.log(`[MIGRATION DATES] Détection de ${slashRows.length} opération(s) au format DD/MM/YYYY. Normalisation en cours vers YYYY-MM-DD...`);
-        for (const row of slashRows) {
-          const normalized = normalizeDateToDay(row.date);
-          if (normalized && normalized !== row.date) {
-            await adminClient.from('cashier_transactions').update({ date: normalized }).eq('id', row.id);
-          }
-        }
-        console.log(`[MIGRATION DATES] Migration terminée avec succès : ${slashRows.length} opération(s) converties en ISO YYYY-MM-DD.`);
-      } catch (migrationError) {
-        console.warn('[MIGRATION DATES] Erreur lors de la normalisation des dates en ISO:', migrationError);
-      }
-    })();
-  }
-  return datesMigrationPromise;
-}
 
 export const getOperationsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
@@ -43,8 +12,6 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
   }
 
   try {
-    await ensureCashierDatesMigrated(adminClient);
-
     const rawLimit = req.query['limit'];
     const rawOffset = req.query['offset'];
     // Nombre minimum de lignes par page : 80 strict (plafond de sécurité à 1000)

@@ -137,7 +137,6 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
   const effectiveCategory: 'entree' | 'sortie' = category === 'entree' ? 'entree' : 'sortie';
   const signedMontant = effectiveCategory === 'sortie' ? -Math.abs(rawMontant) : Math.abs(rawMontant);
   const entryDate = date && typeof date === 'string' ? String(date).split('T')[0] : new Date().toISOString().split('T')[0];
-  const year = entryDate.split('-')[0] || new Date().getFullYear().toString();
 
   try {
     // 1. Récupération du préfixe de séquence du journal
@@ -157,28 +156,11 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
       return;
     }
 
-    const sequencePrefix = (journalRow.sequence_prefix || 'JRNL').toUpperCase();
-
-    // 2. Calcul du numéro de séquence au sein du journal avec gestion des conflits
-    const { data: maxRow } = await adminClient
-      .from('journal_entries')
-      .select('sequence_number')
-      .eq('journal_id', journalId)
-      .order('sequence_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextSeq = maxRow?.sequence_number ? Number(maxRow.sequence_number) + 1 : 1;
-    const paddedSeq = String(nextSeq).padStart(5, '0');
-    const pieceComptable = `${sequencePrefix}/${year}/${paddedSeq}`;
-
-    // 3. Insertion en base de données avec contrôle d'intégrité
+    // PostgreSQL attribue sequence_number et piece_comptable via le trigger atomique.
     const { data: inserted, error: insertError } = await adminClient
       .from('journal_entries')
       .insert({
         journal_id: journalId,
-        sequence_number: nextSeq,
-        piece_comptable: pieceComptable,
         date: entryDate,
         libelle: libelle.trim(),
         service: service ? String(service).trim() : '',
@@ -197,10 +179,9 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
 
     if (insertError || !inserted) {
       console.error('[JOURNAL_ENTRIES] Échec de persistance de l’écriture comptable:', insertError?.message);
-      // Code 23505 = violation d'unicité (doublon de pièce comptable)
       if (insertError?.code === '23505') {
         res.status(409).json({
-          error: `Un enregistrement avec la pièce comptable ${pieceComptable} existe déjà dans ce journal. Veuillez réessayer.`,
+          error: 'Une écriture équivalente existe déjà dans ce journal. Veuillez réessayer.',
         });
         return;
       }

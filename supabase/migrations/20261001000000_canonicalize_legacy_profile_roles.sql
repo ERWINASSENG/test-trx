@@ -34,4 +34,19 @@ JOIN public.access_roles r ON r.role_key = p.role::text
 WHERE p.is_active IS TRUE
   AND r.is_active IS TRUE;
 
+-- Réduire la lecture directe des profils : les écrans d’administration passent
+-- par les endpoints serveur protégés par access.users.read.
+DROP POLICY IF EXISTS profiles_select_policy ON public.profiles;
+CREATE POLICY profiles_select_policy ON public.profiles
+  FOR SELECT TO authenticated
+  USING (
+    id = (SELECT auth.uid())
+    OR (public.is_active_user() AND public.is_admin())
+  );
+
+-- Ces fonctions sont appelées par des triggers et ne sont pas des RPC publiques.
+REVOKE ALL ON FUNCTION public.assign_piece_comptable() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.assign_journal_entry_piece_comptable() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
+
 COMMIT;
