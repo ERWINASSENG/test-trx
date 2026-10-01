@@ -53,6 +53,14 @@ export const routes: Routes = [
         title: 'Transmex - Tableau de Bord',
       },
       {
+        path: 'prospects',
+        loadComponent: () =>
+          import('./features/prospects/prospects').then((m) => m.ProspectsComponent),
+        canActivate: [roleGuard],
+        data: { permission: 'prospects.read' },
+        title: 'Transmex - Prospects',
+      },
+      {
         path: 'admin/users',
         loadComponent: () =>
           import('./features/admin/access-control/access-control').then(

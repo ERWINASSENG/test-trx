@@ -39,6 +39,15 @@ export const APP_MODULES: readonly AppModule[] = [
     permissionKey: 'hr.read',
   },
   {
+    id: 'prospects',
+    label: 'Prospects',
+    description: 'Suivi des contacts et opportunités commerciales',
+    route: '/prospects',
+    icon: '/assets/module-icons/prospects.svg',
+    accent: '#0b5ed7',
+    permissionKey: 'prospects.read',
+  },
+  {
     id: 'administration',
     label: 'Paramètres',
     description: 'Utilisateurs, rôles et configuration',

@@ -19,6 +19,13 @@ import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
 import { getOperationsHandler } from './server/cashier.read';
 import {
+  createProspectHandler,
+  deleteProspectHandler,
+  listProspectAssigneesHandler,
+  listProspectsHandler,
+  updateProspectHandler,
+} from './server/prospects';
+import {
   createJournalHandler,
   deleteJournalHandler,
   getJournalsHandler,
@@ -150,6 +157,7 @@ app.use(
     '/api/cahier/operations',
     '/api/cashier/transactions',
     '/api/system/operations',
+    '/api/prospects',
   ],
   (req, res, next): void => {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
@@ -1086,6 +1094,13 @@ app.post('/api/journals/:journalId/entries', requireAuth, requirePermission('jou
 app.put('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
 app.patch('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
 app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.delete', resolveJournalOwnerContext), deleteJournalEntryHandler);
+
+// Module Prospects : contrôles serveur dédiés à chaque capacité.
+app.get('/api/prospects/assignees', requireAuth, requirePermission('prospects.read'), listProspectAssigneesHandler);
+app.get('/api/prospects', requireAuth, requirePermission('prospects.read'), listProspectsHandler);
+app.post('/api/prospects', requireAuth, requirePermission('prospects.create'), createProspectHandler);
+app.patch('/api/prospects/:id', requireAuth, requirePermission('prospects.update'), updateProspectHandler);
+app.delete('/api/prospects/:id', requireAuth, requirePermission('prospects.delete'), deleteProspectHandler);
 
 // Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
 app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);

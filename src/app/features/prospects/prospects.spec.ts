@@ -1,0 +1,102 @@
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AccessControlService } from '../../core/services/access-control.service';
+import { ProspectService } from '../../core/services/prospect.service';
+import { ProspectsComponent } from './prospects';
+
+const prospect = {
+  id: 'a1b2c3d4-e5f6-4789-8123-456789abcdef',
+  name: 'Prospect Démo',
+  companyName: 'Société Démo',
+  contactName: 'Amina Test',
+  email: 'amina@example.com',
+  phone: null,
+  source: 'Recommandation',
+  status: 'new' as const,
+  assignedTo: null,
+  estimatedValue: 50000,
+  currency: 'XAF',
+  nextFollowUp: null,
+  notes: '',
+  createdBy: 'user-1',
+  createdAt: '2026-10-01T00:00:00.000Z',
+  updatedAt: '2026-10-01T00:00:00.000Z',
+};
+
+describe('ProspectsComponent', () => {
+  const mockProspectService = {
+    prospects: signal<typeof prospect[]>([]),
+    assignees: signal([]),
+    total: signal(0),
+    isLoading: signal(false),
+    error: signal<string | null>(null),
+    loadProspects: vi.fn().mockResolvedValue(true),
+    loadAssignees: vi.fn().mockResolvedValue(true),
+    createProspect: vi.fn().mockResolvedValue({ success: true, data: prospect }),
+    updateProspect: vi.fn().mockResolvedValue({ success: true, data: prospect }),
+    deleteProspect: vi.fn().mockResolvedValue({ success: true, data: { deleted: true } }),
+  };
+  const mockAccessControl = { hasPermission: vi.fn().mockReturnValue(true) };
+
+  beforeEach(() => vi.clearAllMocks());
+
+  function createComponent() {
+    TestBed.configureTestingModule({
+      imports: [ProspectsComponent],
+      providers: [
+        { provide: ProspectService, useValue: mockProspectService },
+        { provide: AccessControlService, useValue: mockAccessControl },
+      ],
+    });
+    const fixture = TestBed.createComponent(ProspectsComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('charge la première page et les responsables actifs', () => {
+    const fixture = createComponent();
+    expect(fixture.componentInstance).toBeTruthy();
+    expect(mockProspectService.loadProspects).toHaveBeenCalled();
+    expect(mockProspectService.loadAssignees).toHaveBeenCalled();
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('n’envoie pas un formulaire invalide au serveur', async () => {
+    const fixture = createComponent();
+    fixture.componentInstance.openCreate();
+    await fixture.componentInstance.saveProspect();
+    expect(mockProspectService.createProspect).not.toHaveBeenCalled();
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('crée un prospect validé via le service serveur et recharge la liste', async () => {
+    const fixture = createComponent();
+    const component = fixture.componentInstance;
+    component.openCreate();
+    component.form.patchValue({
+      name: 'Prospect Démo',
+      companyName: 'Société Démo',
+      contactName: 'Amina Test',
+      email: 'amina@example.com',
+      source: 'Recommandation',
+      status: 'new',
+      estimatedValue: 50000,
+      currency: 'XAF',
+    });
+
+    await component.saveProspect();
+
+    expect(mockProspectService.createProspect).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Prospect Démo',
+      email: 'amina@example.com',
+      estimatedValue: 50000,
+    }));
+    expect(mockProspectService.loadProspects).toHaveBeenCalledTimes(2);
+    expect(component.feedback()).toBe('Prospect créé.');
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+});

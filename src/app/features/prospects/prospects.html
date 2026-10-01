@@ -1,0 +1,182 @@
+<main class="prospects-page" aria-labelledby="prospects-title">
+  <header class="prospects-header">
+    <div>
+      <p class="prospects-eyebrow">Développement commercial</p>
+      <h1 id="prospects-title">Prospects</h1>
+    </div>
+    @if (canCreate()) {
+      <button type="button" class="primary-action" (click)="openCreate()">
+        <mat-icon>add</mat-icon><span>Nouveau prospect</span>
+      </button>
+    }
+  </header>
+
+  @if (feedback()) {
+    <p class="feedback" role="status">{{ feedback() }}</p>
+  }
+  @if (prospectService.error()) {
+    <p class="feedback feedback-error" role="alert">{{ prospectService.error() }}</p>
+  }
+
+  <section class="prospects-toolbar" aria-label="Recherche et filtres des prospects">
+    <form class="search-form" (submit)="$event.preventDefault(); applyFilters()">
+      <mat-icon aria-hidden="true">search</mat-icon>
+      <input
+        type="search"
+        aria-label="Rechercher un prospect"
+        placeholder="Nom, société, contact ou e-mail"
+        [value]="searchDraft()"
+        (input)="searchDraft.set($any($event.target).value)" />
+      <button type="submit" class="icon-action" aria-label="Lancer la recherche" title="Rechercher">
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+    </form>
+
+    <label class="status-filter">
+      <span>Étape</span>
+      <select aria-label="Filtrer par étape" [value]="statusFilter()" (change)="changeStatusFilter($any($event.target).value)">
+        <option value="">Toutes</option>
+        @for (status of statuses; track status.value) {
+          <option [value]="status.value">{{ status.label }}</option>
+        }
+      </select>
+    </label>
+
+    <div class="view-switch" role="group" aria-label="Vue des prospects">
+      <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
+        <mat-icon>view_list</mat-icon>
+      </button>
+      <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
+        <mat-icon>view_kanban</mat-icon>
+      </button>
+    </div>
+
+    <div class="pagination" aria-label="Pagination des prospects">
+      <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
+      <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+      <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+    </div>
+  </section>
+
+  @if (prospectService.isLoading()) {
+    <div class="loading-state" role="status"><mat-icon>progress_activity</mat-icon><span>Chargement des prospects…</span></div>
+  } @else if (view() === 'list') {
+    <div class="table-scroll">
+      <table class="prospects-table">
+        <thead>
+          <tr>
+            <th scope="col">Prospect</th>
+            <th scope="col">Contact</th>
+            <th scope="col">Étape</th>
+            <th scope="col">Source</th>
+            <th scope="col">Responsable</th>
+            <th scope="col">Valeur estimée</th>
+            <th scope="col">Prochaine relance</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (prospect of prospectService.prospects(); track prospect.id) {
+            <tr>
+              <td>
+                <strong>{{ prospect.name }}</strong>
+                @if (prospect.companyName) { <small>{{ prospect.companyName }}</small> }
+              </td>
+              <td>
+                <span>{{ prospect.contactName || '—' }}</span>
+                <small>{{ prospect.email || prospect.phone || 'Coordonnées non renseignées' }}</small>
+              </td>
+              <td><span class="status-pill" [class]="statusClass(prospect.status)">{{ statusLabel(prospect.status) }}</span></td>
+              <td>{{ prospect.source || '—' }}</td>
+              <td>{{ assigneeName(prospect.assignedTo) }}</td>
+              <td>{{ formatValue(prospect.estimatedValue, prospect.currency) }}</td>
+              <td>{{ prospect.nextFollowUp ? (prospect.nextFollowUp | date:'d MMM y') : '—' }}</td>
+              <td class="row-actions">
+                @if (canUpdate()) {
+                  <button type="button" class="icon-action" [attr.aria-label]="'Modifier ' + prospect.name" title="Modifier" (click)="openEdit(prospect)"><mat-icon>edit</mat-icon></button>
+                }
+                @if (canDelete()) {
+                  <button type="button" class="icon-action danger-action" [attr.aria-label]="'Supprimer ' + prospect.name" title="Supprimer" (click)="deleteProspect(prospect)"><mat-icon>delete_outline</mat-icon></button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td class="empty-state" colspan="8">Aucun prospect ne correspond aux critères.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <div class="kanban-board" aria-label="Prospects par étape">
+      @for (column of statusColumns(); track column.value) {
+        <section class="kanban-column" [attr.aria-label]="column.label">
+          <header><h2>{{ column.label }}</h2><span>{{ column.prospects.length }}</span></header>
+          @for (prospect of column.prospects; track prospect.id) {
+            <article class="prospect-card">
+              <div class="prospect-card-heading">
+                <h3>{{ prospect.name }}</h3>
+                @if (canUpdate()) {
+                  <button type="button" class="icon-action" [attr.aria-label]="'Modifier ' + prospect.name" title="Modifier" (click)="openEdit(prospect)"><mat-icon>edit</mat-icon></button>
+                }
+              </div>
+              @if (prospect.companyName) { <p class="company-name">{{ prospect.companyName }}</p> }
+              <p>{{ prospect.contactName || prospect.email || 'Contact non renseigné' }}</p>
+              <footer>
+                <span>{{ assigneeName(prospect.assignedTo) }}</span>
+                <strong>{{ formatValue(prospect.estimatedValue, prospect.currency) }}</strong>
+              </footer>
+            </article>
+          } @empty {
+            <p class="column-empty">Aucun prospect</p>
+          }
+        </section>
+      }
+    </div>
+  }
+
+  @if (isModalOpen()) {
+    <div class="modal-backdrop" role="presentation" (click)="closeModal()">
+      <section class="prospect-modal" cdkTrapFocus cdkTrapFocusAutoCapture role="dialog" aria-modal="true" aria-labelledby="prospect-modal-title" (click)="$event.stopPropagation()" (keydown.escape)="closeModal()">
+        <header>
+          <div>
+            <p class="prospects-eyebrow">Fiche commerciale</p>
+            <h2 id="prospect-modal-title">{{ editingId() ? 'Modifier le prospect' : 'Nouveau prospect' }}</h2>
+          </div>
+          <button type="button" class="icon-action" aria-label="Fermer" title="Fermer" [disabled]="isSaving()" (click)="closeModal()"><mat-icon>close</mat-icon></button>
+        </header>
+        @if (formError()) { <p class="feedback feedback-error" role="alert">{{ formError() }}</p> }
+        <form [formGroup]="form" (ngSubmit)="saveProspect()">
+          <div class="form-grid">
+            <label class="field field-wide">Nom du prospect *<input formControlName="name" autocomplete="organization" />
+              @if (form.controls.name.touched && form.controls.name.invalid) { <small class="field-error">Saisis au moins 2 caractères.</small> }
+            </label>
+            <label class="field">Société<input formControlName="companyName" autocomplete="organization" /></label>
+            <label class="field">Nom du contact<input formControlName="contactName" autocomplete="name" /></label>
+            <label class="field">E-mail<input type="email" formControlName="email" autocomplete="email" />
+              @if (form.controls.email.touched && form.controls.email.invalid) { <small class="field-error">Adresse e-mail invalide.</small> }
+            </label>
+            <label class="field">Téléphone<input type="tel" formControlName="phone" autocomplete="tel" /></label>
+            <label class="field">Source<input formControlName="source" placeholder="Recommandation, salon…" /></label>
+            <label class="field">Étape<select formControlName="status">@for (status of statuses; track status.value) { <option [value]="status.value">{{ status.label }}</option> }</select></label>
+            <label class="field">Responsable<select formControlName="assignedTo"><option value="">Non attribué</option>@for (assignee of prospectService.assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }} · {{ assignee.email }}</option> }</select></label>
+            <label class="field">Valeur estimée<input type="number" min="0" step="1000" formControlName="estimatedValue" /></label>
+            <label class="field">Devise<input maxlength="3" formControlName="currency" /></label>
+            <label class="field">Prochaine relance<input type="date" formControlName="nextFollowUp" /></label>
+            <label class="field field-wide">Notes<textarea rows="4" formControlName="notes"></textarea></label>
+          </div>
+          <footer class="modal-actions">
+            <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeModal()">Annuler</button>
+            <button type="submit" class="primary-action" [disabled]="isSaving() || form.invalid">
+              <mat-icon>{{ isSaving() ? 'progress_activity' : 'save' }}</mat-icon>
+              <span>{{ isSaving() ? 'Enregistrement…' : 'Enregistrer' }}</span>
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  }
+</main>
