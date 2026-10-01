@@ -21,10 +21,6 @@ export async function syncUserAccessRole(
   assignedBy: string | null,
   assignmentSource: 'admin' | 'legacy_profile'
 ): Promise<void> {
-  if (!isCanonicalAccessRoleKey(roleKey)) {
-    throw new Error(`Le rôle « ${roleKey} » ne peut pas être synchronisé avec profiles.role.`);
-  }
-
   const { data: role, error: roleError } = await adminClient
     .from('access_roles')
     .select('id')

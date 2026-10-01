@@ -382,8 +382,8 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
     .eq('id', roleId)
     .eq('is_active', true)
     .maybeSingle();
-  if (roleError || !role || !isCanonicalAccessRoleKey(role.role_key)) {
-    res.status(400).json({ error: 'Ce rôle ne peut pas être synchronisé avec le profil legacy.' });
+  if (roleError || !role) {
+    res.status(404).json({ error: 'Rôle actif introuvable.' });
     return;
   }
 
@@ -399,18 +399,20 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
       const actorUserId = actorIdFromRequest(req);
       await syncUserAccessRole(adminClient, userId, roleKey, actorUserId, 'admin');
 
-      const { error: profileError } = await adminClient
-        .from('profiles')
-        .update({ role: roleKey, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-      if (profileError) throw profileError;
+      if (isCanonicalAccessRoleKey(roleKey)) {
+        const { error: profileError } = await adminClient
+          .from('profiles')
+          .update({ role: roleKey, updated_at: new Date().toISOString() })
+          .eq('id', userId);
+        if (profileError) throw profileError;
 
-      const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
-      if (authReadError) throw authReadError;
-      const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, {
-        app_metadata: { ...(authUser.user?.app_metadata || {}), role: roleKey },
-      });
-      if (authUpdateError) throw authUpdateError;
+        const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
+        if (authReadError) throw authReadError;
+        const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, {
+          app_metadata: { ...(authUser.user?.app_metadata || {}), role: roleKey },
+        });
+        if (authUpdateError) throw authUpdateError;
+      }
     }
   );
 };

@@ -2588,10 +2588,6 @@ BEGIN
       IF NOT FOUND OR NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = target_user_id) THEN
         RAISE EXCEPTION 'Active role or user profile not found' USING ERRCODE = 'P0002';
       END IF;
-      IF target_role_key NOT IN ('admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe') THEN
-        RAISE EXCEPTION 'Role cannot be synchronized with the legacy profile' USING ERRCODE = '22023';
-      END IF;
-
       IF target_role_key <> 'admin' AND EXISTS (
         SELECT 1
         FROM public.access_user_roles ur
@@ -2620,15 +2616,17 @@ BEGIN
           assignment_source = 'admin',
           expires_at = EXCLUDED.expires_at;
 
-      UPDATE public.profiles
-      SET role = target_role_key::public.user_role_enum,
-          updated_at = now()
-      WHERE id = target_user_id;
+      IF target_role_key IN ('admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe') THEN
+        UPDATE public.profiles
+        SET role = target_role_key::public.user_role_enum,
+            updated_at = now()
+        WHERE id = target_user_id;
 
-      UPDATE auth.users
-      SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
-        || jsonb_build_object('role', target_role_key)
-      WHERE id = target_user_id;
+        UPDATE auth.users
+        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
+          || jsonb_build_object('role', target_role_key)
+        WHERE id = target_user_id;
+      END IF;
 
       next_state := jsonb_build_object('userId', target_user_id, 'roleKey', target_role_key, 'expiresAt', payload->'expiresAt');
       audit_subject := target_user_id;
