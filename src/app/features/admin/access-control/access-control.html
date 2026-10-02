@@ -176,7 +176,7 @@
                 <select aria-label="Rôle à attribuer" [value]="userRoleDraft()" (change)="userRoleDraft.set($any($event.target).value)">
                   <option value="">Choisir un rôle</option>
                   @for (role of accessControl.roles(); track role.id) {
-                    @if (role.isActive) { <option [value]="role.id">{{ role.label }}</option> }
+                    @if (role.isActive && isAssignableRole(role)) { <option [value]="role.id">{{ role.label }}</option> }
                   }
                 </select>
                 <button type="button" class="primary-button" [disabled]="!userRoleDraft()" (click)="assignSelectedRole()">Attribuer</button>
