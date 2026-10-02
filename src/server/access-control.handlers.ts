@@ -387,6 +387,13 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
     return;
   }
 
+  if (!isCanonicalAccessRoleKey(role.role_key)) {
+    res.status(400).json({
+      error: 'Ce rôle personnalisé n’est pas encore compatible avec l’affectation utilisateur. Utilisez l’un des rôles Transmex canoniques.',
+    });
+    return;
+  }
+
   await runAccessMutation(
     req,
     res,
@@ -396,9 +403,9 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
       const roleKey = (data as { roleKey?: unknown } | null)?.roleKey;
       if (typeof roleKey !== 'string') throw new Error('La réponse de la mutation ne contient pas de rôle valide.');
 
-      const actorUserId = actorIdFromRequest(req);
-      await syncUserAccessRole(adminClient, userId, roleKey, actorUserId, 'admin');
-
+      // access_control_mutate est déjà la transaction de vérité pour access_user_roles + profiles.
+      // Ne pas rappeler syncUserAccessRole ici : la fonction SQL de synchronisation marque
+      // l'affectation comme legacy_profile et pourrait écraser la source admin.
       if (isCanonicalAccessRoleKey(roleKey)) {
         const { error: profileError } = await adminClient
           .from('profiles')
