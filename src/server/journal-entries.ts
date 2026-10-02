@@ -54,12 +54,21 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
   }
 
   try {
-    const { data, error } = await adminClient
+    const rawLimit = Number(req.query['limit']);
+    const rawOffset = Number(req.query['offset']);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 && rawLimit <= 500 ? rawLimit : 100;
+    const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+
+    const { data, count, error } = await adminClient
       .from('journal_entries')
-      .select('*')
+      .select(
+        'id, journal_id, sequence_number, piece_comptable, date, libelle, service, type_description, category, status, no_dossier, partenaire, employee, quantity, montant, solde_apres, created_by, employee_id, created_at, updated_at',
+        { count: 'exact' }
+      )
       .eq('journal_id', journalId)
       .order('date', { ascending: true })
-      .order('sequence_number', { ascending: true });
+      .order('sequence_number', { ascending: true })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error(`[JOURNAL_ENTRIES] Erreur lecture des écritures du journal ${journalId}:`, error.message);
@@ -73,6 +82,9 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
     res.json({
       success: true,
       journal_id: journalId,
+      total_count: count ?? entries.length,
+      limit,
+      offset,
       count: entries.length,
       current_balance: currentBalance,
       entries,
@@ -434,10 +446,11 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
   try {
     const { data, error } = await adminClient
       .from('journal_entries')
-      .select('*')
+      .select('date, montant, libelle')
       .eq('journal_id', journalId)
       .order('date', { ascending: true })
-      .order('sequence_number', { ascending: true });
+      .order('sequence_number', { ascending: true })
+      .limit(1000);
 
     if (error) {
       res.status(500).json({ error: error.message });

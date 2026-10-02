@@ -91,16 +91,6 @@ export const routes: Routes = [
         title: 'Transmex - Gestion des accès',
       },
       {
-        path: 'admin/access-control',
-        loadComponent: () =>
-          import('./features/admin/access-control/access-control').then(
-            (m) => m.AccessControlCenter
-          ),
-        canActivate: [roleGuard],
-        data: { permission: 'access.roles.read' },
-        title: 'Transmex - Gestion des accès',
-      },
-      {
         path: 'admin',
         redirectTo: 'admin/view',
         pathMatch: 'full',

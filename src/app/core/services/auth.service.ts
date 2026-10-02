@@ -6,7 +6,6 @@ import { SupabaseService } from './supabase.service';
 import { normalizeUserRole } from '../utils/role.utils';
 
 const CACHED_PROFILE_KEY = 'transmex_user_profile';
-const CACHED_TOKEN_KEY = 'transmex_auth_token';
 
 @Injectable({
   providedIn: 'root',
@@ -80,15 +79,14 @@ export class AuthService {
   }
 
   /**
-   * Restaure le profil et le token depuis localStorage pour un affichage instantané
+   * Restaure le profil depuis localStorage pour un affichage instantané.
+   * Sécurité : le token JWT n'est JAMAIS extrait de localStorage (géré via cookies @supabase/ssr).
    */
   private restoreCachedProfile(): void {
     if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
       try {
-        const cachedToken = localStorage.getItem(CACHED_TOKEN_KEY);
-        if (cachedToken) {
-          this._token.set(cachedToken);
-        }
+        // Nettoyage proactif de tout vestige legacy de token (durcissement anti-XSS)
+        localStorage.removeItem('transmex_auth_token');
 
         const cached = localStorage.getItem(CACHED_PROFILE_KEY);
         if (cached) {
@@ -103,13 +101,12 @@ export class AuthService {
     }
   }
 
-  private saveCachedProfile(profile: UserProfile, token?: string): void {
+  private saveCachedProfile(profile: UserProfile): void {
     if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
       try {
         localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
-        if (token) {
-          localStorage.setItem(CACHED_TOKEN_KEY, token);
-        }
+        // Jamais de token dans le localStorage (stockage exclusif en cookie HttpOnly / @supabase/ssr)
+        localStorage.removeItem('transmex_auth_token');
       } catch {
         // Ignorer
       }
@@ -120,7 +117,7 @@ export class AuthService {
     if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
       try {
         localStorage.removeItem(CACHED_PROFILE_KEY);
-        localStorage.removeItem(CACHED_TOKEN_KEY);
+        localStorage.removeItem('transmex_auth_token');
       } catch {
         // Ignorer
       }
@@ -428,7 +425,7 @@ export class AuthService {
   }
 
   public setLocalSession(user: UserProfile, token: string): void {
-    this.saveCachedProfile(user, token);
+    this.saveCachedProfile(user);
     this._currentUser.set(user);
     this._token.set(token);
     this._authError.set(null);

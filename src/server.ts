@@ -12,6 +12,7 @@ import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
+import { syncUserAccessRole } from './server/access-role-sync';
 import { formatPersistedPieceComptable, normalizeDateToDay } from './server/cashier.utils';
 import { updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
@@ -206,7 +207,7 @@ app.post('/api/auth/sync-role', requireAuth, async (req: express.Request, res: e
     });
 
     // Scellement dans public.profiles
-    await supabaseAdmin.from('profiles').upsert(
+    const { error: profileUpsertError } = await supabaseAdmin.from('profiles').upsert(
       {
         id: user.id,
         email: user.email,
@@ -215,6 +216,18 @@ app.post('/api/auth/sync-role', requireAuth, async (req: express.Request, res: e
       },
       { onConflict: 'id' }
     );
+
+    if (profileUpsertError) {
+      console.error('Erreur upsert profile dans sync-role:', profileUpsertError.message);
+      res.status(500).json({ error: 'Échec de synchronisation du profil utilisateur.' });
+      return;
+    }
+
+    try {
+      await syncUserAccessRole(supabaseAdmin, user.id, targetRole, user.id, 'legacy_profile');
+    } catch (syncErr) {
+      console.warn('Synchronisation access_user_roles dans sync-role:', syncErr);
+    }
 
     res.json({
       success: true,
@@ -292,11 +305,17 @@ const checkDuplicateCashierTransaction = async (
 
   const absMontant = Math.abs(Number(candidate.montant));
 
-  // Requête large sur le montant (positif ou négatif) pour neutraliser toute incohérence de signe
-  const { data: candidates, error } = await adminClient
+  // Requête optimisée ciblée sur le jour et le montant pour éviter les balayages complets de table
+  let candidateQuery = adminClient
     .from('cashier_transactions')
     .select('id, date, libelle, montant, service, no_dossier')
     .or(`montant.eq.${candidate.montant},montant.eq.${-candidate.montant},montant.eq.${absMontant},montant.eq.${-absMontant}`);
+
+  if (normDay) {
+    candidateQuery = candidateQuery.eq('date', normDay);
+  }
+
+  const { data: candidates, error } = await candidateQuery;
 
   if (error || !candidates || candidates.length === 0) {
     return { isDuplicate: false };
@@ -469,9 +488,11 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       console.error('Erreur SQL lors de l’insertion de l’opération:', error.message);
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
-        res.status(409).json({
-          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
-        });
+        const isPiece = error.message?.includes('piece_comptable') || error.message?.includes('piece');
+        const errorMsg = isPiece
+          ? `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`
+          : `Opération déjà enregistrée : une opération identique existe déjà en caisse (conflit de saisie simultanée). La double saisie est interdite.`;
+        res.status(409).json({ error: errorMsg });
         return;
       }
       res.status(500).json({ error: 'Erreur lors de l’enregistrement de l’opération de caisse.' });
@@ -731,9 +752,11 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       console.error('Erreur SQL lors de la mise à jour de l’opération:', error.message);
       const isUniqueViolation = error.code === '23505' || error.message?.toLowerCase().includes('unique') || error.message?.includes('duplicate key');
       if (isUniqueViolation) {
-        res.status(409).json({
-          error: `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`,
-        });
+        const isPiece = error.message?.includes('piece_comptable') || error.message?.includes('piece');
+        const errorMsg = isPiece
+          ? `Erreur d'unicité : le numéro de pièce comptable est déjà utilisé dans la base de données.`
+          : `Modification refusée : une opération identique existe déjà en caisse (conflit de saisie simultanée). La double saisie est interdite.`;
+        res.status(409).json({ error: errorMsg });
         return;
       }
       res.status(500).json({ error: 'Erreur lors de la modification de l’opération de caisse.' });
@@ -952,6 +975,43 @@ const duplicateOperationsHandler = async (req: express.Request, res: express.Res
 };
 
 /**
+ * Calcul du solde global et des métriques de caisse côté PostgreSQL
+ * Indépendant de la pagination et des tranches locales.
+ */
+const getCashierSummaryHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    res.status(503).json({ error: 'Service Supabase non configuré sur le serveur' });
+    return;
+  }
+
+  try {
+    const rawJournalId = req.query['journalId'] || req.query['journal_id'];
+    const journalId = typeof rawJournalId === 'string' && rawJournalId.trim() && rawJournalId !== 'native-caisse-principal' && rawJournalId !== 'CSH1'
+      ? rawJournalId.trim()
+      : null;
+
+    const { data, error } = await adminClient.rpc('get_cashier_summary', {
+      p_journal_id: journalId,
+    });
+
+    if (error) {
+      console.error('Erreur SQL get_cashier_summary:', error.message);
+      res.status(500).json({ error: 'Erreur lors du calcul du solde de caisse.' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      summary: data,
+    });
+  } catch (err: unknown) {
+    console.error('Erreur getCashierSummaryHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors du calcul du solde.' });
+  }
+};
+
+/**
  * Modification de statut en masse (PATCH /api/cahier/operations/status)
  */
 const updateOperationsStatusHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -1046,6 +1106,7 @@ const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transac
 
 cashierOperationAliases.forEach((path) => {
   app.get(path, requireAuth, requirePermission('cashier.read'), getOperationsHandler);
+  app.get(`${path}/summary`, requireAuth, requirePermission('cashier.read'), getCashierSummaryHandler);
 });
 
 cashierOperationAliases.forEach((path) => {

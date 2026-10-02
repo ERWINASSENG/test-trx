@@ -65,6 +65,15 @@ export class CashierService implements OnDestroy {
   private errorTimeout: ReturnType<typeof setTimeout> | null = null;
   private realtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
 
+  // Résumé global calculé côté serveur (indépendant de la pagination locale)
+  private readonly _serverSummary = signal<{
+    total_entrees: number;
+    total_sorties: number;
+    solde_global: number;
+    total_count: number;
+  } | null>(null);
+  public readonly serverSummary = this._serverSummary.asReadonly();
+
   public setError(message: string | null, notify = true): void {
     if (this.errorTimeout) {
       clearTimeout(this.errorTimeout);
@@ -83,38 +92,17 @@ export class CashierService implements OnDestroy {
   }
 
   constructor() {
-    // Réactivité automatique : recharger les transactions et initialiser Realtime dès qu'un utilisateur est authentifié
+    // Réactivité unique coordonnée (P0 #7 : élimine la triple invocation concurrente au démarrage)
     effect(() => {
       const user = this.authService.currentUser();
       if (user && this.isBrowser) {
         this.loadTransactions();
+        this.loadCashierSummary();
         this.setupRealtimeSubscription();
       } else if (!user && this.isBrowser) {
         this.cleanupRealtimeSubscription();
       }
     });
-
-    // Au montage initial dans le navigateur, attend la session et déclenche le chargement
-    if (this.isBrowser) {
-      this.initBrowserData();
-    }
-  }
-
-  private async initBrowserData(): Promise<void> {
-    try {
-      if (typeof this.authService.waitForSession === 'function') {
-        await this.authService.waitForSession();
-      }
-      const isAuth = typeof this.authService.isAuthenticated === 'function'
-        ? this.authService.isAuthenticated()
-        : Boolean(typeof this.authService.currentUser === 'function' ? this.authService.currentUser() : null);
-      if (isAuth) {
-        await this.loadTransactions();
-        await this.setupRealtimeSubscription();
-      }
-    } catch (e) {
-      console.warn('Initialisation des données de caisse après refresh:', e);
-    }
   }
 
   ngOnDestroy(): void {
@@ -278,8 +266,42 @@ export class CashierService implements OnDestroy {
     );
   });
 
+  /**
+   * Charge le résumé global et le solde exact depuis le serveur PostgreSQL (P0 #5)
+   */
+  public async loadCashierSummary(): Promise<void> {
+    if (!this.isBrowser) return;
+    try {
+      const token = this.authService.token();
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const activeJournal = this._activeJournalId();
+      const journalQuery = activeJournal && activeJournal !== 'native-caisse-principal' && activeJournal !== 'CSH1'
+        ? `?journalId=${encodeURIComponent(activeJournal)}`
+        : '';
+
+      const res = await fetch(`/api/cahier/operations/summary${journalQuery}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.summary) {
+          this._serverSummary.set(json.summary);
+        }
+      }
+    } catch {
+      // Ignorer silencieusement
+    }
+  }
+
   // Solde permanent et hermétique de la Caisse Principale (CSH1)
+  // Utilise en priorité le solde global exact calculé côté serveur PostgreSQL (P0 #5)
   public readonly caisseBalance = computed(() => {
+    const summary = this._serverSummary();
+    const currentJournal = this._activeJournalId();
+    const isMainCaisse = !currentJournal || currentJournal === 'native-caisse-principal' || currentJournal === 'CSH1';
+    if (summary && summary.solde_global !== undefined && isMainCaisse) {
+      return Number(summary.solde_global);
+    }
     const list = this.caisseTransactions();
     if (list.length === 0) return 0;
     return list.reduce((acc, curr) => acc + (Number(curr.montant) || 0), 0);
@@ -499,6 +521,7 @@ export class CashierService implements OnDestroy {
       } finally {
         this._isLoading.set(false);
         this.activeLoadPromise = null;
+        this.loadCashierSummary();
       }
     })();
 
@@ -720,7 +743,7 @@ export class CashierService implements OnDestroy {
     const currentUserId = this.authService.currentUser()?.id;
     const operationToStore: CashierTransaction = {
       id: savedRow.id,
-      pieceComptable: savedRow.piece_comptable || explicitPiece || this.nextPieceComptable(),
+      pieceComptable: savedRow.piece_comptable || explicitPiece || undefined,
       date: this.formatDate(savedRow.date || new Date().toISOString()),
       libelle: savedRow.libelle,
       service: savedRow.service || savedRow.type_transaction || '',
@@ -1350,16 +1373,13 @@ export class CashierService implements OnDestroy {
     });
 
     let balance = 0;
-    const yearCounters: Record<string, number> = {};
     const updatedChronological = chronological.map((tx) => {
       balance += tx.montant;
-      const yrMatch = tx.date?.includes('/')
-        ? Number(tx.date.split('/')[2])
-        : (tx.date?.includes('-') ? Number(tx.date.split('-')[0]) : 2026);
-      const year = isNaN(yrMatch) ? 2026 : yrMatch;
-      yearCounters[year] = (yearCounters[year] || 0) + 1;
-      const piece = tx.pieceComptable || `CSH1/${year}/${String(yearCounters[year]).padStart(5, '0')}`;
-      return { ...tx, soldeApres: balance, pieceComptable: piece };
+      // Ne JAMAIS inventer de fausse pièce comptable CSH1/... côté client (P0 #6)
+      return {
+        ...tx,
+        soldeApres: tx.soldeApres !== undefined && tx.soldeApres !== null ? tx.soldeApres : balance,
+      };
     });
 
     // Remettre en ordre antéchronologique strict (le plus récent en tête)
@@ -1421,21 +1441,14 @@ export class CashierService implements OnDestroy {
     });
 
     let runningBalance = 0;
-    const yearCounters: Record<string, number> = {};
     const mappedChronological = chronological.map((row) => {
       const numMontant = Number(row.montant) || 0;
       runningBalance += numMontant;
 
-      const yrMatch = row.date?.includes('/')
-        ? Number(row.date.split('/')[2])
-        : (row.date?.includes('-') ? Number(row.date.split('-')[0]) : 2026);
-      const year = isNaN(yrMatch) ? 2026 : yrMatch;
-      yearCounters[year] = (yearCounters[year] || 0) + 1;
-      const computedFallback = `CSH1/${year}/${String(yearCounters[year]).padStart(5, '0')}`;
-
       return {
         id: row.id,
-        pieceComptable: row.piece_comptable ? String(row.piece_comptable).trim() : computedFallback,
+        // Ne JAMAIS forger de fausse pièce comptable côté client : la base fait autorité (P0 #6)
+        pieceComptable: row.piece_comptable ? String(row.piece_comptable).trim() : undefined,
         date: this.formatDate(row.date),
         libelle: row.libelle || '',
         service: row.service || row.type_transaction || '',
@@ -1619,9 +1632,11 @@ export class CashierService implements OnDestroy {
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            // Re-synchronisation silencieuse pour s'assurer qu'aucune transaction n'a été manquée
-            // avant ou pendant l'établissement de la connexion WebSocket
-            this.loadTransactions();
+            // Re-synchronisation ciblée uniquement si le cache local est vide pour éviter les appels concurrents (P0 #7)
+            if (this._transactions().length === 0) {
+              this.loadTransactions();
+            }
+            this.loadCashierSummary();
           } else if (status === 'CHANNEL_ERROR') {
             // Silencieux si l'option Realtime n'est pas activée sur la table Supabase
           } else if (status === 'TIMED_OUT') {
