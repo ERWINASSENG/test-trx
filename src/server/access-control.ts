@@ -92,7 +92,7 @@ const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null
 
   const { data: profile, error: profileError } = await adminClient
     .from('profiles')
-    .select('is_active')
+    .select('is_active, role')
     .eq('id', userId)
     .maybeSingle();
 
@@ -154,8 +154,13 @@ const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null
       isUserOverride: true,
     }));
 
+  const resolvedRoleKeys = roleRows.map((role) => role.role_key);
+  if (profile?.role && !resolvedRoleKeys.includes(String(profile.role))) {
+    resolvedRoleKeys.push(String(profile.role));
+  }
+
   return {
-    roleKeys: roleRows.map((role) => role.role_key),
+    roleKeys: resolvedRoleKeys,
     rules: [...roleRules, ...userRules],
   };
 };
@@ -164,12 +169,26 @@ export const resolveEffectivePermissions = async (userId: string): Promise<Effec
   const accessRules = await loadAccessRules(userId);
   if (!accessRules) return null;
 
-  return accessRules.rules.map((rule) => ({
+  const effective = accessRules.rules.map((rule) => ({
     permissionKey: rule.permissionKey,
     scope: rule.scope,
     effect: rule.effect,
     sourceRoleKey: rule.sourceRoleKey,
   }));
+
+  // Assurer la présence des permissions universelles pour tout compte actif
+  const primaryRole = accessRules.roleKeys[0] || 'employe';
+  if (!effective.some((p) => p.permissionKey === 'apps.view')) {
+    effective.push({ permissionKey: 'apps.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
+  }
+  if (!effective.some((p) => p.permissionKey === 'dashboard.view')) {
+    effective.push({ permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
+  }
+  if (!effective.some((p) => p.permissionKey === 'profile.read')) {
+    effective.push({ permissionKey: 'profile.read', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
+  }
+
+  return effective;
 };
 
 export const hasPermission = async (
@@ -180,6 +199,16 @@ export const hasPermission = async (
 ): Promise<boolean> => {
   const accessRules = loadedRules || await loadAccessRules(userId);
   if (!accessRules) return false;
+
+  // 1. Règle d'or : le rôle admin possède tous les droits sans exception
+  if (accessRules.roleKeys.includes('admin')) {
+    return true;
+  }
+
+  // 2. Accès garanti aux modules universels pour tout collaborateur actif
+  if (['apps.view', 'dashboard.view', 'profile.read'].includes(permissionKey)) {
+    return true;
+  }
 
   const actor = { userId };
   const matchingRules = accessRules.rules.filter((rule) => rule.permissionKey === permissionKey);
@@ -194,9 +223,26 @@ export const hasPermission = async (
   );
   if (applicableOverride) return true;
 
-  return matchingRules.some(
-    (rule) => !rule.isUserOverride && scopeAllows(rule.scope, actor, resource)
-  );
+  if (matchingRules.some((rule) => !rule.isUserOverride && scopeAllows(rule.scope, actor, resource))) {
+    return true;
+  }
+
+  // 3. Repli métier par rôle canonique côté serveur
+  const hasRole = (role: string) => accessRules.roleKeys.includes(role);
+  if (hasRole('manager') && ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey)) {
+    return true;
+  }
+  if ((hasRole('tresorier') || hasRole('comptable')) && ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey)) {
+    return true;
+  }
+  if (hasRole('caissiere') && ['cashier.read', 'cashier.write'].includes(permissionKey)) {
+    return true;
+  }
+  if (hasRole('employe') && ['hr.read'].includes(permissionKey)) {
+    return true;
+  }
+
+  return false;
 };
 
 export type AccessResourceResolver = (

@@ -75,17 +75,52 @@ export class AccessControlService {
   public readonly error = computed(() => this._error());
 
   public hasPermission(permissionKey: string): boolean {
+    // 1. Règle d'or : l'administrateur système possède tous les droits
+    if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
+      return true;
+    }
+
+    // 2. Accès universel garanti aux espaces communs pour tout utilisateur authentifié
+    if (['apps.view', 'dashboard.view', 'profile.read'].includes(permissionKey)) {
+      return true;
+    }
+
+    // 3. Évaluation granulaire issue de l'API /api/access-control/me
     const matchingPermissions = this._effectivePermissions().filter(
       (permission) => permission.permissionKey === permissionKey
     );
     if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope.type === 'all')) return false;
-    return matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all');
+    if (matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all')) return true;
+
+    // 4. Repli canonique robuste selon le rôle Transmex du collaborateur
+    const userRole = this.authService.currentRole();
+    if (!userRole) return false;
+
+    switch (userRole) {
+      case 'admin':
+        return true;
+      case 'manager':
+        return ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey);
+      case 'tresorier':
+      case 'comptable':
+        return ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey);
+      case 'caissiere':
+        return ['cashier.read', 'cashier.write'].includes(permissionKey);
+      case 'employe':
+        return ['hr.read'].includes(permissionKey);
+      default:
+        return false;
+    }
   }
   
   public hasPermissionForResource(
     permissionKey: string,
     resource: { subjectUserId?: string; ownerUserId?: string; departmentId?: string }
   ): boolean {
+    if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
+      return true;
+    }
+
     const actorId = this.authService.currentUser()?.id;
     if (!actorId) return false;
     const matchingPermissions = this._effectivePermissions().filter(
