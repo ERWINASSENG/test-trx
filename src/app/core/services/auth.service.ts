@@ -197,54 +197,62 @@ export class AuthService {
     accessToken: string,
     authUser?: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } | null
   ): Promise<UserProfile | null> {
-    if (!this.supabaseService.supabase) return null;
+    if (!accessToken) return null;
 
     try {
-      const { data: profile } = await this.supabaseService.supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      // Les profils ne sont plus lus directement depuis PostgREST côté navigateur.
+      // Le serveur valide le Bearer token puis lit public.profiles avec service_role.
+      const response = await fetch('/api/profile/me', {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
 
-      const appRole = authUser?.app_metadata?.['role'] as UserRole | undefined;
-      const profileRole = profile?.role as UserRole | undefined;
-      // Résolution sécurisée du rôle :
-      // 1. Si app_metadata (scellé serveur par Supabase Admin) ou profile (table SQL sécurisée) spécifie 'admin' => 'admin'
-      // 2. user_metadata n'est jamais utilisé pour élever les privilèges admin (modifiable côté client)
-      let targetRole: UserRole = 'employe';
-      if (appRole === 'admin' || profileRole === 'admin') {
-        targetRole = 'admin';
-      } else {
-        targetRole = normalizeUserRole(appRole || profileRole || 'employe');
+      if (!response.ok) {
+        console.warn(`Lecture profil serveur échouée (HTTP ${response.status}).`);
+        return null;
       }
 
-      const resolvedRole: UserRole = targetRole;
+      const payload = await response.json() as {
+        profile?: Record<string, unknown>;
+        role?: string;
+      };
+      const profile = payload.profile;
+      if (!profile || profile['id'] !== userId) {
+        return null;
+      }
+
+      const serverRole = typeof payload.role === 'string' ? payload.role : undefined;
+      const appRole = authUser?.app_metadata?.['role'] as UserRole | undefined;
+      const profileRole = profile['role'] as UserRole | undefined;
+      const resolvedRole: UserRole = normalizeUserRole(serverRole || appRole || profileRole || 'employe');
 
       const userProfile: UserProfile = {
         id: userId,
-        email: email || profile?.email || '',
-        firstName: profile?.first_name || (authUser?.user_metadata?.['first_name'] as string) || 'Utilisateur',
-        lastName: profile?.last_name || (authUser?.user_metadata?.['last_name'] as string) || 'Transmex',
+        email: email || String(profile['email'] || ''),
+        firstName: String(profile['first_name'] || authUser?.user_metadata?.['first_name'] || 'Utilisateur'),
+        lastName: String(profile['last_name'] || authUser?.user_metadata?.['last_name'] || 'Transmex'),
         role: resolvedRole,
         roles: [resolvedRole],
-        department: profile?.department || 'Services Généraux',
-        phone: profile?.phone,
-        isActive: profile?.is_active ?? true,
-        avatarUrl: profile?.avatar_url,
-        createdAt: profile?.created_at || new Date().toISOString(),
+        department: String(profile['department'] || 'Services Généraux'),
+        phone: typeof profile['phone'] === 'string' ? profile['phone'] : undefined,
+        isActive: profile['is_active'] !== false,
+        avatarUrl: typeof profile['avatar_url'] === 'string' ? profile['avatar_url'] : undefined,
+        createdAt: typeof profile['created_at'] === 'string' ? profile['created_at'] : new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
       };
 
       this.setLocalSession(userProfile, accessToken);
 
-      // Auto-réconciliation avec le serveur d'administration
       if (accessToken && resolvedRole === 'admin') {
         this.triggerServerRoleSync(accessToken);
       }
 
       return userProfile;
     } catch (err) {
-      console.warn('Erreur lors du chargement du profil utilisateur depuis Supabase:', err);
+      console.warn('Erreur lors du chargement du profil utilisateur depuis le serveur:', err);
       return null;
     }
   }
