@@ -161,6 +161,8 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   /** Vérifie le droit d’édition du journal réel associé à la ligne. */
   public canEditTransaction(tx: CashierTransaction): boolean {
+    if (tx.status === 'cancelled') return false;
+
     const transactionJournalId = tx.journalId ?? tx.journal_id ?? 'native-caisse-principal';
     const isNativeCaisse =
       transactionJournalId === 'native-caisse-principal' ||
@@ -192,7 +194,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly isAllSelected = this.cashierService.isAllSelected;
   public readonly isLoading = this.cashierService.isLoading;
   public readonly error = this.cashierService.error;
-  public readonly nextPieceComptable = this.cashierService.nextPieceComptable;
   public readonly sortField = this.cashierService.sortField;
   public readonly sortDirection = this.cashierService.sortDirection;
 
@@ -206,7 +207,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   // Contrôles UI synchronisés avec le service
   public readonly isAddingRow = this.cashierService.isAddingRow;
   public readonly isSubmitting = signal<boolean>(false);
-  public readonly isDeleting = signal<boolean>(false);
   public readonly isFilterDropdownOpen = signal<boolean>(false);
   public readonly searchControl = new FormControl<string>('', {
     nonNullable: true,
@@ -651,24 +651,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     this.cashierService.toggleSelectAll(!this.isAllSelected());
   }
 
-  public async deleteSelectedTransactions(): Promise<void> {
-    const count = this.selectedCount();
-    if (count === 0) return;
-
-    const confirmed = confirm(
-      `Êtes-vous sûr de vouloir supprimer ${count} transaction(s) sélectionnée(s) ?`
-    );
-    if (!confirmed) return;
-
-    this.isDeleting.set(true);
-    try {
-      await this.cashierService.deleteSelected();
-    } finally {
-      this.isDeleting.set(false);
-      this.cashierService.toggleSelectAll(false);
-    }
-  }
-
   public async startAddInline(): Promise<void> {
     if (!this.canEdit()) return;
 
@@ -783,8 +765,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      // Comme sur Odoo, nous ne passons pas de numéro de pièce figé à la création :
-      // le trigger / routeur serveur assigne la pièce officielle du journal actif de manière atomique et sans trou.
+      // La pièce ne vient jamais du formulaire ; la base l'attribue à la comptabilisation.
       const activeJId = this.cashierService.activeJournalId();
       const result = await this.cashierService.addTransaction({
         pieceComptable: undefined,

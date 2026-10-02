@@ -180,12 +180,20 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.currentBalance()).toBe(500000);
   });
 
-  it('devrait supprimer les éléments sélectionnés et recalculer les soldes', async () => {
-    globalThis.fetch = (async () => {
+  it('devrait annuler les éléments sélectionnés sans supprimer leur pièce comptable', async () => {
+    globalThis.fetch = (async (input, init) => {
+      if (String(input).endsWith('/status')) {
+        return new Response(JSON.stringify({
+          success: true,
+          count: 1,
+          data: [{ id: 'tx-delete-1', piece_comptable: 'CSH1/2026/00001', status: 'cancelled' }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       return new Response(JSON.stringify({
         success: true,
         operation: {
           id: 'tx-delete-1',
+          piece_comptable: 'CSH1/2026/00001',
           date: '2026-09-20',
           libelle: 'Transaction à supprimer',
           category: 'sortie',
@@ -211,8 +219,10 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     expect(service.allTransactions()[0].selected).toBe(true);
 
-    await service.deleteSelected();
-    expect(service.allTransactions().length).toBe(0);
+    await service.cancelSelected();
+    expect(service.allTransactions().length).toBe(1);
+    expect(service.allTransactions()[0].status).toBe('cancelled');
+    expect(service.allTransactions()[0].pieceComptable).toBe('CSH1/2026/00001');
     expect(service.currentBalance()).toBe(0);
   });
 
@@ -249,33 +259,6 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     service.setSearchQuery('');
     expect(service.filteredTransactions().length).toBe(1);
-  });
-
-  it('devrait calculer la prochaine pièce comptable séquentielle nextPieceComptable (Cas nominal)', async () => {
-    const currentYear = new Date().getFullYear() || 2026;
-    expect(service.nextPieceComptable()).toBe(`CSH1/${currentYear}/00001`);
-
-    globalThis.fetch = (async () => {
-      return new Response(
-        JSON.stringify({
-          operations: [
-            {
-              id: 'row-1',
-              piece_comptable: `CSH1/${currentYear}/00005`,
-              date: new Date().toISOString(),
-              libelle: 'Opération avec pièce',
-              montant: 10000,
-              category: 'entree',
-            },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
-    }) as typeof globalThis.fetch;
-
-    await service.loadTransactions();
-
-    expect(service.nextPieceComptable()).toBe(`CSH1/${currentYear}/00006`);
   });
 
   it('devrait bloquer immédiatement la création si le numéro de pièce comptable existe déjà (Cas d’erreur)', async () => {

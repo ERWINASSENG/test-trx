@@ -459,7 +459,7 @@
                     </button>
 
                     <!-- 3. Dupliquer -->
-                    @if (canEditCaisse()) {
+                    @if (canCancelCashierOperations()) {
                       <button
                         type="button"
                         (click)="onDuplicateAction()"
@@ -471,17 +471,17 @@
                       </button>
                     }
 
-                    <!-- 4. Supprimer (Style rouge Odoo) -->
+                    <!-- 4. Annuler en conservant la pièce comptable -->
                     @if (canEditCaisse()) {
                       <button
                         type="button"
-                        (click)="onDeleteSelectedAction()"
-                        [disabled]="isDeleting()"
+                        (click)="onCancelSelectedAction()"
+                        [disabled]="isCancelling()"
                         class="w-full flex items-center gap-3 px-3.5 py-2 text-left transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium"
-                        id="cp-action-delete-selected"
+                        id="cp-action-cancel-selected"
                         role="menuitem">
-                        <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-rose-500">delete_outline</mat-icon>
-                        <span>Supprimer</span>
+                        <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-rose-500">cancel</mat-icon>
+                        <span>Annuler</span>
                       </button>
                     }
 

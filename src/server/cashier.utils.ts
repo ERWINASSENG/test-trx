@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 /**
  * Normalise la valeur d'une pièce comptable déjà persistée en base.
  * Si la pièce comptable est présente, elle est nettoyée et normalisée en majuscules.
@@ -15,64 +13,6 @@ export const formatPersistedPieceComptable = (row: Record<string, unknown>): Rec
     ...row,
     piece_comptable: existingPiece,
   };
-};
-
-/**
- * Calcule de manière déterministe le prochain numéro de pièce comptable séquentiel Odoo (ex: CSH1/2026/00042)
- * pour une année donnée en interrogeant la table `cashier_transactions`.
- *
- * Algorithme :
- * 1. Détermine l'année à partir de la date d'opération fournie (ou année courante).
- * 2. Cherche les pièces comptables existantes de l'année (préfixe `CSH1/{year}/`).
- * 3. Extrait le numéro séquentiel maximal (`maxSeq`).
- * 4. Retourne `CSH1/{year}/{maxSeq + 1 + offset}` avec padding sur 5 chiffres.
- */
-export const computeNextPieceComptable = async (
-  client: SupabaseClient,
-  dateStr?: string | null,
-  offset = 0
-): Promise<string> => {
-  let year = new Date().getFullYear();
-  if (typeof dateStr === 'string' && dateStr.trim()) {
-    const trimmed = dateStr.trim();
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 3 && parts[2]) {
-        const parsedYear = parseInt(parts[2], 10);
-        if (!isNaN(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100) year = parsedYear;
-      }
-    } else {
-      const parsedYear = new Date(trimmed).getFullYear();
-      if (!isNaN(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100) year = parsedYear;
-    }
-  }
-
-  const prefix = `CSH1/${year}/`;
-
-  const { data, error } = await client
-    .from('cashier_transactions')
-    .select('piece_comptable')
-    .ilike('piece_comptable', `${prefix}%`);
-
-  let maxSeq = 0;
-
-  if (!error && Array.isArray(data)) {
-    for (const row of data) {
-      const piece = typeof row['piece_comptable'] === 'string'
-        ? row['piece_comptable'].trim().toUpperCase().replace(/\s+/g, '')
-        : '';
-      if (piece.startsWith(prefix)) {
-        const seqStr = piece.substring(prefix.length);
-        const seqNum = parseInt(seqStr, 10);
-        if (!isNaN(seqNum) && seqNum > maxSeq) {
-          maxSeq = seqNum;
-        }
-      }
-    }
-  }
-
-  const nextSeq = maxSeq + 1 + offset;
-  return `${prefix}${String(nextSeq).padStart(5, '0')}`;
 };
 
 export const normalizeDateToDay = (rawDate?: string | null): string => {

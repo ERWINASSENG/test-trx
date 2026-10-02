@@ -46,7 +46,7 @@ export class MainLayout {
   public readonly isUserDropdownOpen = signal<boolean>(false);
   public readonly isConfigDropdownOpen = signal<boolean>(false);
   public readonly isActionsMenuOpen = signal<boolean>(false);
-  public readonly isDeleting = signal<boolean>(false);
+  public readonly isCancelling = signal<boolean>(false);
   public readonly searchQuery = signal<string>('');
   public readonly activeView = signal<'graph' | 'list'>('list');
 
@@ -94,6 +94,16 @@ export class MainLayout {
     return this.accessControl.hasPermissionForResource('journal_entries.create', {
       ownerUserId: activeJournal?.created_by,
     });
+  });
+
+  public readonly canCancelCashierOperations = computed(() => {
+    const journalId = this.cashierService.activeJournalId();
+    const isMainCashier =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+    return isMainCashier && this.accessControl.hasPermission('cashier.status_update');
   });
 
   // Nom dynamique du journal actif (Caisse Principale ou journal personnalisé)
@@ -256,15 +266,16 @@ export class MainLayout {
     this.isActionsMenuOpen.set(false);
   }
 
-  public async onDeleteSelectedAction(): Promise<void> {
-    if (!this.canEditCaisse()) return;
+  public async onCancelSelectedAction(): Promise<void> {
+    if (!this.canCancelCashierOperations()) return;
     const count = this.selectedTransactionsCount();
-    if (count === 0 || this.isDeleting()) return;
-    this.isDeleting.set(true);
+    if (count === 0 || this.isCancelling()) return;
+    if (!confirm(`Annuler ${count} opération(s) sélectionnée(s) ? Les numéros de pièce seront conservés.`)) return;
+    this.isCancelling.set(true);
     this.closeActionsMenu();
 
     try {
-      const success = await this.cashierService.deleteSelected();
+      const success = await this.cashierService.cancelSelected();
       if (!success) {
         const err = this.cashierService.error();
         if (err) {
@@ -272,7 +283,7 @@ export class MainLayout {
         }
       }
     } finally {
-      this.isDeleting.set(false);
+      this.isCancelling.set(false);
     }
   }
 

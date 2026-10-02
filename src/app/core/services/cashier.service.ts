@@ -304,7 +304,7 @@ export class CashierService implements OnDestroy {
     }
     const list = this.caisseTransactions();
     if (list.length === 0) return 0;
-    return list.reduce((acc, curr) => acc + (Number(curr.montant) || 0), 0);
+    return list.reduce((acc, curr) => acc + (curr.status === 'cancelled' ? 0 : Number(curr.montant) || 0), 0);
   });
 
   // Transactions appartenant exclusivement au journal sélectionné
@@ -317,29 +317,6 @@ export class CashierService implements OnDestroy {
     }
 
     return list.filter((t) => t.journalId === currentJournal || t.journal_id === currentJournal);
-  });
-
-  // Signal calculé pour la prochaine référence de pièce comptable prévisionnelle adaptée au journal
-  public readonly nextPieceComptable = computed<string>(() => {
-    const list = this.journalTransactions();
-    const currentYear = new Date().getFullYear() || 2026;
-    const prefixStr = this._activeJournalPrefix() || 'CSH1';
-    const prefix = `${prefixStr}/${currentYear}/`;
-    let maxSeq = 0;
-
-    for (const t of list) {
-      const piece = normalizePieceComptable(t.pieceComptable);
-      if (piece && piece.startsWith(prefix)) {
-        const seqStr = piece.substring(prefix.length);
-        const seqNum = parseInt(seqStr, 10);
-        if (!isNaN(seqNum) && seqNum > maxSeq) {
-          maxSeq = seqNum;
-        }
-      }
-    }
-
-    const nextNum = maxSeq > 0 ? maxSeq + 1 : list.length + 1;
-    return `${prefix}${String(nextNum).padStart(5, '0')}`;
   });
 
   // États exposés en lecture seule
@@ -394,7 +371,7 @@ export class CashierService implements OnDestroy {
   public readonly currentBalance = computed(() => {
     const list = this.journalTransactions();
     if (list.length === 0) return 0;
-    return list.reduce((acc, curr) => acc + curr.montant, 0);
+    return list.reduce((acc, curr) => acc + (curr.status === 'cancelled' ? 0 : curr.montant), 0);
   });
 
   // Transactions paginées
@@ -877,13 +854,6 @@ export class CashierService implements OnDestroy {
   }
 
   /**
-   * Alias rétrocompatible pour la suppression des transactions sélectionnées
-   */
-  public async deleteSelectedTransactions(): Promise<boolean> {
-    return this.deleteSelected();
-  }
-
-  /**
    * ───────────────────────────────────────────────────────────────────────────
    * 2b. MODIFICATION D'UNE TRANSACTION : API RELAIS AVEC REPLI ET RÉACTIVITÉ
    * ───────────────────────────────────────────────────────────────────────────
@@ -1021,25 +991,21 @@ export class CashierService implements OnDestroy {
    * 3. SUPPRESSION D'OPÉRATIONS : API RELAIS AVEC REPLI ET RÉACTIVITÉ
    * ───────────────────────────────────────────────────────────────────────────
    */
-  public async deleteTransaction(id: string): Promise<boolean> {
+  public async cancelTransaction(id: string): Promise<boolean> {
     if (!id) return false;
-    return this.deleteBatchTransactions([id]);
+    return this.cancelTransactions([id]);
   }
 
-  public async deleteSelected(): Promise<boolean> {
-    const selectedIds = this._transactions()
+  public async cancelSelected(): Promise<boolean> {
+    const selectedIds = this.caisseTransactions()
       .filter((t) => t.selected)
       .map((t) => t.id);
 
     if (selectedIds.length === 0) return true;
-    return this.deleteBatchTransactions(selectedIds);
+    return this.cancelTransactions(selectedIds);
   }
 
-  /**
-   * Suppression synchronisée avec la base de données (Supabase / Serveur Express)
-   * La mise à jour du Signal local n'intervient QUE SI la suppression en base est confirmée.
-   */
-  private async deleteBatchTransactions(targetIds: string[]): Promise<boolean> {
+  private async cancelTransactions(targetIds: string[]): Promise<boolean> {
     if (targetIds.length === 0) return true;
 
     this._error.set(null);
@@ -1053,14 +1019,14 @@ export class CashierService implements OnDestroy {
           activeToken = sessionData.session.access_token;
         }
       } catch (err) {
-        console.warn('Session Supabase non récupérable pour suppression:', err);
+          console.warn('Session Supabase non récupérable pour annulation:', err);
       }
     }
 
-    let deletedSuccessfully = false;
+    let cancelledSuccessfully = false;
     let failureReason: string | null = null;
 
-    // Étape 1 : Appel à l'API Express sécurisée (exécute la suppression SQL via la clé de service)
+    // Annule les lignes sans supprimer leur pièce comptable.
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -1070,22 +1036,22 @@ export class CashierService implements OnDestroy {
         headers['Authorization'] = `Bearer ${activeToken}`;
       }
 
-      let response = await fetch('/api/cahier/operations', {
-        method: 'DELETE',
+      let response = await fetch('/api/cahier/operations/status', {
+        method: 'PATCH',
         headers,
-        body: JSON.stringify({ ids: targetIds }),
+        body: JSON.stringify({ ids: targetIds, status: 'cancelled' }),
       });
 
       if (!response.ok && response.status === 404) {
-        response = await fetch('/api/cashier/transactions', {
-          method: 'DELETE',
+        response = await fetch('/api/cashier/transactions/status', {
+          method: 'PATCH',
           headers,
-          body: JSON.stringify({ ids: targetIds }),
+          body: JSON.stringify({ ids: targetIds, status: 'cancelled' }),
         });
       }
 
       if (response.ok) {
-        deletedSuccessfully = true;
+        cancelledSuccessfully = true;
       } else {
         const errJson = await response.json().catch(() => null);
         if (response.status === 403) {
@@ -1095,17 +1061,15 @@ export class CashierService implements OnDestroy {
         }
       }
     } catch (networkErr) {
-      console.warn('Erreur réseau appel API Express DELETE, tentative repli Supabase:', networkErr);
+      console.warn('Erreur réseau appel API Express PATCH, annulation impossible:', networkErr);
     }
 
-    // Une panne de l'API ne doit jamais déclencher une suppression directe via Supabase.
-    if (!deletedSuccessfully && !failureReason) {
+    if (!cancelledSuccessfully && !failureReason) {
       failureReason = 'Le service de caisse est temporairement indisponible. Veuillez réessayer.';
     }
 
-    // Si la suppression a échoué en base de données, on refuse la suppression dans l'UI et on alerte l'utilisateur
-    if (!deletedSuccessfully) {
-      let errorMsg = failureReason || 'Impossible de supprimer cette opération dans la base de données.';
+    if (!cancelledSuccessfully) {
+      let errorMsg = failureReason || 'Impossible d’annuler cette opération dans la base de données.';
       if (
         errorMsg.includes('403') ||
         errorMsg.includes('Forbidden') ||
@@ -1116,13 +1080,15 @@ export class CashierService implements OnDestroy {
         errorMsg = 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
       }
       this.setError(errorMsg);
-      console.error('[CashierService] Échec suppression DB:', errorMsg);
+      console.error('[CashierService] Échec annulation DB:', errorMsg);
       return false;
     }
 
-    // Étape 3 : Mise à jour de l'état réactif Signals Angular 19 UNIQUEMENT après succès DB
-    this._transactions.update((items) => items.filter((item) => !targetIds.includes(item.id)));
+    this._transactions.update((items) => items.map((item) =>
+      targetIds.includes(item.id) ? { ...item, status: 'cancelled', selected: false } : item
+    ));
     this.recalculateRunningBalances();
+    void this.loadCashierSummary();
     return true;
   }
 
@@ -1374,6 +1340,9 @@ export class CashierService implements OnDestroy {
 
     let balance = 0;
     const updatedChronological = chronological.map((tx) => {
+      if (tx.status === 'cancelled') {
+        return { ...tx, soldeApres: balance };
+      }
       balance += tx.montant;
       // Ne JAMAIS inventer de fausse pièce comptable CSH1/... côté client (P0 #6)
       return {
