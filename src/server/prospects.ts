@@ -7,7 +7,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEARCH_PATTERN = /[^a-zA-Z0-9@.+\-\s]/g;
 
-type ProspectMutation = {
+interface ProspectMutation {
   name?: string;
   company_name?: string | null;
   contact_name?: string | null;
@@ -20,7 +20,7 @@ type ProspectMutation = {
   currency?: string;
   next_follow_up?: string | null;
   notes?: string;
-};
+}
 
 export function validateProspectPayload(value: unknown, partial = false): { data?: ProspectMutation; error?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { error: 'Le corps de la demande est invalide.' };
@@ -50,7 +50,7 @@ export function validateProspectPayload(value: unknown, partial = false): { data
   if (name === null || (!partial && name === undefined)) return { error: 'Le nom du prospect est obligatoire (2 à 200 caractères).' };
   if (name && name.length < 2) return { error: 'Le nom du prospect doit contenir au moins 2 caractères.' };
 
-  const boundedFields: Array<[string, keyof ProspectMutation, number]> = [
+  const boundedFields: [string, keyof ProspectMutation, number][] = [
     ['companyName', 'company_name', 200],
     ['contactName', 'contact_name', 200],
     ['phone', 'phone', 40],

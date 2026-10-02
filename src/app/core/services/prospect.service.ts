@@ -39,7 +39,7 @@ export class ProspectService {
     if (params.search?.trim()) query.set('search', params.search.trim());
     if (params.status) query.set('status', params.status);
 
-    const result = await this.request<{ prospects: Array<Record<string, unknown>>; total: number }>(`?${query}`);
+    const result = await this.request<{ prospects: Record<string, unknown>[]; total: number }>(`?${query}`);
     if (!result.success || !result.data) {
       this._error.set(result.error || 'Impossible de charger les prospects.');
       return false;
@@ -52,7 +52,7 @@ export class ProspectService {
   }
 
   public async loadAssignees(): Promise<boolean> {
-    const result = await this.request<{ assignees: Array<Record<string, unknown>> }>('/assignees');
+    const result = await this.request<{ assignees: Record<string, unknown>[] }>('/assignees');
     if (!result.success || !result.data) {
       this._error.set(result.error || 'Impossible de charger les responsables.');
       return false;

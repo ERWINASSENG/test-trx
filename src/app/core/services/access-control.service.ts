@@ -32,7 +32,7 @@ export interface UserAccessDetails {
     last_name: string;
     is_active: boolean;
   };
-  roleAssignments: Array<AccessUserRole & { role: AccessRole | null }>;
+  roleAssignments: (AccessUserRole & { role: AccessRole | null })[];
   overrides: AccessPermissionOverride[];
 }
 
@@ -42,10 +42,10 @@ export interface AccessControlUser {
   firstName: string;
   lastName: string;
   isActive: boolean;
-  roles: Array<{
+  roles: {
     role: AccessRole;
     expiresAt: string | null;
-  }>;
+  }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -111,7 +111,7 @@ export class AccessControlService {
   }
 
   public async loadRoles(): Promise<void> {
-    const result = await this.request<{ roles: Array<Record<string, unknown>> }>('/roles');
+    const result = await this.request<{ roles: Record<string, unknown>[] }>('/roles');
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les rôles.');
       return;
@@ -121,7 +121,7 @@ export class AccessControlService {
   }
 
   public async loadPermissions(): Promise<void> {
-    const result = await this.request<{ permissions: Array<Record<string, unknown>> }>('/permissions');
+    const result = await this.request<{ permissions: Record<string, unknown>[] }>('/permissions');
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions.');
       return;
@@ -131,7 +131,7 @@ export class AccessControlService {
   }
 
   public async loadUsers(limit = 200): Promise<void> {
-    const result = await this.request<{ users: Array<Record<string, unknown>> }>(`/users?limit=${encodeURIComponent(String(limit))}`);
+    const result = await this.request<{ users: Record<string, unknown>[] }>(`/users?limit=${encodeURIComponent(String(limit))}`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les utilisateurs.');
       return;
@@ -157,7 +157,7 @@ export class AccessControlService {
   public async loadRolePermissions(roleId: string): Promise<void> {
     const result = await this.request<{
       role: Record<string, unknown>;
-      grants: Array<Record<string, unknown>>;
+      grants: Record<string, unknown>[];
     }>(`/roles/${encodeURIComponent(roleId)}/permissions`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions du rôle.');
@@ -181,7 +181,7 @@ export class AccessControlService {
   public async loadAudit(limit = 50, userId?: string): Promise<void> {
     const query = new URLSearchParams({ limit: String(limit) });
     if (userId) query.set('userId', userId);
-    const result = await this.request<{ entries: Array<Record<string, unknown>> }>(`/audit?${query.toString()}`);
+    const result = await this.request<{ entries: Record<string, unknown>[] }>(`/audit?${query.toString()}`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger le journal d’audit.');
       return;
@@ -208,7 +208,7 @@ export class AccessControlService {
 
   public async replaceRolePermissions(
     roleId: string,
-    grants: Array<Pick<AccessRolePermission, 'permissionKey' | 'scope'>>
+    grants: Pick<AccessRolePermission, 'permissionKey' | 'scope'>[]
   ): Promise<AccessApiResult<AccessRolePermission[]>> {
     return this.mutate<AccessRolePermission[]>(`/roles/${encodeURIComponent(roleId)}/permissions`, 'PUT', { grants });
   }
@@ -290,8 +290,8 @@ export class AccessControlService {
 
   private mapUserAccess(row: Record<string, unknown>): UserAccessDetails {
     const userRow = (row['user'] || {}) as Record<string, unknown>;
-    const assignments = Array.isArray(row['roleAssignments']) ? row['roleAssignments'] as Array<Record<string, unknown>> : [];
-    const overrides = Array.isArray(row['overrides']) ? row['overrides'] as Array<Record<string, unknown>> : [];
+    const assignments = Array.isArray(row['roleAssignments']) ? row['roleAssignments'] as Record<string, unknown>[] : [];
+    const overrides = Array.isArray(row['overrides']) ? row['overrides'] as Record<string, unknown>[] : [];
 
     return {
       user: {

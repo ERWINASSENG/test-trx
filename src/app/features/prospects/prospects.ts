@@ -5,7 +5,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { ProspectService } from '../../core/services/prospect.service';
-import { CreateProspectInput, PROSPECT_STATUSES, Prospect, ProspectStatus } from '../../core/models/prospect.model';
+import { CreateProspectInput, Prospect, ProspectStatus } from '../../core/models/prospect.model';
 
 type ProspectsView = 'list' | 'kanban';
 
@@ -20,7 +20,7 @@ export class ProspectsComponent {
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
 
-  public readonly statuses: Array<{ value: ProspectStatus; label: string }> = [
+  public readonly statuses: { value: ProspectStatus; label: string }[] = [
     { value: 'new', label: 'Nouveau' },
     { value: 'contacted', label: 'Contacté' },
     { value: 'qualified', label: 'Qualifié' },

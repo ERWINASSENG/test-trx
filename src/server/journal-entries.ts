@@ -315,7 +315,7 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
   allowedUpdates['updated_at'] = new Date().toISOString();
 
   try {
-    let query = adminClient
+    const query = adminClient
       .from('journal_entries')
       .update(allowedUpdates)
       .eq('id', entryId)
@@ -382,7 +382,7 @@ export const deleteJournalEntryHandler = async (req: express.Request, res: expre
   }
 
   try {
-    let query = adminClient
+    const query = adminClient
       .from('journal_entries')
       .delete()
       .eq('id', entryId)

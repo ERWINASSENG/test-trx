@@ -126,7 +126,7 @@ const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null
 
   if (roleRowsResult.error) return null;
 
-  const roleRows = (roleRowsResult.data || []) as Array<{ id: string; role_key: string }>;
+  const roleRows = (roleRowsResult.data || []) as { id: string; role_key: string }[];
   const activeRoleIds = roleRows.map((role) => role.id);
   const roleKeyById = new Map(roleRows.map((role) => [role.id, role.role_key]));
   const grantsResult = activeRoleIds.length > 0

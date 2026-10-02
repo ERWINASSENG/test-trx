@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessPermission, AccessRole, AccessRolePermission, AccessScope, AccessUserRole, PermissionEffect } from '../../../core/models/access-control.model';
@@ -18,7 +18,7 @@ interface PermissionGroup {
   styleUrl: './access-control.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AccessControlCenter {
+export class AccessControlCenter implements OnInit {
   public readonly accessControl = inject(AccessControlService);
 
   public readonly activeView = signal<AccessView>('roles');
@@ -181,7 +181,7 @@ export class AccessControlCenter {
     const roleId = this.selectedRoleId();
     if (!roleId) return;
 
-    const grants: Array<Pick<AccessRolePermission, 'permissionKey' | 'scope'>> = [];
+    const grants: Pick<AccessRolePermission, 'permissionKey' | 'scope'>[] = [];
     try {
       for (const grant of this.draftGrants()) {
         const scope = JSON.parse(this.scopeDraft(grant.permissionKey)) as AccessScope;

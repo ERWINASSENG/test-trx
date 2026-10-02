@@ -187,7 +187,7 @@ export const listAccessUsersHandler = async (req: express.Request, res: express.
   }
 
   const rolesById = new Map((roles || []).map((role) => [role.id, role]));
-  const assignmentsByUserId = new Map<string, Array<Record<string, unknown>>>();
+  const assignmentsByUserId = new Map<string, Record<string, unknown>[]>();
   for (const assignment of assignments || []) {
     const userAssignments = assignmentsByUserId.get(assignment.user_id) || [];
     const role = rolesById.get(assignment.role_id);
