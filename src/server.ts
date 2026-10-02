@@ -368,9 +368,10 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
 
     const payload = req.body || {};
     const rawPiece = payload.pieceComptable || payload.piece_comptable;
-    const candidatePiece = typeof rawPiece === 'string' && rawPiece.trim()
-      ? rawPiece.trim().toUpperCase().replace(/\s+/g, '')
-      : null;
+    if (typeof rawPiece === 'string' && rawPiece.trim()) {
+      res.status(400).json({ error: 'La pièce comptable est attribuée par la base lors de la comptabilisation.' });
+      return;
+    }
     const libelle = typeof payload.libelle === 'string' ? payload.libelle.trim() : '';
     const service = payload.service || payload.typeTransaction || payload.type_transaction || null;
     const typeDescription = payload.typeDescription || payload.type_description || null;
@@ -395,22 +396,6 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
     if (!Number.isFinite(montant) || montant === 0) {
       res.status(400).json({ error: 'Le montant de l’opération doit être un nombre fini différent de zéro.' });
       return;
-    }
-
-    // Contrôle d'unicité strict du numéro de pièce comptable en priorité absolue
-    if (candidatePiece) {
-      const { data: pieceDup } = await adminClient
-        .from('cashier_transactions')
-        .select('id, piece_comptable, date, libelle')
-        .eq('piece_comptable', candidatePiece)
-        .maybeSingle();
-
-      if (pieceDup) {
-        res.status(409).json({
-          error: `Erreur d'unicité : le numéro de pièce comptable "${candidatePiece}" est déjà attribué à une autre opération (ID: ${pieceDup.id}, Libellé: "${pieceDup.libelle}"). Les numéros de pièce comptable doivent être strictement uniques.`,
-        });
-        return;
-      }
     }
 
     // Normalisation absolue du signe du montant selon la catégorie
@@ -459,7 +444,7 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
     const status = payload.status === 'posted' ? 'posted' : (payload.status === 'cancelled' ? 'cancelled' : 'draft');
 
     const rowToInsert = {
-      piece_comptable: candidatePiece,
+      piece_comptable: null,
       libelle,
       service,
       type_description: typeDescription,
@@ -478,7 +463,7 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       journal_id: payload.journal_id || payload.journalId || null,
     };
 
-    console.log(`[AUDIT CASHIER] Création opération par [${authenticatedUser?.email || callerId || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) : Montant=${montant}, Libellé="${libelle}", Pièce="${candidatePiece || 'auto'}"`);
+    console.log(`[AUDIT CASHIER] Création opération par [${authenticatedUser?.email || callerId || 'inconnu'}] (rôle: ${authenticatedUser?.role || 'non-défini'}) : Montant=${montant}, Libellé="${libelle}", pièce attribuée à la comptabilisation`);
 
     const { data, error } = await adminClient
       .from('cashier_transactions')
@@ -500,6 +485,20 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       res.status(500).json({ error: 'Erreur lors de l’enregistrement de l’opération de caisse.' });
       return;
     }
+
+    await writeAuditLog(adminClient, {
+      userId: callerId,
+      userEmail: authenticatedUser?.email,
+      userRole: authenticatedUser?.role,
+      action: 'CREATE_OPERATION',
+      entityId: data.id,
+      details: {
+        piece_comptable: data.piece_comptable,
+        status: data.status,
+        source: 'cashier_api',
+      },
+      ipAddress: req.ip || null,
+    });
 
     const enrichedOperation = formatPersistedPieceComptable(data);
 
@@ -539,7 +538,7 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
     const updateData: Record<string, unknown> = {};
     const { data: existingRow, error: fetchError } = await adminClient
       .from('cashier_transactions')
-      .select('created_by, employee_id, category, montant, status')
+      .select('created_by, employee_id, category, montant, status, piece_comptable')
       .eq('id', targetId)
       .maybeSingle();
 
@@ -684,23 +683,14 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       const targetPiece = typeof rawPiece === 'string' && rawPiece.trim()
         ? rawPiece.trim().toUpperCase().replace(/\s+/g, '')
         : null;
+      const currentPiece = typeof existingRow.piece_comptable === 'string' && existingRow.piece_comptable.trim()
+        ? existingRow.piece_comptable.trim().toUpperCase().replace(/\s+/g, '')
+        : null;
 
-      if (targetPiece) {
-        const { data: pieceDup } = await adminClient
-          .from('cashier_transactions')
-          .select('id, piece_comptable, date, libelle')
-          .eq('piece_comptable', targetPiece)
-          .neq('id', targetId)
-          .maybeSingle();
-
-        if (pieceDup) {
-          res.status(409).json({
-            error: `Modification refusée : le numéro de pièce comptable "${targetPiece}" est déjà attribué à une autre opération (ID: ${pieceDup.id}, Libellé: "${pieceDup.libelle}").`,
-          });
-          return;
-        }
+      if (targetPiece !== currentPiece) {
+        res.status(400).json({ error: 'Le numéro de pièce comptable est immuable et ne peut pas être fourni par le client.' });
+        return;
       }
-      updateData['piece_comptable'] = targetPiece;
     }
 
     if (Object.keys(updateData).length === 0) {

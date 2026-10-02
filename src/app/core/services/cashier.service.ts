@@ -521,7 +521,7 @@ export class CashierService implements OnDestroy {
   ): Promise<{ success: boolean; operation?: CashierTransaction; error?: string }> {
     this._error.set(null);
 
-    // Si une pièce comptable est explicitement fournie par l'appelant (ex: import ou rattachement manuel), on la normalise
+    // Une pièce officielle ne peut pas être choisie par le client.
     const explicitPiece = op.pieceComptable ? normalizePieceComptable(op.pieceComptable) : undefined;
     if (explicitPiece) {
       const pieceDuplicate = findDuplicatePieceComptable({ pieceComptable: explicitPiece }, this._transactions());
@@ -530,6 +530,10 @@ export class CashierService implements OnDestroy {
         this.setError(errorMsg);
         return { success: false, error: errorMsg };
       }
+
+      const errorMsg = 'La pièce comptable est attribuée par la base à la comptabilisation. Les numéros importés ne sont pas conservés.';
+      this.setError(errorMsg);
+      return { success: false, error: errorMsg };
     }
 
     // Contrôle d'unicité par empreinte métier : Date + Montant + Libellé + N° de dossier/matricule + Service
@@ -813,7 +817,7 @@ export class CashierService implements OnDestroy {
 
       try {
         const res = await this.addTransaction({
-          pieceComptable: candidatePiece || undefined,
+          pieceComptable: undefined,
           date: row.date,
           libelle: row.libelle,
           service: row.service,

@@ -308,7 +308,6 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     }) as typeof globalThis.fetch;
 
     const result = await service.saveOperationViaApi({
-      pieceComptable: 'CSH1/2026/00099',
       libelle: 'Tentative avec pièce en conflit',
       montant: 12000,
       category: 'sortie',
@@ -317,6 +316,25 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('Erreur d\'unicité');
     expect(service.error()).toContain('CSH1/2026/00099');
+  });
+
+  it('devrait refuser une pièce fournie par le client avant tout appel serveur', async () => {
+    let requestSent = false;
+    globalThis.fetch = (async () => {
+      requestSent = true;
+      return new Response(null, { status: 201 });
+    }) as typeof globalThis.fetch;
+
+    const result = await service.saveOperationViaApi({
+      pieceComptable: 'CSH1/2026/00099',
+      libelle: 'Pièce importée manuellement',
+      montant: 12000,
+      category: 'sortie',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('attribuée par la base');
+    expect(requestSent).toBe(false);
   });
 
   it('devrait initialiser la pagination à 80 éléments minimum et respecter ce plancher via setPageSize', () => {
