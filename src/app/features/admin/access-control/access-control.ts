@@ -223,6 +223,10 @@ export class AccessControlCenter implements OnInit {
     await this.accessControl.loadUserAccess(user.id);
   }
 
+  public isAssignableRole(role: AccessRole): boolean {
+    return ['admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe'].includes(role.roleKey);
+  }
+
   public async assignSelectedRole(): Promise<void> {
     const userId = this.selectedUserId();
     const roleId = this.userRoleDraft();
