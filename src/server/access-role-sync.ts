@@ -30,19 +30,21 @@ export async function syncUserAccessRole(
   assignedBy: string | null,
   assignmentSource: 'admin' | 'legacy_profile' = 'admin'
 ): Promise<void> {
-  // 1. Appel de la procédure PostgreSQL atomique (transactionnelle et sécurisée)
+  // La fonction SQL de production attend explicitement l'acteur et le mode exclusif.
+  // - admin : mono-rôle strict, cohérent avec access_control_mutate.
+  // - legacy_profile : synchronisation conservatrice qui ne retire que l'ancien rôle legacy.
   const { error: rpcError } = await adminClient.rpc('sync_user_primary_role', {
+    p_actor_user_id: assignedBy ?? userId,
     p_user_id: userId,
     p_role_key: roleKey,
-    p_assigned_by: assignedBy,
-    p_assignment_source: assignmentSource,
+    p_exclusive: assignmentSource === 'admin',
   });
 
   if (!rpcError) {
     return;
   }
 
-  console.warn('RPC sync_user_primary_role non disponible, bascule sur upsert idempotent:', rpcError.message);
+  console.warn('RPC sync_user_primary_role échoué, bascule sur upsert idempotent:', rpcError.message);
 
   // 2. Repli résilient et idempotent (sans destruction des rôles préexistants)
   const { data: role, error: roleError } = await adminClient
