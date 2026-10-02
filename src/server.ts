@@ -14,7 +14,7 @@ import { getSupabaseAdmin, requireAuth } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
 import { formatPersistedPieceComptable, normalizeDateToDay } from './server/cashier.utils';
-import { updateCurrentUserProfileHandler } from './server/profile';
+import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
@@ -249,6 +249,7 @@ collaboratorCollectionAliases.forEach((path) => {
 /**
  * Modification d'un compte collaborateur (synchronisation auth.app_metadata + public.profiles)
  */
+app.get('/api/profile/me', requireAuth, getCurrentUserProfileHandler);
 app.patch('/api/profile/me', requireAuth, requirePermission('profile.update'), updateCurrentUserProfileHandler);
 
 collaboratorCollectionAliases.forEach((path) => {
