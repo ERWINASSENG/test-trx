@@ -57,7 +57,7 @@ import {
   setUserPermissionOverrideHandler,
   updateAccessRoleHandler,
 } from './server/access-control.handlers';
-import { requirePermission, resolveJournalOwnerContext } from './server/access-control';
+import { hasPermission, requirePermission, resolveJournalOwnerContext } from './server/access-control';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -176,7 +176,24 @@ app.get('/api/config', getSupabaseConfigHandler);
 const collaboratorCollectionAliases = ['/api/system/collaborators', '/api/admin/users'];
 
 collaboratorCollectionAliases.forEach((path) => {
-  app.get(path, requireAuth, requirePermission('users.read'), getCollaboratorsHandler);
+  app.get(path, requireAuth, async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
+    const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
+    if (!user?.id) {
+      res.status(401).json({ error: 'Utilisateur non authentifié.' });
+      return;
+    }
+
+    try {
+      const canRead = (await hasPermission(user.id, 'hr.read', undefined)) || (await hasPermission(user.id, 'users.read', undefined));
+      if (canRead) {
+        next();
+        return;
+      }
+      requirePermission('users.read')(req, res, next);
+    } catch {
+      requirePermission('users.read')(req, res, next);
+    }
+  }, getCollaboratorsHandler);
 });
 
 /**

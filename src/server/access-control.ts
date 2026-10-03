@@ -232,7 +232,23 @@ export const hasPermission = async (
   if (hasRole('manager') && ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey)) {
     return true;
   }
-  if ((hasRole('tresorier') || hasRole('comptable')) && ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey)) {
+  if ((hasRole('tresorier') || hasRole('comptable')) && [
+    'cashier.read',
+    'cashier.write',
+    'cashier.update',
+    'cashier.status_update',
+    'cashier.duplicate',
+    'journals.read',
+    'journals.write',
+    'journals.create',
+    'journals.update',
+    'journals.delete',
+    'journal_entries.read',
+    'journal_entries.chart_read',
+    'journal_entries.create',
+    'journal_entries.update',
+    'journal_entries.delete',
+  ].includes(permissionKey)) {
     return true;
   }
   if (hasRole('caissiere') && ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey)) {

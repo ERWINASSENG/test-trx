@@ -193,7 +193,8 @@ export class SupabaseService {
       if (this.isBrowser) {
         const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
 
-        // Client Navigateur : createBrowserClient gère document.cookie + localStorage avec rafraîchissement automatique
+        // Client Navigateur : createBrowserClient avec persistance résiliente (document.cookie + réplication sécurisée localStorage)
+        // Garantit la survie de la session en cas de contrainte de cookie tiers en iframe ou lors d'une actualisation
         this.client = createBrowserClient(url, key, {
           auth: {
             persistSession: true,
@@ -201,13 +202,49 @@ export class SupabaseService {
             detectSessionInUrl: true,
             flowType: 'pkce',
           },
-          cookieOptions: {
-            name: 'sb-auth-token',
-            maxAge: 14 * 24 * 60 * 60, // 14 jours de validité de session
-            domain: '',
-            sameSite: 'lax',
-            path: '/',
-            secure: isHttps,
+          cookies: {
+            getAll: () => {
+              const cookies = parseCookieHeader(typeof document !== 'undefined' ? document.cookie : '');
+              if (cookies.length > 0) return cookies;
+              try {
+                const stored = localStorage.getItem('sb-auth-fallback-cookies');
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  if (Array.isArray(parsed)) return parsed;
+                }
+              } catch {
+                // Ignorer
+              }
+              return [];
+            },
+            setAll: (cookiesToSet) => {
+              const existing = parseCookieHeader(typeof document !== 'undefined' ? document.cookie : '');
+              const map = new Map<string, string>();
+              existing.forEach((c) => map.set(c.name, c.value));
+
+              for (const { name, value, options } of cookiesToSet) {
+                if (value) {
+                  map.set(name, value);
+                } else {
+                  map.delete(name);
+                }
+                if (typeof document !== 'undefined') {
+                  document.cookie = serializeCookieHeader(name, value, {
+                    ...options,
+                    path: '/',
+                    sameSite: isHttps ? 'none' : 'lax',
+                    secure: isHttps,
+                  });
+                }
+              }
+
+              try {
+                const cookieArray = Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+                localStorage.setItem('sb-auth-fallback-cookies', JSON.stringify(cookieArray));
+              } catch {
+                // Ignorer
+              }
+            },
           },
         });
       } else {

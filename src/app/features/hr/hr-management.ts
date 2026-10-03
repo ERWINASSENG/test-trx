@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SlicePipe } from '@angular/common';
 import { ROLE_DEFINITIONS, UserProfile, UserRole } from '../../core/models/auth.model';
@@ -16,13 +16,22 @@ import { generateSecurePassword } from '../../core/utils/crypto.utils';
     '(document:click)': 'onDocumentClick($event)',
   },
 })
-export class HrManagement {
+export class HrManagement implements OnInit {
   private readonly userService = inject(UserService);
   private readonly authService = inject(AuthService);
 
   public readonly users = this.userService.users;
   public readonly isLoading = this.userService.isLoading;
+  public readonly userServiceError = this.userService.error;
   public readonly isAdmin = this.authService.isAdmin;
+
+  public ngOnInit(): void {
+    void this.userService.loadInitialUsers();
+  }
+
+  public retryLoadUsers(): void {
+    void this.userService.loadInitialUsers();
+  }
 
   public readonly selectedDepartment = signal<string>('all');
   public readonly searchQuery = signal<string>('');

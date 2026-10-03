@@ -203,9 +203,15 @@
                 </div>
               </td>
 
-              <!-- Référence -->
-              <td class="py-2 px-3 whitespace-nowrap align-middle text-slate-400 text-xs">
-                <span></span>
+              <!-- N°Dossier / Référence -->
+              <td class="py-2 px-3 align-middle">
+                <input
+                  id="inline-input-no-dossier"
+                  type="text"
+                  formControlName="noDossier"
+                  placeholder=""
+                  class="odoo-field-input w-full"
+                />
               </td>
 
               <!-- Services -->
@@ -362,9 +368,15 @@
                     </div>
                   </td>
 
-                  <!-- Référence -->
-                  <td class="py-2 px-3 whitespace-nowrap align-middle text-slate-400 text-xs">
-                    <span></span>
+                  <!-- N°Dossier / Référence -->
+                  <td class="py-2 px-3 align-middle">
+                    <input
+                      id="inline-edit-no-dossier"
+                      type="text"
+                      formControlName="noDossier"
+                      placeholder=""
+                      class="odoo-field-input w-full"
+                    />
                   </td>
 
                   <!-- Services -->
@@ -475,7 +487,7 @@
 
                   <!-- Partenaire (Vide si absent, pas de tiret) -->
                   <td class="py-2.5 px-3 whitespace-nowrap text-slate-800 dark:text-slate-200 font-normal">
-                    {{ tx.employee || '' }}
+                    {{ tx.employee || tx.partenaire || '' }}
                   </td>
 
                   <!-- Référence (Vide si absent) -->

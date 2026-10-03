@@ -103,7 +103,23 @@ export class AccessControlService {
         return ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey);
       case 'tresorier':
       case 'comptable':
-        return ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey);
+        return [
+          'cashier.read',
+          'cashier.write',
+          'cashier.update',
+          'cashier.status_update',
+          'cashier.duplicate',
+          'journals.read',
+          'journals.write',
+          'journals.create',
+          'journals.update',
+          'journals.delete',
+          'journal_entries.read',
+          'journal_entries.chart_read',
+          'journal_entries.create',
+          'journal_entries.update',
+          'journal_entries.delete',
+        ].includes(permissionKey);
       case 'caissiere':
         return ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey);
       case 'employe':
@@ -381,7 +397,13 @@ export class AccessControlService {
   }
 
   private async request<T>(path: string, method = 'GET', body?: unknown): Promise<AccessApiResult<T>> {
-    const token = this.authService.token();
+    // 1. Attendre la résolution initiale de la session d'authentification
+    await this.authService.waitForSession();
+
+    let token = this.authService.token();
+    if (!token && typeof window !== 'undefined' && window.sessionStorage) {
+      token = sessionStorage.getItem('transmex_session_token');
+    }
     if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
 
     this._isLoading.set(true);

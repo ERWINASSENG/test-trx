@@ -224,35 +224,42 @@ export class CashierService implements OnDestroy {
       if (res.ok) {
         const json = await res.json();
         const entries = json.entries || [];
-        const mappedOps: CashierTransaction[] = entries.map((row: Record<string, unknown>) => ({
-          id: String(row['id']),
-          pieceComptable: String(row['piece_comptable']),
-          date: this.formatDate(String(row['date'] || '')),
-          libelle: String(row['libelle']),
-          service: row['service'] ? String(row['service']) : '',
-          typeDescription: row['type_description'] ? String(row['type_description']) : '',
-          category: (row['category'] === 'sortie' ? 'sortie' : 'entree') as 'entree' | 'sortie',
-          status: (row['status'] as 'draft' | 'posted' | 'cancelled') || 'draft',
-          noDossier: row['no_dossier'] ? String(row['no_dossier']) : '',
-          firstName: '',
-          employee: row['employee'] ? String(row['employee']) : '',
-          partenaire: row['partenaire'] ? String(row['partenaire']) : '',
-          quantity: row['quantity'] ? Number(row['quantity']) : undefined,
-          montant: Number(row['montant']) || 0,
-          soldeApres: row['solde_apres'] !== undefined && row['solde_apres'] !== null ? Number(row['solde_apres']) : undefined,
-          selected: false,
-          createdBy: row['created_by'] ? String(row['created_by']) : undefined,
-          employeeId: row['employee_id'] ? String(row['employee_id']) : undefined,
-          journalId: journalId,
-          journal_id: journalId,
-          createdAt: String(row['created_at'] || ''),
-          updatedAt: row['updated_at'] ? String(row['updated_at']) : undefined,
-        }));
+        const mappedOps: CashierTransaction[] = entries.map((row: Record<string, unknown>) => {
+          const emp = row['employee'] ? String(row['employee']) : (row['partenaire'] ? String(row['partenaire']) : '');
+          const part = row['partenaire'] ? String(row['partenaire']) : (row['employee'] ? String(row['employee']) : '');
+          const numMontant = Number(row['montant']) || 0;
+          return {
+            id: String(row['id']),
+            pieceComptable: row['piece_comptable'] ? String(row['piece_comptable']).trim() : undefined,
+            date: this.formatDate(String(row['date'] || '')),
+            libelle: String(row['libelle'] || ''),
+            service: row['service'] ? String(row['service']) : '',
+            typeDescription: row['type_description'] ? String(row['type_description']) : (row['typeDescription'] ? String(row['typeDescription']) : ''),
+            category: (row['category'] === 'sortie' ? 'sortie' : 'entree') as 'entree' | 'sortie',
+            status: (row['status'] as 'draft' | 'posted' | 'cancelled') || 'draft',
+            noDossier: row['no_dossier'] ? String(row['no_dossier']) : (row['noDossier'] ? String(row['noDossier']) : ''),
+            firstName: '',
+            employee: emp,
+            partenaire: part,
+            quantity: row['quantity'] !== null && row['quantity'] !== undefined ? Number(row['quantity']) : undefined,
+            montant: numMontant,
+            soldeApres: row['solde_apres'] !== undefined && row['solde_apres'] !== null ? Number(row['solde_apres']) : undefined,
+            selected: false,
+            createdBy: row['created_by'] ? String(row['created_by']) : undefined,
+            employeeId: row['employee_id'] ? String(row['employee_id']) : undefined,
+            journalId: journalId,
+            journal_id: journalId,
+            createdAt: String(row['created_at'] || ''),
+            updatedAt: row['updated_at'] ? String(row['updated_at']) : undefined,
+          };
+        });
 
         this._transactions.update((curr) => {
           const withoutThisJournal = curr.filter((t) => t.journalId !== journalId && t.journal_id !== journalId);
           return [...withoutThisJournal, ...mappedOps];
         });
+
+        this.recalculateRunningBalances();
       }
     } catch (err) {
       console.warn(`Erreur chargement écritures pour le journal ${journalId}:`, err);
@@ -373,11 +380,26 @@ export class CashierService implements OnDestroy {
     });
   });
 
-  // Calcul du solde actuel en temps réel pour le journal actif
+  // Calcul du solde actuel en temps réel pour le journal actif (100% hermétique et indépendant)
   public readonly currentBalance = computed(() => {
+    const currentJournal = this._activeJournalId();
+    const isMainCash =
+      !currentJournal || currentJournal === 'native-caisse-principal' || currentJournal === 'CSH1';
+
+    if (isMainCash) {
+      return this.caisseBalance();
+    }
+
     const list = this.journalTransactions();
     if (list.length === 0) return 0;
-    return list.reduce((acc, curr) => acc + (curr.status === 'posted' ? Number(curr.montant) || 0 : 0), 0);
+
+    const postedSum = list.reduce((acc, curr) => acc + (curr.status === 'posted' ? Number(curr.montant) || 0 : 0), 0);
+    const hasPosted = list.some((curr) => curr.status === 'posted');
+    if (hasPosted) {
+      return postedSum;
+    }
+    // Si toutes les écritures sont en cours/brouillon pour ce nouveau journal, sommer les écritures non annulées
+    return list.reduce((acc, curr) => acc + (curr.status !== 'cancelled' ? Number(curr.montant) || 0 : 0), 0);
   });
 
   // Transactions paginées
@@ -921,46 +943,81 @@ export class CashierService implements OnDestroy {
     // 1. Convertir la date affichée en ISO standard sans décalage de fuseau horaire
     const isoDate = updatedFields.date ? toStandardIsoDateString(updatedFields.date) : undefined;
 
-    // 2. Appel vers l'API serveur-relais
+    // 2. Appel vers l'API serveur-relais (routage dédié selon le journal)
     let updatedViaApi = false;
     let apiErrorMessage = '';
+    const targetJournalId = currentTx?.journalId || currentTx?.journal_id || this._activeJournalId();
+    const isDedicatedJournal =
+      targetJournalId &&
+      targetJournalId !== 'native-caisse-principal' &&
+      targetJournalId !== 'CSH1' &&
+      this._activeJournalPrefix() !== 'CSH1';
+
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const bodyPayload: Record<string, unknown> = {};
-      if (updatedFields.libelle !== undefined) bodyPayload['libelle'] = updatedFields.libelle;
-      if (updatedFields.service !== undefined) bodyPayload['service'] = updatedFields.service;
-      if (updatedFields.typeDescription !== undefined) bodyPayload['typeDescription'] = updatedFields.typeDescription;
-      if (updatedFields.category !== undefined) bodyPayload['category'] = updatedFields.category;
-      if (updatedFields.status !== undefined) bodyPayload['status'] = updatedFields.status;
-      if (updatedFields.noDossier !== undefined) bodyPayload['noDossier'] = updatedFields.noDossier;
-      if (updatedFields.firstName !== undefined) bodyPayload['firstName'] = updatedFields.firstName;
-      if (updatedFields.employee !== undefined) bodyPayload['employee'] = updatedFields.employee;
-      if (updatedFields.partenaire !== undefined) bodyPayload['partenaire'] = updatedFields.partenaire;
-      if (updatedFields.quantity !== undefined) bodyPayload['quantity'] = updatedFields.quantity;
-      if (updatedFields.montant !== undefined) bodyPayload['montant'] = updatedFields.montant;
-      if (updatedFields.pieceComptable !== undefined) bodyPayload['pieceComptable'] = updatedFields.pieceComptable;
-      if (isoDate) bodyPayload['date'] = isoDate;
+      if (isDedicatedJournal) {
+        const bodyPayload: Record<string, unknown> = {};
+        if (updatedFields.libelle !== undefined) bodyPayload['libelle'] = updatedFields.libelle;
+        if (updatedFields.service !== undefined) bodyPayload['service'] = updatedFields.service;
+        if (updatedFields.typeDescription !== undefined) bodyPayload['type_description'] = updatedFields.typeDescription;
+        if (updatedFields.category !== undefined) bodyPayload['category'] = updatedFields.category;
+        if (updatedFields.status !== undefined) bodyPayload['status'] = updatedFields.status;
+        if (updatedFields.noDossier !== undefined) bodyPayload['no_dossier'] = updatedFields.noDossier;
+        if (updatedFields.employee !== undefined) bodyPayload['employee'] = updatedFields.employee;
+        if (updatedFields.partenaire !== undefined) bodyPayload['partenaire'] = updatedFields.partenaire;
+        if (updatedFields.quantity !== undefined) bodyPayload['quantity'] = updatedFields.quantity;
+        if (updatedFields.montant !== undefined) bodyPayload['montant'] = updatedFields.montant;
+        if (isoDate) bodyPayload['date'] = isoDate;
 
-      const response = await fetch(`/api/cahier/operations/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(bodyPayload),
-      });
+        const response = await fetch(`/api/journals/${encodeURIComponent(targetJournalId)}/entries/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(bodyPayload),
+        });
 
-      if (response.ok) {
-        updatedViaApi = true;
-      } else {
-        const errJson = await response.json().catch(() => null);
-        if (response.status === 403) {
-          apiErrorMessage = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
+        if (response.ok) {
+          updatedViaApi = true;
         } else {
+          const errJson = await response.json().catch(() => null);
           apiErrorMessage = errJson?.error || errJson?.message || `Erreur serveur (${response.status})`;
+        }
+      } else {
+        const bodyPayload: Record<string, unknown> = {};
+        if (updatedFields.libelle !== undefined) bodyPayload['libelle'] = updatedFields.libelle;
+        if (updatedFields.service !== undefined) bodyPayload['service'] = updatedFields.service;
+        if (updatedFields.typeDescription !== undefined) bodyPayload['typeDescription'] = updatedFields.typeDescription;
+        if (updatedFields.category !== undefined) bodyPayload['category'] = updatedFields.category;
+        if (updatedFields.status !== undefined) bodyPayload['status'] = updatedFields.status;
+        if (updatedFields.noDossier !== undefined) bodyPayload['noDossier'] = updatedFields.noDossier;
+        if (updatedFields.firstName !== undefined) bodyPayload['firstName'] = updatedFields.firstName;
+        if (updatedFields.employee !== undefined) bodyPayload['employee'] = updatedFields.employee;
+        if (updatedFields.partenaire !== undefined) bodyPayload['partenaire'] = updatedFields.partenaire;
+        if (updatedFields.quantity !== undefined) bodyPayload['quantity'] = updatedFields.quantity;
+        if (updatedFields.montant !== undefined) bodyPayload['montant'] = updatedFields.montant;
+        if (updatedFields.pieceComptable !== undefined) bodyPayload['pieceComptable'] = updatedFields.pieceComptable;
+        if (isoDate) bodyPayload['date'] = isoDate;
+
+        const response = await fetch(`/api/cahier/operations/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(bodyPayload),
+        });
+
+        if (response.ok) {
+          updatedViaApi = true;
+        } else {
+          const errJson = await response.json().catch(() => null);
+          if (response.status === 403) {
+            apiErrorMessage = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
+          } else {
+            apiErrorMessage = errJson?.error || errJson?.message || `Erreur serveur (${response.status})`;
+          }
         }
       }
     } catch (apiErr) {
-      console.warn('Appel API update /api/cahier/operations échoué, tentative via client Supabase direct:', apiErr);
+      console.warn('Appel API update opérations échoué:', apiErr);
       apiErrorMessage = apiErr instanceof Error ? apiErr.message : 'Erreur réseau';
     }
 
@@ -1069,28 +1126,53 @@ export class CashierService implements OnDestroy {
         headers['Authorization'] = `Bearer ${activeToken}`;
       }
 
-      let response = await fetch('/api/cahier/operations/status', {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ ids: targetIds, status: 'cancelled' }),
-      });
+      const targetedTxs = this._transactions().filter((t) => targetIds.includes(t.id));
+      const isDedicatedJournal = targetedTxs.length > 0 && targetedTxs.every(
+        (t) => t.journalId && t.journalId !== 'native-caisse-principal' && t.journalId !== 'CSH1'
+      );
 
-      if (!response.ok && response.status === 404) {
-        response = await fetch('/api/cashier/transactions/status', {
+      if (isDedicatedJournal) {
+        let allOk = true;
+        for (const tx of targetedTxs) {
+          const jId = tx.journalId || tx.journal_id || this._activeJournalId();
+          const response = await fetch(`/api/journals/${encodeURIComponent(jId)}/entries/${encodeURIComponent(tx.id)}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ status: 'cancelled' }),
+          });
+          if (!response.ok) {
+            allOk = false;
+            const errJson = await response.json().catch(() => null);
+            failureReason = errJson?.error || `Erreur d'annulation (${response.status})`;
+          }
+        }
+        if (allOk) {
+          cancelledSuccessfully = true;
+        }
+      } else {
+        let response = await fetch('/api/cahier/operations/status', {
           method: 'PATCH',
           headers,
           body: JSON.stringify({ ids: targetIds, status: 'cancelled' }),
         });
-      }
 
-      if (response.ok) {
-        cancelledSuccessfully = true;
-      } else {
-        const errJson = await response.json().catch(() => null);
-        if (response.status === 403) {
-          failureReason = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
+        if (!response.ok && response.status === 404) {
+          response = await fetch('/api/cashier/transactions/status', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ids: targetIds, status: 'cancelled' }),
+          });
+        }
+
+        if (response.ok) {
+          cancelledSuccessfully = true;
         } else {
-          failureReason = errJson?.error || errJson?.message || `Erreur serveur HTTP ${response.status}`;
+          const errJson = await response.json().catch(() => null);
+          if (response.status === 403) {
+            failureReason = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
+          } else {
+            failureReason = errJson?.error || errJson?.message || `Erreur serveur HTTP ${response.status}`;
+          }
         }
       }
     } catch (networkErr) {
@@ -1358,40 +1440,72 @@ export class CashierService implements OnDestroy {
   }
 
   /**
-   * Recalcule les soldes progressifs de manière chronologique et maintient l'ordre antéchronologique
+   * Recalcule les soldes progressifs de manière isolée et hermétique pour chaque journal
+   * et maintient l'ordre antéchronologique global.
    */
   private recalculateRunningBalances(): void {
     const current = this._transactions();
     if (current.length === 0) return;
 
-    // Trier du plus ancien au plus récent pour calculer le solde progressif
-    const chronological = [...current].sort((a, b) => {
-      const timeA = this.parseDateTimestamp(a.date);
-      const timeB = this.parseDateTimestamp(b.date);
-      if (timeA !== timeB) return timeA - timeB;
-      const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return createdA - createdB;
-    });
+    // Partitionner les écritures par journal pour garantir une stricte indépendance de chaque compte
+    const journalsMap = new Map<string, CashierTransaction[]>();
 
-    let balance = 0;
-    const updatedChronological = chronological.map((tx) => {
-      if (tx.status !== 'posted') {
-        return { ...tx, soldeApres: balance };
-      }
-      balance += tx.montant;
-      // Ne JAMAIS inventer de fausse pièce comptable CSH1/... côté client (P0 #6)
-      return {
-        ...tx,
-        soldeApres: tx.soldeApres !== undefined && tx.soldeApres !== null ? tx.soldeApres : balance,
-      };
-    });
+    for (const tx of current) {
+      const isCustomJournal =
+        tx.journalId &&
+        tx.journalId !== 'native-caisse-principal' &&
+        tx.journalId !== 'CSH1' &&
+        !tx.pieceComptable?.startsWith('CSH1');
+
+      const jId = isCustomJournal ? (tx.journalId || tx.journal_id || 'native-caisse-principal') : 'native-caisse-principal';
+      const group = journalsMap.get(jId) || [];
+      group.push(tx);
+      journalsMap.set(jId, group);
+    }
+
+    const allUpdated: CashierTransaction[] = [];
+
+    for (const groupTxs of journalsMap.values()) {
+      // Trier chronologiquement (du plus ancien au plus récent) pour ce journal spécifique
+      const chronological = [...groupTxs].sort((a, b) => {
+        const timeA = this.parseDateTimestamp(a.date);
+        const timeB = this.parseDateTimestamp(b.date);
+        if (timeA !== timeB) return timeA - timeB;
+        const seqA = this.extractPieceSequence(a.pieceComptable);
+        const seqB = this.extractPieceSequence(b.pieceComptable);
+        if (seqA !== 0 && seqB !== 0 && seqA !== seqB) {
+          return seqA - seqB;
+        }
+        const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return createdA - createdB;
+      });
+
+      let balance = 0;
+      const updatedGroup = chronological.map((tx) => {
+        if (tx.status === 'cancelled') {
+          return { ...tx, soldeApres: balance };
+        }
+        balance += Number(tx.montant) || 0;
+        return {
+          ...tx,
+          soldeApres: balance,
+        };
+      });
+
+      allUpdated.push(...updatedGroup);
+    }
 
     // Remettre en ordre antéchronologique strict (le plus récent en tête)
-    const antechronological = [...updatedChronological].sort((a, b) => {
+    const antechronological = [...allUpdated].sort((a, b) => {
       const timeA = this.parseDateTimestamp(a.date);
       const timeB = this.parseDateTimestamp(b.date);
       if (timeA !== timeB) return timeB - timeA;
+      const seqA = this.extractPieceSequence(a.pieceComptable);
+      const seqB = this.extractPieceSequence(b.pieceComptable);
+      if (seqA !== 0 && seqB !== 0 && seqA !== seqB) {
+        return seqB - seqA;
+      }
       const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return createdB - createdA;
@@ -1440,6 +1554,11 @@ export class CashierService implements OnDestroy {
       const timeA = this.parseDateTimestamp(a.date);
       const timeB = this.parseDateTimestamp(b.date);
       if (timeA !== timeB) return timeA - timeB;
+      const seqA = this.extractPieceSequence(a.piece_comptable || undefined);
+      const seqB = this.extractPieceSequence(b.piece_comptable || undefined);
+      if (seqA !== 0 && seqB !== 0 && seqA !== seqB) {
+        return seqA - seqB;
+      }
       const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return createdA - createdB;
@@ -1448,7 +1567,10 @@ export class CashierService implements OnDestroy {
     let runningBalance = 0;
     const mappedChronological = chronological.map((row) => {
       const numMontant = Number(row.montant) || 0;
-      runningBalance += numMontant;
+      const isPosted = row.status === 'posted';
+      if (isPosted) {
+        runningBalance += numMontant;
+      }
 
       return {
         id: row.id,
@@ -1466,7 +1588,7 @@ export class CashierService implements OnDestroy {
         partenaire: row.partenaire || row.employee || '',
         quantity: row.quantity !== null && row.quantity !== undefined ? Number(row.quantity) : undefined,
         montant: numMontant,
-        soldeApres: row.solde_apres !== undefined && row.solde_apres !== null ? Number(row.solde_apres) : runningBalance,
+        soldeApres: row.solde_apres !== undefined && row.solde_apres !== null ? Number(row.solde_apres) : (isPosted ? runningBalance : 0),
         selected: !!row.selected,
         createdBy: row.created_by || undefined,
         employeeId: row.employee_id || undefined,
@@ -1482,6 +1604,11 @@ export class CashierService implements OnDestroy {
       const timeA = this.parseDateTimestamp(a.date);
       const timeB = this.parseDateTimestamp(b.date);
       if (timeA !== timeB) return timeB - timeA;
+      const seqA = this.extractPieceSequence(a.pieceComptable);
+      const seqB = this.extractPieceSequence(b.pieceComptable);
+      if (seqA !== 0 && seqB !== 0 && seqA !== seqB) {
+        return seqB - seqA;
+      }
       const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return createdB - createdA;

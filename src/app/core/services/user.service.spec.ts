@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { UserService } from './user.service';
 import { SupabaseService } from './supabase.service';
+import { AuthService } from './auth.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -16,6 +17,13 @@ describe('UserService', () => {
             supabase: null,
             isConfigured: false,
             ensureInitialized: vi.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            token: () => 'mock-jwt-token',
+            currentUser: () => ({ id: 'usr-1', email: 'test@transmex.com' }),
           },
         },
       ],

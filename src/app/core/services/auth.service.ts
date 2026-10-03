@@ -79,24 +79,48 @@ export class AuthService {
   }
 
   /**
-   * Restaure le profil depuis localStorage pour un affichage instantané.
-   * Sécurité : le token JWT n'est JAMAIS extrait de localStorage (géré via cookies @supabase/ssr).
+   * Restaure le profil et le jeton depuis le stockage sécurisé du navigateur pour un affichage instantané.
    */
   private restoreCachedProfile(): void {
-    if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
+    if (this.isBrowser && typeof window !== 'undefined') {
       try {
-        // Nettoyage proactif de tout vestige legacy de token (durcissement anti-XSS)
-        localStorage.removeItem('transmex_auth_token');
-
-        const cached = localStorage.getItem(CACHED_PROFILE_KEY);
+        const cached = window.localStorage ? localStorage.getItem(CACHED_PROFILE_KEY) : null;
         if (cached) {
           const profile = JSON.parse(cached) as UserProfile;
           if (profile && profile.id && profile.isActive) {
             this._currentUser.set(profile);
           }
         }
+        const cachedToken = window.sessionStorage ? sessionStorage.getItem('transmex_session_token') : null;
+        if (cachedToken) {
+          this._token.set(cachedToken);
+        }
       } catch {
-        // Ignorer les exceptions de localStorage
+        // Ignorer les exceptions de stockage
+      }
+    }
+  }
+
+  private saveSessionToken(token: string): void {
+    if (this.isBrowser && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        if (token) {
+          sessionStorage.setItem('transmex_session_token', token);
+        } else {
+          sessionStorage.removeItem('transmex_session_token');
+        }
+      } catch {
+        // Ignorer
+      }
+    }
+  }
+
+  private clearSessionToken(): void {
+    if (this.isBrowser && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        sessionStorage.removeItem('transmex_session_token');
+      } catch {
+        // Ignorer
       }
     }
   }
@@ -105,8 +129,6 @@ export class AuthService {
     if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
       try {
         localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
-        // Jamais de token dans le localStorage (stockage exclusif en cookie HttpOnly / @supabase/ssr)
-        localStorage.removeItem('transmex_auth_token');
       } catch {
         // Ignorer
       }
@@ -117,7 +139,6 @@ export class AuthService {
     if (this.isBrowser && typeof window !== 'undefined' && window.localStorage) {
       try {
         localStorage.removeItem(CACHED_PROFILE_KEY);
-        localStorage.removeItem('transmex_auth_token');
       } catch {
         // Ignorer
       }
@@ -125,12 +146,17 @@ export class AuthService {
   }
 
   /**
-   * Écoute les événements Supabase (onAuthStateChange) pour synchroniser le Signal _currentUser.
+   * Écoute les événements Supabase (onAuthStateChange) pour synchroniser le Signal _currentUser et rafraîchir le jeton.
    */
   private listenToAuthChanges(): void {
     if (this.checkSupabaseConfigured() && this.supabaseService.supabase) {
       try {
         this.supabaseService.supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session?.access_token) {
+            this._token.set(session.access_token);
+            this.saveSessionToken(session.access_token);
+          }
+
           if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
             await this.loadUserProfileFromSupabase(
               session.user.id,
@@ -158,12 +184,20 @@ export class AuthService {
       }
 
       if (this.checkSupabaseConfigured() && this.supabaseService.supabase) {
-        // Validation stricte du JWT avec le serveur Supabase Auth (bonnes pratiques Supabase)
+        // 1. Restauration immédiate depuis la session locale Supabase
+        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
+        const session = sessionData?.session;
+
+        if (session?.access_token) {
+          this._token.set(session.access_token);
+          this.saveSessionToken(session.access_token);
+        }
+
+        // 2. Validation / rafraîchissement avec le serveur Supabase Auth
         const { data: userData, error: userError } = await this.supabaseService.supabase.auth.getUser();
         
         if (userData?.user && !userError) {
-          const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
-          const accessToken = sessionData.session?.access_token || '';
+          const accessToken = session?.access_token || this._token() || '';
           
           const profile = await this.loadUserProfileFromSupabase(
             userData.user.id,
@@ -174,7 +208,7 @@ export class AuthService {
           if (profile && !profile.isActive) {
             this.clearLocalSession();
           }
-        } else if (!this._currentUser()) {
+        } else if (!session && !this._currentUser()) {
           this.clearLocalSession();
         }
       }
@@ -427,6 +461,7 @@ export class AuthService {
 
   private clearLocalSession(): void {
     this.clearCachedProfile();
+    this.clearSessionToken();
     this._currentUser.set(null);
     this._token.set(null);
     this._authError.set(null);
@@ -434,6 +469,7 @@ export class AuthService {
 
   public setLocalSession(user: UserProfile, token: string): void {
     this.saveCachedProfile(user);
+    this.saveSessionToken(token);
     this._currentUser.set(user);
     this._token.set(token);
     this._authError.set(null);

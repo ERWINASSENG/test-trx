@@ -1,7 +1,8 @@
-import { Injectable, computed, inject, signal, PLATFORM_ID } from '@angular/core';
+import { Injectable, computed, inject, signal, effect, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { CreateUserPayload, UpdateUserPayload, UserProfile } from '../models/auth.model';
 import { SupabaseService } from './supabase.service';
+import { AuthService } from './auth.service';
 import { normalizeUserRole } from '../utils/role.utils';
 
 const USERS_STORAGE_KEY = 'transmex_users_store';
@@ -11,6 +12,7 @@ const USERS_STORAGE_KEY = 'transmex_users_store';
 })
 export class UserService {
   private readonly supabaseService = inject(SupabaseService);
+  private readonly authService = inject(AuthService);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
 
@@ -25,6 +27,10 @@ export class UserService {
   private async getAuthToken(): Promise<string> {
     if (!this.isBrowser) return '';
 
+    // 1. Récupération prioritaire depuis le signal d'authentification réactif AuthService
+    const authSignalToken = this.authService.token();
+    if (authSignalToken) return authSignalToken;
+
     try {
       if (this.checkSupabaseConfigured() && this.supabaseService.supabase) {
         await this.supabaseService.ensureInitialized();
@@ -33,9 +39,6 @@ export class UserService {
           return sessionData.session.access_token;
         }
       }
-
-      const cachedToken = localStorage.getItem('transmex_auth_token');
-      if (cachedToken) return cachedToken;
 
       // Chercher aussi les tokens sb-*-auth-token stockés automatiquement par Supabase
       for (let i = 0; i < localStorage.length; i++) {
@@ -73,7 +76,13 @@ export class UserService {
   public readonly employeCount = computed(() => this._users().filter((u) => u.role === 'employe').length);
 
   constructor() {
-    this.loadInitialUsers();
+    this.restoreFromStorage();
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (user && this.isBrowser) {
+        void this.loadInitialUsers();
+      }
+    });
   }
 
   private restoreFromStorage(): void {
@@ -100,54 +109,55 @@ export class UserService {
     this._error.set(null);
 
     try {
-      // 1. Tenter l'appel à l'API sécurisée /api/system/collaborators avec le Bearer token admin
-      if (this.isBrowser) {
-        try {
-          const authToken = await this.getAuthToken();
-          const headers: Record<string, string> = {};
-          if (authToken) {
-            headers['Authorization'] = `Bearer ${authToken}`;
-          }
+      if (!this.isBrowser) {
+        return;
+      }
 
-          const res = await fetch('/api/system/collaborators', { method: 'GET', headers });
-              if (!res.ok) {
-                const errorData = await res.json().catch(() => null);
-                throw new Error(errorData?.error || `Erreur serveur (${res.status}) lors du chargement des utilisateurs.`);
-              }
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        // Si l'utilisateur n'est pas encore identifié, préserver le cache local existant sans vider la liste
+        this._isLoading.set(false);
+        return;
+      }
 
-              const data = await res.json();
-              if (!data?.users || !Array.isArray(data.users)) {
-                throw new Error('Réponse invalide du serveur de gestion des utilisateurs.');
-              }
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${authToken}`,
+      };
 
-              const mapped: UserProfile[] = data.users.map((row: UserProfile) => ({
-                id: row.id,
-                email: row.email,
-                firstName: row.firstName || 'Utilisateur',
-                lastName: row.lastName || 'Transmex',
-                role: normalizeUserRole(row.role),
-                department: row.department || 'Services Généraux',
-                phone: row.phone,
-                isActive: row.isActive ?? true,
-                avatarUrl: row.avatarUrl,
-                createdAt: row.createdAt || new Date().toISOString(),
-                lastLoginAt: row.lastLoginAt,
-              }));
+      const res = await fetch('/api/system/collaborators', { method: 'GET', headers });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || `Erreur serveur (${res.status}) lors du chargement des utilisateurs.`);
+      }
 
-              this._users.set(mapped);
-              this.saveToStorage(mapped);
-              return;
-            } catch (error) {
-              throw error instanceof Error ? error : new Error('Le serveur de gestion des utilisateurs est injoignable.');
-            }
-          }
+      const data = await res.json();
+      if (!data?.users || !Array.isArray(data.users)) {
+        throw new Error('Réponse invalide du serveur de gestion des utilisateurs.');
+      }
 
-          throw new Error('Le chargement des utilisateurs nécessite un navigateur authentifié.');
+      const mapped: UserProfile[] = data.users.map((row: UserProfile) => ({
+        id: row.id,
+        email: row.email,
+        firstName: row.firstName || 'Utilisateur',
+        lastName: row.lastName || 'Transmex',
+        role: normalizeUserRole(row.role),
+        department: row.department || 'Services Généraux',
+        phone: row.phone,
+        isActive: row.isActive ?? true,
+        avatarUrl: row.avatarUrl,
+        createdAt: row.createdAt || new Date().toISOString(),
+        lastLoginAt: row.lastLoginAt,
+      }));
+
+      this._users.set(mapped);
+      this.saveToStorage(mapped);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur lors du chargement des utilisateurs';
       this._error.set(msg);
-      this._users.set([]);
-      if (this.isBrowser) localStorage.removeItem(USERS_STORAGE_KEY);
+      // En cas d'erreur de communication réseau, préserver les données locales déjà en mémoire
+      if (this._users().length === 0) {
+        this.restoreFromStorage();
+      }
     } finally {
       this._isLoading.set(false);
     }

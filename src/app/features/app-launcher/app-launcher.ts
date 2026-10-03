@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { RouterLink } from '@angular/router';
 import { APP_MODULES, AppModule, isAppModuleVisibleToPermissions } from '../../core/models/app-module.model';
 import { AccessControlService } from '../../core/services/access-control.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-launcher',
@@ -12,14 +13,19 @@ import { AccessControlService } from '../../core/services/access-control.service
 })
 export class AppLauncher implements OnInit {
   public readonly accessControl = inject(AccessControlService);
+  public readonly authService = inject(AuthService);
 
   public readonly searchQuery = signal('');
   public readonly visibleModules = computed<readonly AppModule[]>(() => {
     const permissions = this.accessControl.effectivePermissions();
-
     const query = this.normalizeSearchValue(this.searchQuery());
+
     return APP_MODULES.filter((module) => {
-      if (!isAppModuleVisibleToPermissions(module, permissions)) return false;
+      // 1. Contrôle d'habilitation direct via accessControl (supporte admin, rôle restauré, et permissions fines)
+      const isAllowed = this.accessControl.hasPermission(module.permissionKey) ||
+        (permissions.length > 0 && isAppModuleVisibleToPermissions(module, permissions));
+
+      if (!isAllowed) return false;
       if (!query) return true;
 
       return this.normalizeSearchValue(`${module.label} ${module.description}`).includes(query);
