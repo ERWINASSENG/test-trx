@@ -75,6 +75,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       type_transaction: 'Carburant',
       type_description: 'Station Total',
       category: 'sortie' as const,
+      status: 'posted' as const,
       matricule_vehicule: 'LT-5544-AA',
       first_name: 'Samuel',
       employee: 'Samuel Eboa',
@@ -87,8 +88,10 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     let fetchCalledWithInit: RequestInit | undefined;
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      fetchCalledWithUrl = String(input);
-      fetchCalledWithInit = init;
+      if (String(input) === '/api/cahier/operations') {
+        fetchCalledWithUrl = String(input);
+        fetchCalledWithInit = init;
+      }
       return new Response(
         JSON.stringify({
           success: true,
@@ -103,6 +106,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       typeTransaction: 'Carburant',
       typeDescription: 'Station Total',
       category: 'sortie',
+      status: 'posted',
       matriculeVehicule: 'LT-5544-AA',
       firstName: 'Samuel',
       employee: 'Samuel Eboa',
@@ -150,7 +154,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.currentBalance()).toBe(0);
   });
 
-  it('devrait récupérer les opérations via l’API rapide dans loadTransactions()', async () => {
+  it('devrait ne compter que les opérations posted dans le solde après chargement', async () => {
     const mockRows = [
       {
         id: 'row-1',
@@ -163,6 +167,23 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         employee: 'Directeur',
         quantity: 1,
         montant: 500000,
+        status: 'posted' as const,
+      },
+      {
+        id: 'row-2',
+        date: '2026-09-07',
+        libelle: 'Brouillon non comptabilisé',
+        category: 'entree' as const,
+        montant: 250000,
+        status: 'draft' as const,
+      },
+      {
+        id: 'row-3',
+        date: '2026-09-08',
+        libelle: 'Opération annulée',
+        category: 'sortie' as const,
+        montant: -100000,
+        status: 'cancelled' as const,
       },
     ];
 
@@ -175,8 +196,8 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     await service.loadTransactions();
 
-    expect(service.allTransactions().length).toBe(1);
-    expect(service.allTransactions()[0].libelle).toBe('Versement Caisse');
+    expect(service.allTransactions().length).toBe(3);
+    expect(service.allTransactions().find((tx) => tx.id === 'row-1')?.libelle).toBe('Versement Caisse');
     expect(service.currentBalance()).toBe(500000);
   });
 

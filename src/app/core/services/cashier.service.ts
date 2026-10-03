@@ -71,6 +71,8 @@ export class CashierService implements OnDestroy {
     total_sorties: number;
     solde_global: number;
     total_count: number;
+    nb_brouillons?: number;
+    nb_annulees?: number;
   } | null>(null);
   public readonly serverSummary = this._serverSummary.asReadonly();
 
@@ -304,7 +306,7 @@ export class CashierService implements OnDestroy {
     }
     const list = this.caisseTransactions();
     if (list.length === 0) return 0;
-    return list.reduce((acc, curr) => acc + (curr.status === 'cancelled' ? 0 : Number(curr.montant) || 0), 0);
+    return list.reduce((acc, curr) => acc + (curr.status === 'posted' ? Number(curr.montant) || 0 : 0), 0);
   });
 
   // Transactions appartenant exclusivement au journal sélectionné
@@ -377,7 +379,7 @@ export class CashierService implements OnDestroy {
   public readonly currentBalance = computed(() => {
     const list = this.journalTransactions();
     if (list.length === 0) return 0;
-    return list.reduce((acc, curr) => acc + (curr.status === 'cancelled' ? 0 : curr.montant), 0);
+    return list.reduce((acc, curr) => acc + (curr.status === 'posted' ? Number(curr.montant) || 0 : 0), 0);
   });
 
   // Transactions paginées
@@ -523,7 +525,8 @@ export class CashierService implements OnDestroy {
    * Dès réception de la confirmation, injecte l'opération dans le Signal _transactions.
    */
   public async saveOperationViaApi(
-    op: Partial<CashierTransaction> | Omit<CashierTransaction, 'id' | 'soldeApres' | 'selected'>
+    op: Partial<CashierTransaction> | Omit<CashierTransaction, 'id' | 'soldeApres' | 'selected'>,
+    refreshSummary = true
   ): Promise<{ success: boolean; operation?: CashierTransaction; error?: string }> {
     this._error.set(null);
 
@@ -660,6 +663,7 @@ export class CashierService implements OnDestroy {
       };
 
       this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
+      if (refreshSummary) void this.loadCashierSummary();
       return { success: true, operation: operationToStore };
     }
 
@@ -758,8 +762,9 @@ export class CashierService implements OnDestroy {
 
     // Étape 4 (RÉACTIVITÉ INSTANTANÉE) : Mise à jour immédiate du Signal Angular 19
     this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
-  this.setPageIndex(0);
+    this.setPageIndex(0);
     this.recalculateRunningBalances();
+    if (refreshSummary) void this.loadCashierSummary();
 
     return { success: true, operation: operationToStore };
   }
@@ -768,9 +773,10 @@ export class CashierService implements OnDestroy {
    * Alias rétrocompatible pour l'ajout d'une transaction
    */
   public async addTransaction(
-    newTx: Omit<CashierTransaction, 'id' | 'soldeApres' | 'selected'>
+    newTx: Omit<CashierTransaction, 'id' | 'soldeApres' | 'selected'>,
+    refreshSummary = true
   ): Promise<{ success: boolean; operation?: CashierTransaction; error?: string }> {
-    return this.saveOperationViaApi(newTx);
+    return this.saveOperationViaApi(newTx, refreshSummary);
   }
 
   /**
@@ -840,7 +846,7 @@ export class CashierService implements OnDestroy {
           montant: row.montant,
           journalId: this._activeJournalId(),
           journal_id: this._activeJournalId() === 'native-caisse-principal' ? null : this._activeJournalId(),
-        });
+        }, false);
 
         if (res.success) {
           insertedCount++;
@@ -997,6 +1003,7 @@ export class CashierService implements OnDestroy {
     );
 
     this.recalculateRunningBalances();
+    void this.loadCashierSummary();
     return { success: true, message: 'Transaction modifiée avec succès' };
   }
 
@@ -1181,6 +1188,7 @@ export class CashierService implements OnDestroy {
 
         this._transactions.update((currentList) => [...mapped, ...currentList]);
         this.recalculateRunningBalances();
+        void this.loadCashierSummary();
         this.toggleSelectAll(false);
         return true;
       } else {
@@ -1235,6 +1243,8 @@ export class CashierService implements OnDestroy {
         this._transactions.update((items) =>
           items.map((it) => (selectedIds.includes(it.id) ? { ...it, status: 'draft', selected: false } : it))
         );
+        this.recalculateRunningBalances();
+        void this.loadCashierSummary();
         return true;
       }
     } catch {
@@ -1368,7 +1378,7 @@ export class CashierService implements OnDestroy {
 
     let balance = 0;
     const updatedChronological = chronological.map((tx) => {
-      if (tx.status === 'cancelled') {
+      if (tx.status !== 'posted') {
         return { ...tx, soldeApres: balance };
       }
       balance += tx.montant;
@@ -1598,6 +1608,7 @@ export class CashierService implements OnDestroy {
               return [mapped, ...currentList];
             });
             this.recalculateRunningBalances();
+            void this.loadCashierSummary();
           }
         )
         .on(
@@ -1612,6 +1623,7 @@ export class CashierService implements OnDestroy {
               currentList.map((t) => (t.id === mapped.id ? { ...mapped, selected: t.selected } : t))
             );
             this.recalculateRunningBalances();
+            void this.loadCashierSummary();
           }
         )
         .on(
@@ -1625,6 +1637,7 @@ export class CashierService implements OnDestroy {
               currentList.filter((t) => t.id !== deletedId)
             );
             this.recalculateRunningBalances();
+            void this.loadCashierSummary();
           }
         )
         .subscribe((status) => {

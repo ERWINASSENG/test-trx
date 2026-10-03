@@ -76,8 +76,13 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
       return;
     }
 
+    const { data: summary, error: sumErr } = await adminClient.rpc('get_journal_summary', { p_journal_id: journalId });
+    if (sumErr) {
+      res.status(500).json({ error: 'Erreur lors du calcul du solde du journal.' });
+      return;
+    }
+
     const entries = (data || []) as JournalEntryRecord[];
-    const currentBalance = entries.reduce((acc, row) => acc + (Number(row.montant) || 0), 0);
 
     res.json({
       success: true,
@@ -86,7 +91,7 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
       limit,
       offset,
       count: entries.length,
-      current_balance: currentBalance,
+      current_balance: Number(summary?.solde_global ?? 0),
       entries,
     });
   } catch (err: unknown) {
@@ -444,20 +449,34 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
   }
 
   try {
-    const { data, error } = await adminClient
-      .from('journal_entries')
-      .select('date, montant, libelle')
-      .eq('journal_id', journalId)
-      .order('date', { ascending: true })
-      .order('sequence_number', { ascending: true })
-      .limit(1000);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
+    const { data: summary, error: sumErr } = await adminClient.rpc('get_journal_summary', { p_journal_id: journalId });
+    if (sumErr) {
+      res.status(500).json({ error: 'Erreur lors du calcul du solde du journal.' });
       return;
     }
 
-    const entries = (data || []) as JournalEntryRecord[];
+    const pageSize = 500;
+    const entries: JournalEntryRecord[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await adminClient
+        .from('journal_entries')
+        .select('date, montant, libelle, sequence_number')
+        .eq('journal_id', journalId)
+        .eq('status', 'posted')
+        .order('date', { ascending: true })
+        .order('sequence_number', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        res.status(500).json({ error: error.message });
+        return;
+      }
+
+      const page = (data || []) as JournalEntryRecord[];
+      entries.push(...page);
+      if (page.length < pageSize) break;
+    }
+
     entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     let runningBalance = 0;
@@ -480,7 +499,7 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
     res.json({
       success: true,
       journal_id: journalId,
-      current_balance: runningBalance,
+      current_balance: Number(summary?.solde_global ?? 0),
       labels,
       balances,
       descriptions,
