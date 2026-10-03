@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { MainLayout } from './main-layout';
@@ -14,9 +14,11 @@ import { vi } from 'vitest';
 
 describe('MainLayout Component', () => {
   let component: MainLayout;
+  let fixture: ComponentFixture<MainLayout>;
   let cashierService: CashierService;
   let themeService: ThemeService;
   let logoutCalled = false;
+  let statusUpdateAllowed = signal(false);
 
   const mockUser: UserProfile = {
     id: 'test-admin',
@@ -41,6 +43,7 @@ describe('MainLayout Component', () => {
 
   beforeEach(() => {
     logoutCalled = false;
+    statusUpdateAllowed = signal(false);
     currentUser = signal<UserProfile | null>(mockUser);
     currentRole = signal<UserRole>(mockUser.role);
     effectivePermissions = signal([
@@ -83,6 +86,7 @@ describe('MainLayout Component', () => {
             effectivePermissions,
             hasPermission: (permission: string) => {
               if (permission === 'cashier.create') return currentRole() === 'admin' || currentRole() === 'caissiere';
+              if (permission === 'cashier.status_update') return currentRole() === 'admin' || (currentRole() === 'caissiere' && statusUpdateAllowed());
               return effectivePermissions().some((item) => item.permissionKey === permission && item.effect === 'allow');
             },
             hasPermissionForResource: (_permission: string, resource: { ownerUserId?: string }) =>
@@ -93,7 +97,7 @@ describe('MainLayout Component', () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(MainLayout);
+    fixture = TestBed.createComponent(MainLayout);
     component = fixture.componentInstance;
     cashierService = TestBed.inject(CashierService);
     themeService = TestBed.inject(ThemeService);
@@ -184,6 +188,53 @@ describe('MainLayout Component', () => {
 
     currentRole.set('tresorier');
     expect(component.canEditCaisse()).toBe(false);
+  });
+
+  it('affiche Annuler uniquement avec le droit de mise à jour du statut', async () => {
+    currentRole.set('caissiere');
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      success: true,
+      operation: {
+        id: 'tx-cancel-guard',
+        piece_comptable: 'CSH1/2026/00001',
+        date: '2026-10-03',
+        libelle: 'Transaction de test',
+        category: 'entree',
+        status: 'draft',
+        montant: 1,
+      },
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as typeof globalThis.fetch;
+
+    try {
+      const result = await cashierService.saveOperationViaApi({
+        libelle: 'Transaction de test',
+        category: 'entree',
+        montant: 1,
+      });
+      expect(result.success).toBe(true);
+      cashierService.toggleSelectTransaction('tx-cancel-guard');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    await component.router.navigateByUrl('/caisse');
+    fixture.detectChanges();
+    component.toggleActionsMenu();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#cp-action-duplicate')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#cp-action-cancel-selected')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#cp-action-reset-draft')).toBeNull();
+
+    statusUpdateAllowed.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#cp-action-cancel-selected')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#cp-action-reset-draft')).not.toBeNull();
+
+    const resetSelectedToDraft = vi.spyOn(cashierService, 'resetSelectedToDraft').mockResolvedValue(true);
+    await component.onResetToDraftAction();
+    expect(resetSelectedToDraft).toHaveBeenCalledOnce();
   });
 
   it('autorise le trésorier uniquement sur ses journaux personnalisés', () => {

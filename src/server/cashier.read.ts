@@ -22,6 +22,12 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
     let offset = rawOffset ? Number(rawOffset) : 0;
     if (isNaN(offset) || offset < 0) offset = 0;
 
+    const { data: nativeCashJournal } = await adminClient
+      .from('journals')
+      .select('id')
+      .eq('sequence_prefix', 'CSH1')
+      .maybeSingle();
+
     const { data, error, count } = await adminClient
       .from('cashier_transactions')
       .select('id, piece_comptable, date, libelle, service, type_description, category, status, no_dossier, dossier_id, first_name, partenaire, employee, employee_id, created_by, quantity, montant, solde_apres, selected, journal_id, created_at, updated_at', { count: 'exact' })
@@ -37,6 +43,9 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
 
     const enrichedRows = (data || []).map((row) => {
       const enriched = formatPersistedPieceComptable(row);
+      if (nativeCashJournal?.id && row.journal_id === nativeCashJournal.id) {
+        enriched['journal_id'] = 'native-caisse-principal';
+      }
       if (!isComptable) return enriched;
 
       const restrictedRow = { ...enriched };

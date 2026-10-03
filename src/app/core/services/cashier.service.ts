@@ -344,6 +344,12 @@ export class CashierService implements OnDestroy {
     });
 
     return [...filtered].sort((a, b) => {
+      const draftWithoutPieceA = a.status === 'draft' && !a.pieceComptable;
+      const draftWithoutPieceB = b.status === 'draft' && !b.pieceComptable;
+      if (draftWithoutPieceA !== draftWithoutPieceB) {
+        return draftWithoutPieceA ? -1 : 1;
+      }
+
       let comparison = 0;
       if (field === 'pieceComptable') {
         const numA = this.extractPieceSequence(a.pieceComptable);
@@ -722,6 +728,9 @@ export class CashierService implements OnDestroy {
 
     // Étape 3 : Création de l'objet transaction unifié (comme sur Odoo : la pièce officielle retournée par la base)
     const currentUserId = this.authService.currentUser()?.id;
+    const persistedJournalId = isNativeCaisse
+      ? 'native-caisse-principal'
+      : savedRow.journal_id || op.journalId || op.journal_id || this._activeJournalId();
     const operationToStore: CashierTransaction = {
       id: savedRow.id,
       pieceComptable: savedRow.piece_comptable || explicitPiece || undefined,
@@ -741,14 +750,15 @@ export class CashierService implements OnDestroy {
       selected: false,
       createdBy: savedRow.created_by || currentUserId || undefined,
       employeeId: savedRow.employee_id || currentUserId || undefined,
-      journalId: savedRow.journal_id || op.journalId || op.journal_id || this._activeJournalId(),
-      journal_id: savedRow.journal_id || op.journalId || op.journal_id || this._activeJournalId(),
+      journalId: persistedJournalId,
+      journal_id: persistedJournalId,
       createdAt: savedRow.created_at || new Date().toISOString(),
       updatedAt: savedRow.updated_at,
     };
 
     // Étape 4 (RÉACTIVITÉ INSTANTANÉE) : Mise à jour immédiate du Signal Angular 19
     this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
+  this.setPageIndex(0);
     this.recalculateRunningBalances();
 
     return { success: true, operation: operationToStore };
@@ -1013,18 +1023,32 @@ export class CashierService implements OnDestroy {
     if (targetIds.length === 0) return true;
 
     this._error.set(null);
-    let activeToken = this.authService.token();
-
-    // Récupération dynamique et fraîche du jeton Supabase
-    if (this.supabaseService.supabase) {
-      try {
-        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
-        if (sessionData.session?.access_token) {
-          activeToken = sessionData.session.access_token;
-        }
-      } catch (err) {
-          console.warn('Session Supabase non récupérable pour annulation:', err);
+    let activeToken: string | null = null;
+    try {
+      if (typeof this.authService.waitForSession === 'function') {
+        await this.authService.waitForSession();
       }
+      if (typeof this.supabaseService.ensureInitialized === 'function') {
+        await this.supabaseService.ensureInitialized();
+      }
+
+      const supabase = this.supabaseService.supabase;
+      if (supabase) {
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        activeToken = sessionData.session?.access_token || this.authService.token();
+      } else {
+        activeToken = this.authService.token();
+      }
+    } catch (err) {
+      console.warn('Session Supabase non récupérable pour annulation:', err);
+      this.setError('Session d’authentification indisponible. Reconnectez-vous avant d’annuler.');
+      return false;
+    }
+
+    if (!activeToken) {
+      this.setError('Session d’authentification indisponible. Reconnectez-vous avant d’annuler.');
+      return false;
     }
 
     let cancelledSuccessfully = false;

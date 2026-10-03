@@ -162,6 +162,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   /** Vérifie le droit d’édition du journal réel associé à la ligne. */
   public canEditTransaction(tx: CashierTransaction): boolean {
     if (tx.status === 'cancelled') return false;
+    if (tx.status === 'posted' && this.authService.currentRole() === 'caissiere') return false;
 
     const transactionJournalId = tx.journalId ?? tx.journal_id ?? 'native-caisse-principal';
     const isNativeCaisse =

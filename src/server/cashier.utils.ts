@@ -39,3 +39,8 @@ export const normalizeDateToDay = (rawDate?: string | null): string => {
   }
   return trimmed;
 };
+
+export const requiresCashierDraftBeforeEdit = (
+  status: string | null | undefined,
+  role: string | null | undefined
+): boolean => role === 'caissiere' && status === 'posted';

@@ -105,7 +105,7 @@ export class AccessControlService {
       case 'comptable':
         return ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey);
       case 'caissiere':
-        return ['cashier.read', 'cashier.write'].includes(permissionKey);
+        return ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey);
       case 'employe':
         return ['hr.read'].includes(permissionKey);
       default:

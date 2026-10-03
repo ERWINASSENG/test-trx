@@ -181,7 +181,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
   });
 
   it('devrait annuler les éléments sélectionnés sans supprimer leur pièce comptable', async () => {
-    globalThis.fetch = (async (input, init) => {
+    globalThis.fetch = (async (input) => {
       if (String(input).endsWith('/status')) {
         return new Response(JSON.stringify({
           success: true,
@@ -381,5 +381,55 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.paginationLabel()).toBe('81-95 / 95');
     expect(service.hasNextPage()).toBe(false);
     expect(service.hasPrevPage()).toBe(true);
+  });
+
+  it('devrait rendre visible en première page un nouveau brouillon sans pièce', async () => {
+    const postedRows = Array.from({ length: 80 }, (_, index) => ({
+      id: `posted-${index}`,
+      piece_comptable: `CSH1/2026/${String(index + 1).padStart(5, '0')}`,
+      date: '2026-10-02',
+      libelle: `Opération comptabilisée ${index}`,
+      category: 'entree' as const,
+      status: 'posted' as const,
+      montant: 100,
+    }));
+    const mappedRows = service.mapDatabaseOperations(postedRows);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mappedRows);
+    service.setPageIndex(1);
+
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          operation: {
+            id: 'draft-without-piece',
+            piece_comptable: null,
+            date: '2026-10-03',
+            libelle: 'Brouillon sans pièce',
+            service: 'TRANSIT',
+            category: 'entree',
+            status: 'draft',
+            montant: 1,
+            created_at: '2026-10-03T10:00:00.000Z',
+          },
+        }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ operations: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch;
+
+    const result = await service.saveOperationViaApi({
+      libelle: 'Brouillon sans pièce',
+      service: 'TRANSIT',
+      category: 'entree',
+      status: 'draft',
+      montant: 1,
+    });
+
+    expect(result.success).toBe(true);
+    expect(service.filterState().pageIndex).toBe(0);
+    expect(service.pagedTransactions()[0].id).toBe('draft-without-piece');
   });
 });

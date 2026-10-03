@@ -1,7 +1,7 @@
 import express from 'express';
 import { isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
 import { getSupabaseAdmin } from './auth';
-import { isCanonicalAccessRoleKey, syncUserAccessRole } from './access-role-sync';
+import { isCanonicalAccessRoleKey } from './access-role-sync';
 
 const actorIdFromRequest = (req: express.Request): string | null => {
   const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;

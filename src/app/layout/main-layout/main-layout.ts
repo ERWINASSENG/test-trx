@@ -306,7 +306,7 @@ export class MainLayout {
   }
 
   public async onResetToDraftAction(): Promise<void> {
-    if (!this.canEditCaisse()) return;
+    if (!this.canCancelCashierOperations()) return;
     if (this.selectedTransactionsCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.resetSelectedToDraft();

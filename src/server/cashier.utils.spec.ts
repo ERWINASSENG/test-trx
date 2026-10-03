@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   formatPersistedPieceComptable,
   normalizeDateToDay,
+  requiresCashierDraftBeforeEdit,
 } from './cashier.utils';
 
 describe('cashier.utils', () => {
@@ -24,6 +25,20 @@ describe('cashier.utils', () => {
 
     it('conserve les formats ISO AAAA-MM-JJ', () => {
       expect(normalizeDateToDay('2026-09-15T10:00:00.000Z')).toBe('2026-09-15');
+    });
+  });
+
+  describe('requiresCashierDraftBeforeEdit', () => {
+    it('exige un retour en brouillon pour une caissière sur une opération comptabilisée', () => {
+      expect(requiresCashierDraftBeforeEdit('posted', 'caissiere')).toBe(true);
+    });
+
+    it('n’empêche pas l’admin de modifier une opération comptabilisée', () => {
+      expect(requiresCashierDraftBeforeEdit('posted', 'admin')).toBe(false);
+    });
+
+    it('permet à une caissière de modifier une opération en brouillon', () => {
+      expect(requiresCashierDraftBeforeEdit('draft', 'caissiere')).toBe(false);
     });
   });
 });

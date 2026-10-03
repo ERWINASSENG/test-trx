@@ -287,7 +287,7 @@ describe('CashierManagement', () => {
     expect(component.currentBalance()).toBe(-30000);
   });
 
-  it('devrait permettre de choisir le statut (Brouillon / Comptabilisé) lors de l’ajout et de la modification', async () => {
+  it('exige le retour en brouillon avant de modifier une pièce comptabilisée', async () => {
     component.startAddInline();
     expect(component.transactionForm.get('status')?.value).toBe('draft');
 
@@ -304,17 +304,24 @@ describe('CashierManagement', () => {
     const createdTx = service.allTransactions()[0];
     expect(createdTx.status).toBe('posted');
 
-    // Modification vers brouillon
+    expect(component.canEditTransaction(createdTx)).toBe(false);
     component.startInlineEdit(createdTx);
-    expect(component.editTransactionForm.get('status')?.value).toBe('posted');
+    expect(component.editingTxId()).toBeNull();
 
-    component.editTransactionForm.patchValue({
-      status: 'draft',
-    });
+    service.toggleSelectTransaction(createdTx.id);
+    await service.resetSelectedToDraft();
+    const draftTx = service.allTransactions()[0];
+    expect(draftTx.status).toBe('draft');
+    expect(component.canEditTransaction(draftTx)).toBe(true);
+
+    await component.startInlineEdit(draftTx);
+    expect(component.editTransactionForm.get('status')?.value).toBe('draft');
+    component.editTransactionForm.patchValue({ libelle: 'Versement corrigé' });
 
     await component.submitInlineEdit();
     const updatedTx = service.allTransactions()[0];
     expect(updatedTx.status).toBe('draft');
+    expect(updatedTx.libelle).toBe('Versement corrigé');
   });
 
   it('devrait afficher une notification d’avertissement lors de la détection d’un doublon', async () => {

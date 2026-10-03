@@ -459,7 +459,7 @@
                     </button>
 
                     <!-- 3. Dupliquer -->
-                    @if (canCancelCashierOperations()) {
+                    @if (canEditCaisse()) {
                       <button
                         type="button"
                         (click)="onDuplicateAction()"
@@ -472,7 +472,7 @@
                     }
 
                     <!-- 4. Annuler en conservant la pièce comptable -->
-                    @if (canEditCaisse()) {
+                    @if (canCancelCashierOperations()) {
                       <button
                         type="button"
                         (click)="onCancelSelectedAction()"
@@ -488,7 +488,7 @@
                     <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
 
                     <!-- 5. Remettre en brouillon -->
-                    @if (canEditCaisse()) {
+                    @if (canCancelCashierOperations()) {
                       <button
                         type="button"
                         (click)="onResetToDraftAction()"

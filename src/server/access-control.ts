@@ -235,7 +235,7 @@ export const hasPermission = async (
   if ((hasRole('tresorier') || hasRole('comptable')) && ['cashier.read', 'cashier.write', 'journals.read', 'journals.write'].includes(permissionKey)) {
     return true;
   }
-  if (hasRole('caissiere') && ['cashier.read', 'cashier.write'].includes(permissionKey)) {
+  if (hasRole('caissiere') && ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey)) {
     return true;
   }
   if (hasRole('employe') && ['hr.read'].includes(permissionKey)) {

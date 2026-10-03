@@ -13,7 +13,7 @@ import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
-import { formatPersistedPieceComptable, normalizeDateToDay } from './server/cashier.utils';
+import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
@@ -575,6 +575,11 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
         updateData['created_by'] = authenticatedUser.id;
         updateData['employee_id'] = authenticatedUser.id;
       }
+    }
+
+    if (requiresCashierDraftBeforeEdit(existingRow.status, authenticatedUser?.role)) {
+      res.status(409).json({ error: 'Remettez l’opération en brouillon avant de la modifier.' });
+      return;
     }
 
     const payload = req.body || {};
