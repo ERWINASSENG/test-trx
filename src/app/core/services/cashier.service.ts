@@ -63,7 +63,12 @@ export class CashierService implements OnDestroy {
   private readonly _isLoading = signal<boolean>(false);
   private readonly _error = signal<string | null>(null);
   private errorTimeout: ReturnType<typeof setTimeout> | null = null;
-  private realtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
+  private cashierRealtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
+  private journalRealtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
+  private realtimeRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  private journalRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly _journalBalanceRefreshVersion = signal(0);
+  public readonly journalBalanceRefreshVersion = this._journalBalanceRefreshVersion.asReadonly();
 
   // Résumé global calculé côté serveur (indépendant de la pagination locale)
   private readonly _serverSummary = signal<{
@@ -278,12 +283,7 @@ export class CashierService implements OnDestroy {
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const activeJournal = this._activeJournalId();
-      const journalQuery = activeJournal && activeJournal !== 'native-caisse-principal' && activeJournal !== 'CSH1'
-        ? `?journalId=${encodeURIComponent(activeJournal)}`
-        : '';
-
-      const res = await fetch(`/api/cahier/operations/summary${journalQuery}`, { headers });
+      const res = await fetch('/api/cahier/operations/summary', { headers });
       if (res.ok) {
         const json = await res.json();
         if (json?.summary) {
@@ -299,9 +299,7 @@ export class CashierService implements OnDestroy {
   // Utilise en priorité le solde global exact calculé côté serveur PostgreSQL (P0 #5)
   public readonly caisseBalance = computed(() => {
     const summary = this._serverSummary();
-    const currentJournal = this._activeJournalId();
-    const isMainCaisse = !currentJournal || currentJournal === 'native-caisse-principal' || currentJournal === 'CSH1';
-    if (summary && summary.solde_global !== undefined && isMainCaisse) {
+    if (summary && summary.solde_global !== undefined) {
       return Number(summary.solde_global);
     }
     const list = this.caisseTransactions();
@@ -1574,9 +1572,7 @@ export class CashierService implements OnDestroy {
    * ───────────────────────────────────────────────────────────────────────────
    * SYNCHRONISATION EN TEMPS RÉEL (SUPABASE REALTIME WEBSOCKET)
    * ───────────────────────────────────────────────────────────────────────────
-   * Écoute les événements INSERT, UPDATE, DELETE sur la table cashier_transactions
-   * et met à jour instantanément le Signal _transactions sans rechargement,
-   * avec réconciliation d'état automatique lors de la souscription ou reconnexion.
+  * Écoute un signal privé d'invalidation puis recharge les données par l'API autorisée.
    */
   private async setupRealtimeSubscription(): Promise<void> {
     if (!this.isBrowser) return;
@@ -1586,87 +1582,82 @@ export class CashierService implements OnDestroy {
       const client = this.supabaseService.supabase;
       if (!client) return;
 
-      // Éviter les souscriptions en doublon
-      if (this.realtimeChannel) {
-        return;
+      let token = this.authService.token();
+      if (!token) {
+        const { data } = await client.auth.getSession();
+        token = data.session?.access_token || '';
+      }
+      if (!token) return;
+
+      await client.realtime.setAuth(token);
+      const role = this.authService.currentRole();
+      const canReadCashier = ['admin', 'caissier', 'caissiere', 'manager', 'comptable', 'tresorier'].includes(role || '');
+      const canReadJournalBalances = ['admin', 'manager', 'tresorier'].includes(role || '');
+
+      if (canReadCashier && !this.cashierRealtimeChannel) {
+        this.cashierRealtimeChannel = client
+          .channel('cashier-balances:invalidate', { config: { private: true } })
+          .on('broadcast', { event: 'cashier_balances_invalidated' }, () => this.scheduleRealtimeRefresh())
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              if (this._transactions().length === 0) this.loadTransactions();
+              this.loadCashierSummary();
+            }
+          });
       }
 
-      this.realtimeChannel = client
-        .channel('public:cashier_transactions')
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'cashier_transactions' },
-          (payload) => {
-            const newRow = payload.new as CashierDbRow;
-            if (!newRow || !newRow.id) return;
-            const mapped = this.mapSingleDbRow(newRow);
-
-            this._transactions.update((currentList) => {
-              if (currentList.some((t) => t.id === mapped.id)) {
-                return currentList;
-              }
-              return [mapped, ...currentList];
-            });
-            this.recalculateRunningBalances();
-            void this.loadCashierSummary();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'cashier_transactions' },
-          (payload) => {
-            const updatedRow = payload.new as CashierDbRow;
-            if (!updatedRow || !updatedRow.id) return;
-            const mapped = this.mapSingleDbRow(updatedRow);
-
-            this._transactions.update((currentList) =>
-              currentList.map((t) => (t.id === mapped.id ? { ...mapped, selected: t.selected } : t))
-            );
-            this.recalculateRunningBalances();
-            void this.loadCashierSummary();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: 'DELETE', schema: 'public', table: 'cashier_transactions' },
-          (payload) => {
-            const deletedId = (payload.old as { id?: string })?.id;
-            if (!deletedId) return;
-
-            this._transactions.update((currentList) =>
-              currentList.filter((t) => t.id !== deletedId)
-            );
-            this.recalculateRunningBalances();
-            void this.loadCashierSummary();
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            // Re-synchronisation ciblée uniquement si le cache local est vide pour éviter les appels concurrents (P0 #7)
-            if (this._transactions().length === 0) {
-              this.loadTransactions();
-            }
-            this.loadCashierSummary();
-          } else if (status === 'CHANNEL_ERROR') {
-            // Silencieux si l'option Realtime n'est pas activée sur la table Supabase
-          } else if (status === 'TIMED_OUT') {
-            // Repli HTTP transparent en cas d'incompatibilité WebSocket/réseau
-            this.loadTransactions();
-          }
-        });
+      if (canReadJournalBalances && !this.journalRealtimeChannel) {
+        this.journalRealtimeChannel = client
+          .channel('journal-balances:invalidate', { config: { private: true } })
+          .on('broadcast', { event: 'journal_balances_invalidated' }, () => this.scheduleJournalRefresh())
+          .subscribe();
+      }
     } catch (err) {
       console.warn('Impossible d’initialiser le canal Realtime Supabase:', err);
     }
   }
 
+  private scheduleRealtimeRefresh(): void {
+    if (this.realtimeRefreshTimeout) clearTimeout(this.realtimeRefreshTimeout);
+    this.realtimeRefreshTimeout = setTimeout(() => {
+      this.realtimeRefreshTimeout = null;
+      void this.loadTransactions();
+    }, 250);
+  }
+
+  private scheduleJournalRefresh(): void {
+    if (this.journalRefreshTimeout) clearTimeout(this.journalRefreshTimeout);
+    this.journalRefreshTimeout = setTimeout(() => {
+      this.journalRefreshTimeout = null;
+      this._journalBalanceRefreshVersion.update((version) => version + 1);
+    }, 250);
+  }
+
   private cleanupRealtimeSubscription(): void {
-    if (this.realtimeChannel && this.supabaseService.supabase) {
+    if (this.realtimeRefreshTimeout) {
+      clearTimeout(this.realtimeRefreshTimeout);
+      this.realtimeRefreshTimeout = null;
+    }
+    if (this.journalRefreshTimeout) {
+      clearTimeout(this.journalRefreshTimeout);
+      this.journalRefreshTimeout = null;
+    }
+    const client = this.supabaseService.supabase;
+    if (this.cashierRealtimeChannel && client) {
       try {
-        this.supabaseService.supabase.removeChannel(this.realtimeChannel);
+        void client.removeChannel(this.cashierRealtimeChannel);
       } catch (err) {
         console.warn('Erreur lors du nettoyage du canal Realtime Supabase:', err);
       }
-      this.realtimeChannel = null;
+      this.cashierRealtimeChannel = null;
+    }
+    if (this.journalRealtimeChannel && client) {
+      try {
+        void client.removeChannel(this.journalRealtimeChannel);
+      } catch (err) {
+        console.warn('Erreur lors du nettoyage du canal Realtime des journaux:', err);
+      }
+      this.journalRealtimeChannel = null;
     }
   }
 

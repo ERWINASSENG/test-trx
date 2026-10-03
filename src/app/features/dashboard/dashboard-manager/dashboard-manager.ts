@@ -114,7 +114,8 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
   // Préparation réactive des données chronologiques pour Chart.js (Caisse Principale exclusivement)
   public readonly chartData = computed<CaisseTimelineData>(() => {
-    const list = [...this.caisseTransactions()].sort((a, b) => {
+    const currentBalance = Number(this.caisseBalance()) || 0;
+    const list = this.caisseTransactions().filter((tx) => tx.status === 'posted').sort((a, b) => {
       const dateA = parseTransactionDate(a.date).getTime();
       const dateB = parseTransactionDate(b.date).getTime();
       if (dateA !== dateB) {
@@ -132,13 +133,14 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
     if (list.length === 0) {
       return {
-        labels: ['Départ', 'Aujourd’hui'],
-        balances: [0, 0],
-        descriptions: ['Solde initial', 'Solde actuel'],
+        labels: ['Solde antérieur', 'Aujourd’hui'],
+        balances: [currentBalance, currentBalance],
+        descriptions: ['Solde antérieur', 'Solde actuel'],
       };
     }
 
-    let runningBalance = 0;
+    const loadedBalance = list.reduce((total, tx) => total + (Number(tx.montant) || 0), 0);
+    let runningBalance = currentBalance - loadedBalance;
     const labels: string[] = [];
     const balances: number[] = [];
     const descriptions: string[] = [];
@@ -175,6 +177,16 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
       const journals = this.additionalJournals();
       if (isPlatformBrowser(this.platformId) && journals.length > 0) {
         // Chargement asynchrone des données des journaux
+        void this.loadAllJournalCharts(journals);
+      }
+    });
+
+    effect(() => {
+      const refreshVersion = this.cashierService.journalBalanceRefreshVersion();
+      if (refreshVersion === 0) return;
+
+      const journals = this.additionalJournals();
+      if (isPlatformBrowser(this.platformId) && journals.length > 0) {
         void this.loadAllJournalCharts(journals);
       }
     });

@@ -32,6 +32,7 @@ describe('DashboardManager', () => {
       service: 'DG',
       typeDescription: 'Dotation',
       category: 'entree',
+      status: 'posted',
       firstName: 'Jean',
       quantity: 1,
       montant: 500000,
@@ -43,6 +44,7 @@ describe('DashboardManager', () => {
       service: 'TRANSPORT',
       typeDescription: 'Camion 01',
       category: 'sortie',
+      status: 'posted',
       firstName: 'Paul',
       quantity: 1,
       montant: -50000,
@@ -52,6 +54,7 @@ describe('DashboardManager', () => {
   const currentUserSignal = signal<UserProfile | null>(mockManagerUser);
   const transactionsSignal = signal<CashierTransaction[]>(mockTransactions);
   const balanceSignal = signal<number>(450000);
+  const journalBalanceRefreshVersionSignal = signal(0);
 
   const authServiceMock = {
     currentUser: currentUserSignal,
@@ -62,6 +65,7 @@ describe('DashboardManager', () => {
     caisseTransactions: transactionsSignal,
     currentBalance: balanceSignal,
     caisseBalance: balanceSignal,
+    journalBalanceRefreshVersion: journalBalanceRefreshVersionSignal,
     loadTransactions: () => Promise.resolve(),
   };
 
@@ -75,6 +79,9 @@ describe('DashboardManager', () => {
   };
 
   beforeEach(async () => {
+    transactionsSignal.set(mockTransactions);
+    balanceSignal.set(450000);
+
     await TestBed.configureTestingModule({
       imports: [DashboardManager],
       providers: [
@@ -109,13 +116,13 @@ describe('DashboardManager', () => {
     expect(data.descriptions[0]).toBe('Approvisionnement caisse');
   });
 
-  it('should handle empty transactions gracefully with default chart data', () => {
+  it('should preserve the server balance when no transactions are loaded', () => {
     transactionsSignal.set([]);
     fixture.detectChanges();
 
     const data = component.chartData();
-    expect(data.labels).toEqual(['Départ', 'Aujourd’hui']);
-    expect(data.balances).toEqual([0, 0]);
+    expect(data.labels).toEqual(['Solde antérieur', 'Aujourd’hui']);
+    expect(data.balances).toEqual([450000, 450000]);
 
     // Restore transactions
     transactionsSignal.set(mockTransactions);
@@ -130,6 +137,7 @@ describe('DashboardManager', () => {
         service: 'DG',
         typeDescription: 'Test',
         category: 'sortie',
+        status: 'posted',
         firstName: 'Jean',
         quantity: 1,
         montant: -20000,
@@ -141,11 +149,13 @@ describe('DashboardManager', () => {
         service: 'DG',
         typeDescription: 'Test',
         category: 'entree',
+        status: 'posted',
         firstName: 'Jean',
         quantity: 1,
         montant: 100000,
       },
     ]);
+    balanceSignal.set(80000);
     fixture.detectChanges();
 
     const data = component.chartData();
@@ -154,6 +164,7 @@ describe('DashboardManager', () => {
 
     // Restore
     transactionsSignal.set(mockTransactions);
+    balanceSignal.set(450000);
   });
 
   it('should process same-day transactions with entree before sortie so chart starts positive', () => {
@@ -165,6 +176,7 @@ describe('DashboardManager', () => {
         service: 'DG',
         typeDescription: 'Dépense',
         category: 'sortie',
+        status: 'posted',
         firstName: 'Paul',
         quantity: 1,
         montant: -457892,
@@ -176,11 +188,13 @@ describe('DashboardManager', () => {
         service: 'DG',
         typeDescription: 'Approvisionnement',
         category: 'entree',
+        status: 'posted',
         firstName: 'Paul',
         quantity: 1,
         montant: 500000,
       },
     ]);
+    balanceSignal.set(42108);
     fixture.detectChanges();
 
     const data = component.chartData();
@@ -189,6 +203,34 @@ describe('DashboardManager', () => {
 
     // Restore
     transactionsSignal.set(mockTransactions);
+    balanceSignal.set(450000);
+  });
+
+  it('should exclude draft and cancelled transactions from the chart balance', () => {
+    transactionsSignal.set([
+      ...mockTransactions,
+      {
+        id: 'tx-draft',
+        date: '2026-03-03',
+        libelle: 'Brouillon',
+        category: 'entree',
+        status: 'draft',
+        montant: 300000,
+      },
+      {
+        id: 'tx-cancelled',
+        date: '2026-03-04',
+        libelle: 'Opération annulée',
+        category: 'sortie',
+        status: 'cancelled',
+        montant: -100000,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const data = component.chartData();
+    expect(data.labels.length).toBe(2);
+    expect(data.balances).toEqual([500000, 450000]);
   });
 
   it('should clean up chart instance on destroy without throwing', () => {
