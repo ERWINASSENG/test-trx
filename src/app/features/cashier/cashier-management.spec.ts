@@ -196,7 +196,8 @@ describe('CashierManagement', () => {
 
     expect(component.isAddingRow()).toBe(false);
     expect(service.allTransactions().length).toBe(1);
-    expect(component.currentBalance()).toBe(-25000);
+    expect(service.allTransactions()[0].status).toBe('draft');
+    expect(component.currentBalance()).toBe(0);
   });
 
   it('devrait exiger le numéro de dossier et la quantité lorsque le type est Opérations', async () => {
@@ -284,7 +285,8 @@ describe('CashierManagement', () => {
     const updatedTx = service.allTransactions()[0];
     expect(updatedTx.libelle).toBe('Fournitures de bureau modifiées');
     expect(updatedTx.montant).toBe(-30000);
-    expect(component.currentBalance()).toBe(-30000);
+    expect(updatedTx.status).toBe('draft');
+    expect(component.currentBalance()).toBe(0);
   });
 
   it('exige le retour en brouillon avant de modifier une pièce comptabilisée', async () => {
