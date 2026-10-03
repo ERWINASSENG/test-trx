@@ -72,7 +72,7 @@ export const getJournalEntriesHandler = async (req: express.Request, res: expres
 
     if (error) {
       console.error(`[JOURNAL_ENTRIES] Erreur lecture des écritures du journal ${journalId}:`, error.message);
-      res.status(500).json({ error: `Erreur lors de la récupération des écritures : ${error.message}` });
+      res.status(500).json({ error: 'Erreur lors de la récupération des écritures du journal.' });
       return;
     }
 
@@ -407,7 +407,8 @@ export const deleteJournalEntryHandler = async (req: express.Request, res: expre
 
     const { error } = await query;
     if (error) {
-      res.status(500).json({ error: `Erreur lors de la suppression : ${error.message}` });
+      console.error('[JOURNAL_ENTRIES] Erreur lors de la suppression d’une écriture:', error.message);
+      res.status(500).json({ error: 'Erreur lors de la suppression de l’écriture comptable.' });
       return;
     }
 
@@ -468,7 +469,8 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
         .range(offset, offset + pageSize - 1);
 
       if (error) {
-        res.status(500).json({ error: error.message });
+        console.error(`[JOURNAL_ENTRIES] Erreur lecture du graphique du journal ${journalId}:`, error.message);
+        res.status(500).json({ error: 'Erreur lors de la récupération des données du graphique.' });
         return;
       }
 

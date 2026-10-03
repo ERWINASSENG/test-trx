@@ -38,9 +38,8 @@ export const getJournalsHandler = async (req: express.Request, res: express.Resp
       canManage: requestHasPermission(req, 'journals.create'),
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Erreur interne';
     console.error('[API JOURNAUX] Exception interne:', err);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: 'Erreur interne lors de la récupération des journaux.' });
   }
 };
 /**
@@ -125,7 +124,7 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
 
     if (insertError) {
       console.error('[API JOURNAUX] Erreur insertion Supabase:', insertError);
-      res.status(500).json({ error: insertError.message || 'Impossible de créer le journal.' });
+      res.status(500).json({ error: 'Impossible de créer le journal.' });
       return;
     }
 
@@ -134,9 +133,8 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
       journal: inserted,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Erreur interne';
     console.error('[API JOURNAUX] Exception création:', err);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: 'Erreur interne lors de la création du journal.' });
   }
 };
 
@@ -248,7 +246,7 @@ export const updateJournalHandler = async (req: express.Request, res: express.Re
 
     if (updateError) {
       console.error('[API JOURNAUX] Erreur mise à jour Supabase:', updateError);
-      res.status(500).json({ error: updateError.message || 'Impossible de mettre à jour le journal.' });
+      res.status(500).json({ error: 'Impossible de mettre à jour le journal.' });
       return;
     }
 
@@ -262,9 +260,8 @@ export const updateJournalHandler = async (req: express.Request, res: express.Re
       journal: updated,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Erreur interne';
     console.error('[API JOURNAUX] Exception mise à jour:', err);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: 'Erreur interne lors de la mise à jour du journal.' });
   }
 };
 
@@ -323,7 +320,7 @@ export const deleteJournalHandler = async (req: express.Request, res: express.Re
 
     if (deleteError) {
       console.error('[API JOURNAUX] Erreur suppression:', deleteError);
-      res.status(500).json({ error: deleteError.message || 'Impossible de supprimer le journal.' });
+      res.status(500).json({ error: 'Impossible de supprimer le journal.' });
       return;
     }
 
@@ -332,8 +329,7 @@ export const deleteJournalHandler = async (req: express.Request, res: express.Re
       id: journalId,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Erreur interne';
     console.error('[API JOURNAUX] Exception suppression:', err);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: 'Erreur interne lors de la suppression du journal.' });
   }
 };
