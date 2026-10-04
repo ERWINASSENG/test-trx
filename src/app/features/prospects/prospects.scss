@@ -14,7 +14,7 @@
   --prospects-text: var(--app-text, #123c6d);
   --prospects-secondary: var(--app-text-muted, #35517a);
   min-height: calc(100vh - 50px);
-  padding: 18px clamp(12px, 2vw, 28px) 32px;
+  padding: 0 0 32px;
   color: var(--prospects-text);
   background:
     radial-gradient(circle at top right, rgba(11, 94, 215, 0.08), transparent 27%),
@@ -22,9 +22,10 @@
     var(--prospects-bg);
 }
 
-.prospects-header,
-.prospects-toolbar,
-.prospects-header > div,
+.prospects-title-group,
+.prospects-title-group > div,
+.prospects-control-search,
+.prospects-control-end,
 .prospect-modal > header,
 .prospect-card-heading,
 .modal-actions {
@@ -34,14 +35,13 @@
   gap: 12px;
 }
 
-.prospects-header {
-  min-height: 56px;
-  padding-bottom: 14px;
-  border-bottom: 2px solid var(--prospects-danger);
+.prospects-title-group > div {
+  display: block;
 }
 
-.prospects-header > div {
-  display: block;
+.prospects-title-group .prospects-eyebrow {
+  margin-bottom: 0;
+  font-size: 9px;
 }
 
 .prospects-eyebrow {
@@ -91,11 +91,18 @@ h1 {
   color: var(--prospects-text);
 }
 
-.prospects-toolbar {
-  flex-wrap: wrap;
-  min-height: 58px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--prospects-border);
+.prospects-title-group h1 {
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.prospects-control-search {
+  width: 100%;
+  gap: 8px;
+}
+
+.prospects-control-end {
+  gap: 12px;
 }
 
 .search-form {
@@ -217,18 +224,19 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .prospects-header { align-items: flex-start; }
-  .prospects-toolbar { align-items: stretch; }
+  .prospects-title-group { align-items: flex-start; }
+  .prospects-control-search { flex-wrap: wrap; }
   .search-form { flex-basis: 100%; }
   .status-filter { flex: 1; justify-content: space-between; }
   .status-filter select { flex: 1; }
+  .prospects-control-end { flex-wrap: wrap; justify-content: flex-end; }
   .pagination { margin-left: auto; }
   .kanban-board { grid-auto-columns: minmax(250px, 82vw); }
 }
 
 @media (max-width: 520px) {
-  .prospects-page { padding: 12px 10px 24px; }
-  .prospects-header { flex-direction: column; align-items: stretch; }
+  .prospects-page { padding-bottom: 24px; }
+  .prospects-title-group { flex-direction: column; align-items: stretch; }
   .form-grid { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
   .prospect-modal { padding: 15px; }

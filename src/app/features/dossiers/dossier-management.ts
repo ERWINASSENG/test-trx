@@ -5,13 +5,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DossierService } from '../../core/services/dossier.service';
+import { Dossier } from '../../core/models/dossier.model';
 import { ProspectService } from '../../core/services/prospect.service';
 import { CreateDossierInput } from '../../core/services/dossier.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
+import { ModuleDataTable } from '../../shared/components/module-data-table/module-data-table';
+
+interface DossierStatusColumn {
+  status: string;
+  dossiers: Dossier[];
+}
 
 @Component({
   selector: 'app-dossier-management',
-  imports: [A11yModule, ReactiveFormsModule, MatIconModule, ModuleControlPanel],
+  imports: [A11yModule, ReactiveFormsModule, MatIconModule, ModuleControlPanel, ModuleDataTable],
   templateUrl: './dossier-management.html',
   styleUrl: './dossier-management.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,8 +32,21 @@ export class DossierManagementComponent {
   public readonly searchDraft = signal('');
   public readonly searchTerm = signal('');
   public readonly prospectSearch = signal('');
+  public readonly view = signal<'list' | 'kanban'>('list');
   public readonly offset = signal(0);
   public readonly pageSize = 25;
+  public readonly statusColumns = computed<DossierStatusColumn[]>(() => {
+    const columns = new Map<string, Dossier[]>();
+
+    for (const dossier of this.dossierService.dossiers()) {
+      const status = dossier.statut.trim() || 'Sans statut';
+      const groupedDossiers = columns.get(status) ?? [];
+      groupedDossiers.push(dossier);
+      columns.set(status, groupedDossiers);
+    }
+
+    return Array.from(columns, ([status, dossiers]) => ({ status, dossiers }));
+  });
   public readonly totalPages = computed(() => Math.max(1, Math.ceil(this.dossierService.total() / this.pageSize)));
   public readonly currentPage = computed(() => Math.floor(this.offset() / this.pageSize) + 1);
   public readonly canLinkProspect = computed(() => this.accessControl.hasPermission('prospects.read'));

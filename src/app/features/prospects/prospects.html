@@ -1,15 +1,68 @@
 <main class="prospects-page" aria-labelledby="prospects-title">
-  <header class="prospects-header">
-    <div>
-      <p class="prospects-eyebrow">Développement commercial</p>
-      <h1 id="prospects-title">Prospects</h1>
+  <app-module-control-panel>
+    <div controlPanelStart class="prospects-title-group">
+      <div>
+        <p class="prospects-eyebrow">Développement commercial</p>
+        <h1 id="prospects-title">Prospects</h1>
+      </div>
+      @if (canCreate()) {
+        <button
+          type="button"
+          class="primary-action h-9 w-28 shrink-0 justify-center"
+          aria-label="Nouveau prospect"
+          title="Nouveau prospect"
+          (click)="openCreate()">
+          <mat-icon>add</mat-icon><span>Nouveau</span>
+        </button>
+      }
     </div>
-    @if (canCreate()) {
-      <button type="button" class="primary-action" (click)="openCreate()">
-        <mat-icon>add</mat-icon><span>Nouveau prospect</span>
-      </button>
-    }
-  </header>
+
+    <div controlPanelCenter class="prospects-control-search">
+      <form class="search-form" (submit)="$event.preventDefault(); applyFilters()">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <input
+          type="search"
+          aria-label="Rechercher un prospect"
+          placeholder="Nom, société, contact ou e-mail"
+          [value]="searchDraft()"
+          (input)="searchDraft.set($any($event.target).value)" />
+        <button type="submit" class="icon-action" aria-label="Lancer la recherche" title="Rechercher">
+          <mat-icon>arrow_forward</mat-icon>
+        </button>
+      </form>
+
+      <label class="status-filter">
+        <span>Étape</span>
+        <select aria-label="Filtrer par étape" [value]="statusFilter()" (change)="changeStatusFilter($any($event.target).value)">
+          <option value="">Toutes</option>
+          @for (status of statuses; track status.value) {
+            <option [value]="status.value">{{ status.label }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div controlPanelEnd class="prospects-control-end">
+      <div class="view-switch" role="group" aria-label="Vue des prospects">
+        <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
+          <mat-icon>reorder</mat-icon>
+        </button>
+        <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
+          <i class="oi oi-view-kanban" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="pagination" aria-label="Pagination des prospects">
+        <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
+        <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+  </app-module-control-panel>
 
   @if (feedback()) {
     <p class="feedback" role="status">{{ feedback() }}</p>
@@ -17,50 +70,6 @@
   @if (prospectService.error()) {
     <p class="feedback feedback-error" role="alert">{{ prospectService.error() }}</p>
   }
-
-  <section class="prospects-toolbar" aria-label="Recherche et filtres des prospects">
-    <form class="search-form" (submit)="$event.preventDefault(); applyFilters()">
-      <mat-icon aria-hidden="true">search</mat-icon>
-      <input
-        type="search"
-        aria-label="Rechercher un prospect"
-        placeholder="Nom, société, contact ou e-mail"
-        [value]="searchDraft()"
-        (input)="searchDraft.set($any($event.target).value)" />
-      <button type="submit" class="icon-action" aria-label="Lancer la recherche" title="Rechercher">
-        <mat-icon>arrow_forward</mat-icon>
-      </button>
-    </form>
-
-    <label class="status-filter">
-      <span>Étape</span>
-      <select aria-label="Filtrer par étape" [value]="statusFilter()" (change)="changeStatusFilter($any($event.target).value)">
-        <option value="">Toutes</option>
-        @for (status of statuses; track status.value) {
-          <option [value]="status.value">{{ status.label }}</option>
-        }
-      </select>
-    </label>
-
-    <div class="view-switch" role="group" aria-label="Vue des prospects">
-      <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
-        <mat-icon>view_list</mat-icon>
-      </button>
-      <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
-        <mat-icon>view_kanban</mat-icon>
-      </button>
-    </div>
-
-    <div class="pagination" aria-label="Pagination des prospects">
-      <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
-      <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
-        <mat-icon>chevron_left</mat-icon>
-      </button>
-      <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
-        <mat-icon>chevron_right</mat-icon>
-      </button>
-    </div>
-  </section>
 
   @if (prospectService.isLoading()) {
     <div class="loading-state" role="status"><mat-icon>progress_activity</mat-icon><span>Chargement des prospects…</span></div>

@@ -5,15 +5,17 @@
         <button
           type="button"
           (click)="openCreate()"
-          class="inline-flex min-h-8 items-center gap-1.5 rounded border border-white/15 bg-[#0b5ed7] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#084db1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b5ed7] dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb]"
+          aria-label="Nouveau dossier"
+          title="Nouveau dossier"
+          class="inline-flex h-9 w-28 shrink-0 items-center justify-center gap-1.5 rounded border border-white/15 bg-[#0b5ed7] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#084db1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b5ed7] dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb]"
           id="dossiers-control-create">
           <mat-icon class="!h-4 !w-4 !text-base">add</mat-icon>
-          Nouveau dossier
+          Nouveau
         </button>
       }
-      <div class="hidden flex-col leading-tight sm:flex" aria-label="Fil d’Ariane">
-        <span class="text-xs font-bold text-[#0b5ed7] dark:text-[#8cc2ff]">Tableau de bord</span>
-        <span class="text-[11px] text-slate-500 dark:text-slate-400">Suivi des dossiers</span>
+      <div class="dossiers-control-title">
+        <p class="dossiers-eyebrow">Suivi des opérations</p>
+        <h1 id="dossiers-title">Dossiers</h1>
       </div>
     </div>
 
@@ -34,6 +36,26 @@
     </div>
 
     <div controlPanelEnd class="flex items-center gap-2 sm:gap-3">
+      <div class="dossiers-view-switch" role="group" aria-label="Vue des dossiers">
+        <button
+          type="button"
+          [class.active]="view() === 'list'"
+          [attr.aria-pressed]="view() === 'list'"
+          aria-label="Vue liste"
+          title="Vue liste"
+          (click)="view.set('list')">
+          <mat-icon>reorder</mat-icon>
+        </button>
+        <button
+          type="button"
+          [class.active]="view() === 'kanban'"
+          [attr.aria-pressed]="view() === 'kanban'"
+          aria-label="Vue Kanban"
+          title="Vue Kanban"
+          (click)="view.set('kanban')">
+          <i class="oi oi-view-kanban" aria-hidden="true"></i>
+        </button>
+      </div>
       <span class="whitespace-nowrap text-[11px] text-slate-600 dark:text-slate-300" aria-live="polite">{{ dossierService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
       <div class="flex items-center overflow-hidden rounded border border-slate-300 bg-white dark:border-[#343a40] dark:bg-white/5" aria-label="Pagination des dossiers">
         <button type="button" class="p-1 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
@@ -46,13 +68,6 @@
     </div>
   </app-module-control-panel>
 
-  <header class="dossiers-header">
-    <div>
-      <p class="dossiers-eyebrow">Suivi des opérations</p>
-      <h1 id="dossiers-title">Dossiers</h1>
-    </div>
-  </header>
-
   @if (feedback()) {
     <p class="feedback" role="status">{{ feedback() }}</p>
   }
@@ -64,10 +79,12 @@
     <div class="loading-state" role="status">
       <mat-icon>progress_activity</mat-icon><span>Chargement des dossiers…</span>
     </div>
-  } @else {
-    <div class="table-scroll">
-      <table class="dossiers-table">
-        <thead>
+  } @else if (view() === 'list') {
+    <app-module-data-table
+      [ariaLabel]="'Liste des dossiers'"
+      [minWidth]="'680px'"
+      [tableClass]="'dossiers-table'">
+        <thead moduleTableHead>
           <tr>
             <th scope="col">N° dossier</th>
             <th scope="col">Client / prospect</th>
@@ -75,7 +92,7 @@
             <th scope="col">Description</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody moduleTableBody>
           @for (dossier of dossierService.dossiers(); track dossier.id) {
             <tr>
               <td><strong>{{ dossier.noDossier }}</strong></td>
@@ -91,7 +108,31 @@
             </tr>
           }
         </tbody>
-      </table>
+    </app-module-data-table>
+  } @else {
+    <div class="dossiers-kanban" aria-label="Dossiers par statut">
+      @for (column of statusColumns(); track column.status) {
+        <section class="dossiers-kanban-column" [attr.aria-label]="'Statut ' + column.status">
+          <header>
+            <h2>{{ column.status }}</h2>
+            <span>{{ column.dossiers.length }}</span>
+          </header>
+          @for (dossier of column.dossiers; track dossier.id) {
+            <article class="dossier-kanban-card">
+              <div class="dossier-kanban-card-heading">
+                <h3>{{ dossier.noDossier }}</h3>
+                <span class="status-pill">{{ dossier.statut }}</span>
+              </div>
+              <p>{{ dossier.client || (dossier.prospectId ? 'Prospect associé' : 'Client non renseigné') }}</p>
+              @if (dossier.description) {
+                <p>{{ dossier.description }}</p>
+              }
+            </article>
+          }
+        </section>
+      } @empty {
+        <p class="empty-state">Aucun dossier ne correspond à la recherche.</p>
+      }
     </div>
   }
 

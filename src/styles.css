@@ -2,6 +2,32 @@
 @import '@fontsource/material-icons/index.css';
 @import "tailwindcss";
 
+/* Odoo UI Icons v1.2, Apache-2.0. Credits: Carbon Design System, Google Material Design Icons; generated with IcoMoon. */
+@font-face {
+  font-family: 'odoo_ui_icons';
+  src: url('/assets/odoo-ui-icons/odoo_ui_icons.woff2') format('woff2');
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+}
+
+.oi {
+  display: inline-block;
+  width: 1em;
+  font-family: 'odoo_ui_icons' !important;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  text-align: center;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.oi-view-kanban::before {
+  content: '\e814';
+}
+
 /* Configuration officielle Tailwind CSS v4 pour le mode sombre via classe .dark */
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -390,7 +416,7 @@ html:not(.dark) #enterprise-control-panel div {
 /* 4. ALIGNEMENT ET RENDU DES ICÔNES MATERIAL ICONS ANTI-FOUT */
 .material-icons,
 mat-icon {
-  font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif;
+  font-family: 'Material Symbols Outlined', 'Material Icons', sans-serif;
   font-weight: normal;
   font-style: normal;
   font-size: 24px;

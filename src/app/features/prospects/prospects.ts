@@ -6,12 +6,13 @@ import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { ProspectService } from '../../core/services/prospect.service';
 import { CreateProspectInput, Prospect, ProspectStatus } from '../../core/models/prospect.model';
+import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
 
 type ProspectsView = 'list' | 'kanban';
 
 @Component({
   selector: 'app-prospects',
-  imports: [A11yModule, ReactiveFormsModule, MatIconModule, DatePipe],
+  imports: [A11yModule, ReactiveFormsModule, MatIconModule, DatePipe, ModuleControlPanel],
   templateUrl: './prospects.html',
   styleUrl: './prospects.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
