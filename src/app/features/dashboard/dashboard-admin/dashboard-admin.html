@@ -399,10 +399,10 @@
                 }
               </td>
               <td class="py-3 text-slate-700 dark:text-slate-300 font-medium">
-                {{ tx.noDossier || tx.employee || tx.firstName || 'Non spécifié' }}
+                {{ tx.noDossier || getTransactionBeneficiary(tx) }}
               </td>
               <td class="py-3 text-right font-bold" [class.text-emerald-600]="tx.category === 'entree' || tx.montant > 0" [class.dark:text-emerald-400]="tx.category === 'entree' || tx.montant > 0" [class.text-rose-600]="tx.category === 'sortie' || tx.montant < 0" [class.dark:text-rose-400]="tx.category === 'sortie' || tx.montant < 0">
-                {{ (tx.category === 'entree' || tx.montant > 0) ? '+' : '-' }}{{ formatCurrency(tx.montant) }}
+                {{ formatTransactionAmount(tx) }}
               </td>
             </tr>
           } @empty {

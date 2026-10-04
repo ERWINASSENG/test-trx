@@ -57,7 +57,7 @@ export class DashboardAdmin implements OnInit {
   public readonly activeUsersCount = this.userService.activeUsersCount;
 
   // Période sélectionnée pour le filtre du graphique
-  public readonly selectedPeriod = signal<'7d' | '30d' | '90d' | 'all'>('30d');
+  public readonly selectedPeriod = signal<'7d' | '30d' | '90d' | 'all'>('all');
   public readonly hoveredChartPoint = signal<ChartTimePoint | null>(null);
 
   // Couleurs de la palette Transimex pour le Donut
@@ -78,12 +78,15 @@ export class DashboardAdmin implements OnInit {
 
   // Transactions brutes de caisse et état de chargement
   public readonly allTransactions = computed(() => this.cashierService.caisseTransactions());
+  public readonly postedTransactions = computed(() =>
+    this.allTransactions().filter((tx) => tx.status === 'posted')
+  );
   public readonly isLoading = computed(() => this.cashierService.isLoading());
 
   // Filtrage selon la période sélectionnée
   public readonly filteredTransactions = computed(() => {
     const period = this.selectedPeriod();
-    const list = this.allTransactions();
+    const list = this.postedTransactions();
     if (period === 'all') return list;
 
     const now = new Date();
@@ -97,19 +100,68 @@ export class DashboardAdmin implements OnInit {
   });
 
   private parseTransactionDate(dateValue: string): Date {
-    const value = dateValue.trim();
+    const value = String(dateValue ?? '').trim();
     const displayDateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
     if (displayDateMatch) {
       const [, day, month, year] = displayDateMatch;
-      return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00`);
+      return this.createValidatedDate(Number(year), Number(month), Number(day));
+    }
+
+    const isoDateMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value);
+    if (isoDateMatch) {
+      const [, year, month, day] = isoDateMatch;
+      return this.createValidatedDate(Number(year), Number(month), Number(day));
     }
 
     return new Date(value);
   }
 
+  private createValidatedDate(year: number, month: number, day: number): Date {
+    const parsedDate = new Date(year, month - 1, day);
+    if (
+      parsedDate.getFullYear() !== year ||
+      parsedDate.getMonth() !== month - 1 ||
+      parsedDate.getDate() !== day
+    ) {
+      return new Date(Number.NaN);
+    }
+    return parsedDate;
+  }
+
+  private transactionDateKey(dateValue: string): string | null {
+    const date = this.parseTransactionDate(dateValue);
+    if (Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private signedTransactionAmount(tx: CashierTransaction): number {
+    const amount = Math.abs(Number(tx.montant) || 0);
+    return tx.category === 'sortie' ? -amount : amount;
+  }
+
+  public getTransactionBeneficiary(tx: CashierTransaction): string {
+    const directName = tx.partenaire || tx.employee || tx.firstName;
+    if (directName) return directName;
+
+    const collaborator = tx.employeeId
+      ? this.users().find((user) => user.id === tx.employeeId)
+      : undefined;
+    if (collaborator) {
+      return `${collaborator.firstName} ${collaborator.lastName}`.trim();
+    }
+
+    return 'Non attribué';
+  }
+
   // KPIs Financiers de la Caisse
   public readonly financialKPIs = computed(() => {
     const list = this.filteredTransactions();
+    const serverSummary = this.selectedPeriod() === 'all'
+      ? this.cashierService.serverSummary()
+      : null;
     let income = 0;
     let expense = 0;
 
@@ -125,9 +177,16 @@ export class DashboardAdmin implements OnInit {
       }
     }
 
+    if (serverSummary) {
+      income = Number(serverSummary.total_entrees) || 0;
+      expense = Number(serverSummary.total_sorties) || 0;
+    }
+
     const netBalance = income - expense;
-    const globalBalance = this.cashierService.currentBalance();
-    const totalTransactions = list.length;
+    const globalBalance = this.cashierService.caisseBalance();
+    const totalTransactions = serverSummary
+      ? Number(serverSummary.total_count) || 0
+      : list.length;
     const expenseRatio = income > 0 ? Math.round((expense / income) * 100) : 0;
 
     return {
@@ -142,9 +201,11 @@ export class DashboardAdmin implements OnInit {
 
   // Évolution temporelle (Graphique en barres / aires comparatives)
   public readonly timelineChartData = computed<ChartTimePoint[]>(() => {
-    const list = [...this.filteredTransactions()].sort(
-      (a, b) => this.parseTransactionDate(a.date).getTime() - this.parseTransactionDate(b.date).getTime()
-    );
+    const list = [...this.filteredTransactions()]
+      .filter((tx) => this.transactionDateKey(tx.date) !== null)
+      .sort(
+        (a, b) => this.parseTransactionDate(a.date).getTime() - this.parseTransactionDate(b.date).getTime()
+      );
 
     if (list.length === 0) {
       return [];
@@ -153,7 +214,8 @@ export class DashboardAdmin implements OnInit {
     // Regrouper par date (YYYY-MM-DD)
     const grouped = new Map<string, { income: number; expense: number }>();
     for (const tx of list) {
-      const dateKey = tx.date ? tx.date.substring(0, 10) : 'Non daté';
+      const dateKey = this.transactionDateKey(tx.date);
+      if (!dateKey) continue;
       const current = grouped.get(dateKey) || { income: 0, expense: 0 };
       if (tx.category === 'entree') {
         current.income += Math.abs(tx.montant);
@@ -173,20 +235,12 @@ export class DashboardAdmin implements OnInit {
       if (val.expense > maxVal) maxVal = val.expense;
     });
 
-    const period = this.selectedPeriod();
-    const now = new Date();
-    const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
-    const thresholdDate = period === 'all'
-      ? null
-      : new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    const openingBalance = thresholdDate
-      ? this.allTransactions()
-        .filter((tx) => {
-          const txDate = this.parseTransactionDate(tx.date);
-          return !isNaN(txDate.getTime()) && txDate < thresholdDate;
-        })
-        .reduce((balance, tx) => balance + tx.montant, 0)
-      : 0;
+    if (grouped.size === 0) return [];
+
+    const openingBalance = this.cashierService.caisseBalance() - list.reduce(
+      (balance, tx) => balance + this.signedTransactionAmount(tx),
+      0
+    );
 
     let runningBalance = openingBalance;
     const result: ChartTimePoint[] = [];
@@ -215,7 +269,7 @@ export class DashboardAdmin implements OnInit {
   // Répartition des dépenses par type d'opération (Graphique Camembert/Donut)
   public readonly categoryBreakdown = computed<CategoryStat[]>(() => {
     const list = this.filteredTransactions();
-    const expenseTx = list.filter((t) => t.category === 'sortie' || t.montant < 0);
+    const expenseTx = list.filter((t) => t.category === 'sortie');
     const totalExpense = expenseTx.reduce((acc, t) => acc + Math.abs(t.montant), 0);
 
     if (totalExpense === 0) {
@@ -255,7 +309,7 @@ export class DashboardAdmin implements OnInit {
     >();
 
     for (const tx of list) {
-      const name = tx.firstName || tx.employee || 'Non attribué';
+      const name = this.getTransactionBeneficiary(tx);
       const existing = map.get(name) || {
         totalExpense: 0,
         totalIncome: 0,
@@ -297,10 +351,15 @@ export class DashboardAdmin implements OnInit {
 
   // Dernières transactions récentes
   public readonly recentTransactions = computed<CashierTransaction[]>(() => {
-    return [...this.allTransactions()]
+    return [...this.postedTransactions()]
       .sort((a, b) => this.parseTransactionDate(b.date).getTime() - this.parseTransactionDate(a.date).getTime())
       .slice(0, 5);
   });
+
+  public formatTransactionAmount(tx: CashierTransaction): string {
+    const sign = tx.category === 'entree' ? '+' : '-';
+    return `${sign}${this.formatCurrency(Math.abs(tx.montant))}`;
+  }
 
   public setPeriod(period: '7d' | '30d' | '90d' | 'all'): void {
     this.selectedPeriod.set(period);
