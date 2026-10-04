@@ -4,7 +4,15 @@ import { SlicePipe } from '@angular/common';
 import { ROLE_DEFINITIONS, UserProfile, UserRole } from '../../core/models/auth.model';
 import { UserService } from '../../core/services/user.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { generateSecurePassword } from '../../core/utils/crypto.utils';
+
+export interface DisplayRoleOption {
+  id: string;
+  label: string;
+  description: string;
+  badgeClass: string;
+}
 
 @Component({
   selector: 'app-hr-management',
@@ -19,18 +27,50 @@ import { generateSecurePassword } from '../../core/utils/crypto.utils';
 export class HrManagement implements OnInit {
   private readonly userService = inject(UserService);
   private readonly authService = inject(AuthService);
+  private readonly accessControlService = inject(AccessControlService);
 
   public readonly users = this.userService.users;
   public readonly isLoading = this.userService.isLoading;
   public readonly userServiceError = this.userService.error;
   public readonly isAdmin = this.authService.isAdmin;
+  public readonly dynamicRoles = this.accessControlService.roles;
+
+  public readonly availableRoles = computed<DisplayRoleOption[]>(() => {
+    const rolesMap = new Map<string, DisplayRoleOption>();
+
+    // 1. Définitions canoniques
+    for (const r of Object.values(ROLE_DEFINITIONS)) {
+      rolesMap.set(r.id, {
+        id: r.id,
+        label: r.label,
+        description: r.description,
+        badgeClass: r.badgeClass,
+      });
+    }
+
+    // 2. Rôles dynamiques synchronisés depuis la table access_roles
+    for (const r of this.dynamicRoles()) {
+      if (!r.isActive) continue;
+      const existing = rolesMap.get(r.roleKey);
+      rolesMap.set(r.roleKey, {
+        id: r.roleKey,
+        label: r.label,
+        description: r.description || existing?.description || 'Rôle personnalisé configuré dans Gestion des accès',
+        badgeClass: existing?.badgeClass || 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      });
+    }
+
+    return Array.from(rolesMap.values());
+  });
 
   public ngOnInit(): void {
     void this.userService.loadInitialUsers();
+    void this.accessControlService.loadRoles();
   }
 
   public retryLoadUsers(): void {
     void this.userService.loadInitialUsers();
+    void this.accessControlService.loadRoles();
   }
 
   public readonly selectedDepartment = signal<string>('all');
@@ -42,8 +82,6 @@ export class HrManagement implements OnInit {
   public readonly editingUserId = signal<string | null>(null);
   public readonly successMessage = signal<string | null>(null);
   public readonly errorMessage = signal<string | null>(null);
-
-  public readonly roleList = Object.values(ROLE_DEFINITIONS);
 
   // Formulaire réactif conforme Angular 19
   public readonly userForm = new FormGroup({
@@ -59,7 +97,7 @@ export class HrManagement implements OnInit {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(2)],
     }),
-    role: new FormControl<UserRole | ''>('', {
+    role: new FormControl<string>('', {
       nonNullable: true,
       validators: [Validators.required],
     }),
@@ -95,12 +133,24 @@ export class HrManagement implements OnInit {
     });
   });
 
-  public getRoleLabel(role: UserRole): string {
-    return ROLE_DEFINITIONS[role]?.label || role;
+  public getRoleLabel(role: string): string {
+    const found = this.availableRoles().find((r) => r.id === role);
+    if (found) return found.label;
+    return ROLE_DEFINITIONS[role as UserRole]?.label || role;
   }
 
-  public getRoleDefinition(role: UserRole) {
-    return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS['employe'];
+  public getRoleDefinition(role: string): DisplayRoleOption {
+    const found = this.availableRoles().find((r) => r.id === role);
+    if (found) {
+      return found;
+    }
+    const def = ROLE_DEFINITIONS[role as UserRole] || ROLE_DEFINITIONS['employe'];
+    return {
+      id: def.id,
+      label: def.label,
+      description: def.description,
+      badgeClass: def.badgeClass,
+    };
   }
 
   public openCreateModal(): void {
@@ -170,7 +220,7 @@ export class HrManagement implements OnInit {
         if (!res.success) {
           throw new Error(res.error || 'Échec de la mise à jour du collaborateur');
         }
-        this.successMessage.set(`Collaborateur ${formVal.firstName} mis à jour avec le rôle ${this.getRoleLabel(formVal.role as UserRole)}.`);
+        this.successMessage.set(`Collaborateur ${formVal.firstName} mis à jour avec le rôle ${this.getRoleLabel(formVal.role)}.`);
       } else {
         // Mode création nouvel utilisateur avec rôle
         const res = await this.userService.createUser({
@@ -185,7 +235,7 @@ export class HrManagement implements OnInit {
         if (!res.success) {
           throw new Error(res.error || 'Échec de la création du compte en base de données');
         }
-        this.successMessage.set(`Collaborateur ${formVal.firstName} créé avec succès. Rôle attribué : ${this.getRoleLabel(formVal.role as UserRole)}.`);
+        this.successMessage.set(`Collaborateur ${formVal.firstName} créé avec succès. Rôle attribué : ${this.getRoleLabel(formVal.role)}.`);
       }
 
       this.isModalOpen.set(false);

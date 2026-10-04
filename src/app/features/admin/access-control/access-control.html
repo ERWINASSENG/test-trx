@@ -143,10 +143,10 @@
               <button type="button" class="user-item" [class.selected]="selectedUserId() === user.id" (click)="selectUser(user)">
                 <span class="user-item-name">{{ user.firstName }} {{ user.lastName }}</span>
                 <span class="user-item-email">{{ user.email }}</span>
-                <span class="user-item-roles" aria-label="Rôles affectés">
-                  @for (assignment of user.roles; track assignment.role.id) {
-                    <span class="role-chip">{{ assignment.role.label }}</span>
-                  } @empty {
+                <span class="user-item-roles" aria-label="Rôle affecté">
+                  @if (user.roles.length > 0) {
+                    <span class="role-chip">{{ user.roles[0].role.label }}</span>
+                  } @else {
                     <span class="role-chip role-chip-empty">Aucun rôle affecté</span>
                   }
                 </span>
@@ -170,29 +170,44 @@
           </div>
 
           <section class="access-section">
-            <div class="section-heading"><h3>Rôles affectés</h3></div>
+            <div class="section-heading"><h3>Rôle unique attribué</h3></div>
+            @if (userAssignmentError()) {
+              <p class="feedback error" role="alert">{{ userAssignmentError() }}</p>
+            }
+
+            <div class="current-role-block">
+              @if (currentUserRole(); as currentRole) {
+                <div class="assignment-item">
+                  <div class="assignment-info">
+                    <span class="role-name">{{ currentRole.role?.label || currentRole.roleKey }}</span>
+                    <small>{{ currentRole.expiresAt ? ('Expire le ' + (currentRole.expiresAt | date:'short')) : 'Rôle permanent (sans expiration)' }}</small>
+                  </div>
+                  @if (can('access.users.assign_roles')) {
+                    <button type="button" class="icon-button danger-icon" title="Retirer le rôle" [attr.aria-label]="'Retirer le rôle ' + (currentRole.role?.label || currentRole.roleKey)" (click)="revokeRole(currentRole)">
+                      <mat-icon>remove_circle_outline</mat-icon>
+                    </button>
+                  }
+                </div>
+              } @else {
+                <p class="empty-state">Aucun rôle attribué à cet employé.</p>
+              }
+            </div>
+
             @if (can('access.users.assign_roles')) {
               <div class="inline-assignment">
-                <select aria-label="Rôle à attribuer" [value]="userRoleDraft()" (change)="userRoleDraft.set($any($event.target).value)">
-                  <option value="">Choisir un rôle</option>
+                <select aria-label="Choisir un rôle" [value]="userRoleDraft()" (change)="userRoleDraft.set($any($event.target).value)">
+                  <option value="">{{ currentUserRole() ? 'Remplacer par un autre rôle...' : 'Attribuer un rôle...' }}</option>
                   @for (role of accessControl.roles(); track role.id) {
-                    @if (role.isActive && isAssignableRole(role)) { <option [value]="role.id">{{ role.label }}</option> }
+                    @if (role.isActive && role.id !== currentUserRole()?.roleId) {
+                      <option [value]="role.id">{{ role.label }}</option>
+                    }
                   }
                 </select>
-                <button type="button" class="primary-button" [disabled]="!userRoleDraft()" (click)="assignSelectedRole()">Attribuer</button>
+                <button type="button" class="primary-button" [disabled]="!userRoleDraft() || accessControl.isLoading()" (click)="assignSelectedRole()">
+                  {{ currentUserRole() ? 'Remplacer le rôle' : 'Attribuer le rôle' }}
+                </button>
               </div>
             }
-            <ul class="assignment-list">
-              @for (assignment of access.roleAssignments; track assignment.roleId) {
-                <li>
-                  <span>{{ assignment.role?.label || assignment.roleKey }}</span>
-                  <small>{{ assignment.expiresAt ? ('Expire le ' + assignment.expiresAt) : 'Sans expiration' }}</small>
-                  @if (can('access.users.assign_roles')) {
-                    <button type="button" class="icon-button danger-icon" title="Retirer le rôle" [attr.aria-label]="'Retirer le rôle ' + (assignment.role?.label || assignment.roleKey)" (click)="revokeRole(assignment)"><mat-icon>remove_circle_outline</mat-icon></button>
-                  }
-                </li>
-              } @empty { <li class="empty-state">Aucun rôle attribué.</li> }
-            </ul>
           </section>
 
           <section class="access-section">

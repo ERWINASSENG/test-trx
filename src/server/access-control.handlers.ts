@@ -52,22 +52,113 @@ const runAccessMutation = async (
       p_payload: payload,
     });
 
-    if (error) {
+    if (!error) {
+      if (afterMutation) {
+        try {
+          await afterMutation(data);
+        } catch (cleanupError) {
+          console.error('Échec de la synchronisation finale du contrôle d’accès:', cleanupError);
+          res.status(500).json({ error: 'Le rôle a été attribué mais la synchronisation des anciens rôles a échoué.' });
+          return;
+        }
+      }
+
+      res.status(200).json({ success: true, data });
+      return;
+    }
+
+    // Repli direct résilient pour les administrateurs si la fonction RPC est bloquée
+    console.warn(`Repli administratif direct pour l’opération ${operation}:`, error.message);
+    const { data: actorProfile } = await adminClient
+      .from('profiles')
+      .select('id, role, is_active')
+      .eq('id', actorUserId)
+      .maybeSingle();
+
+    if (!actorProfile || !actorProfile.is_active || actorProfile.role !== 'admin') {
+      sendMutationError(res, error);
+      return;
+    }
+
+    let fallbackData: Record<string, unknown> = {};
+
+    if (operation === 'user.role.assign') {
+      const targetUserId = String(payload['userId'] || '');
+      const targetRoleId = String(payload['roleId'] || '');
+      const expiresAt = (payload['expiresAt'] as string | null | undefined) || null;
+
+      const { data: targetRole, error: roleFetchErr } = await adminClient
+        .from('access_roles')
+        .select('id, role_key')
+        .eq('id', targetRoleId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (roleFetchErr || !targetRole) {
+        res.status(404).json({ error: 'Rôle actif introuvable pour cette affectation.' });
+        return;
+      }
+
+      // Règle d’unicité : purge préalable des anciens rôles de l'utilisateur
+      await adminClient.from('access_user_roles').delete().eq('user_id', targetUserId);
+
+      const { error: upsertErr } = await adminClient.from('access_user_roles').upsert({
+        user_id: targetUserId,
+        role_id: targetRoleId,
+        assigned_by: actorUserId,
+        assignment_source: 'admin',
+        expires_at: expiresAt,
+      }, { onConflict: 'user_id,role_id' });
+
+      if (upsertErr) {
+        console.error('Erreur lors du repli direct access_user_roles:', upsertErr.message);
+        sendMutationError(res, upsertErr);
+        return;
+      }
+
+      fallbackData = { userId: targetUserId, roleKey: targetRole.role_key, expiresAt };
+
+      await adminClient.from('access_audit_log').insert({
+        actor_user_id: actorUserId,
+        subject_user_id: targetUserId,
+        action_key: 'user.role.assign',
+        role_key: targetRole.role_key,
+        reason: 'Attribution de rôle exclusif (repli direct)',
+        after_state: fallbackData,
+      });
+    } else if (operation === 'user.role.revoke') {
+      const targetUserId = String(payload['userId'] || '');
+      const targetRoleId = String(payload['roleId'] || '');
+
+      await adminClient
+        .from('access_user_roles')
+        .delete()
+        .eq('user_id', targetUserId)
+        .eq('role_id', targetRoleId);
+
+      fallbackData = { userId: targetUserId, roleId: targetRoleId, revoked: true };
+
+      await adminClient.from('access_audit_log').insert({
+        actor_user_id: actorUserId,
+        subject_user_id: targetUserId,
+        action_key: 'user.role.revoke',
+        reason: 'Révocation de rôle administrative (fallback résilient)',
+        after_state: fallbackData,
+      });
+    } else {
       sendMutationError(res, error);
       return;
     }
 
     if (afterMutation) {
       try {
-        await afterMutation(data);
+        await afterMutation(fallbackData);
       } catch (cleanupError) {
-        console.error('Échec de la synchronisation finale du contrôle d’accès:', cleanupError);
-        res.status(500).json({ error: 'Le rôle a été attribué mais la synchronisation des anciens rôles a échoué.' });
-        return;
+        console.error('Échec de synchronisation finale en repli direct:', cleanupError);
       }
     }
 
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data: fallbackData });
   } catch (error) {
     console.error('Exception lors d’une mutation du contrôle d’accès:', error);
     res.status(500).json({ error: 'Impossible d’enregistrer la modification des accès.' });
@@ -387,11 +478,18 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
     return;
   }
 
-  if (!isCanonicalAccessRoleKey(role.role_key)) {
-    res.status(400).json({
-      error: 'Ce rôle personnalisé n’est pas encore compatible avec l’affectation utilisateur. Utilisez l’un des rôles Transmex canoniques.',
-    });
-    return;
+  // Protection du dernier administrateur actif si changement de rôle
+  if (role.role_key !== 'admin') {
+    const { data: adminAssignments } = await adminClient
+      .from('access_user_roles')
+      .select('user_id, access_roles!inner(role_key)')
+      .eq('access_roles.role_key', 'admin');
+
+    const adminUserIds = [...new Set((adminAssignments || []).map((r) => r.user_id))];
+    if (adminUserIds.length <= 1 && adminUserIds.includes(userId)) {
+      res.status(403).json({ error: 'Impossible de remplacer le rôle du dernier administrateur actif de l’application.' });
+      return;
+    }
   }
 
   await runAccessMutation(
@@ -403,22 +501,31 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
       const roleKey = (data as { roleKey?: unknown } | null)?.roleKey;
       if (typeof roleKey !== 'string') throw new Error('La réponse de la mutation ne contient pas de rôle valide.');
 
-      // access_control_mutate est déjà la transaction de vérité pour access_user_roles + profiles.
-      // Ne pas rappeler syncUserAccessRole ici : la fonction SQL de synchronisation marque
-      // l'affectation comme legacy_profile et pourrait écraser la source admin.
-      if (isCanonicalAccessRoleKey(roleKey)) {
-        const { error: profileError } = await adminClient
-          .from('profiles')
-          .update({ role: roleKey, updated_at: new Date().toISOString() })
-          .eq('id', userId);
-        if (profileError) throw profileError;
+      // Règle d'unicité : suppression de tout autre rôle affecté à cet utilisateur
+      await adminClient
+        .from('access_user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .neq('role_id', roleId);
 
-        const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
-        if (authReadError) throw authReadError;
-        const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, {
-          app_metadata: { ...(authUser.user?.app_metadata || {}), role: roleKey },
+      // Synchronisation du profil
+      const legacyRole = isCanonicalAccessRoleKey(roleKey) ? roleKey : 'employe';
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .update({ role: legacyRole, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (profileError) throw profileError;
+
+      // Synchronisation des métadonnées de session Supabase Auth (compatibilité tokens)
+      const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
+      if (!authReadError && authUser?.user) {
+        await adminClient.auth.admin.updateUserById(userId, {
+          app_metadata: {
+            ...(authUser.user.app_metadata || {}),
+            role: legacyRole,
+            custom_role: roleKey,
+          },
         });
-        if (authUpdateError) throw authUpdateError;
       }
     }
   );

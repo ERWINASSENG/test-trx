@@ -103,7 +103,7 @@
             </div>
 
             <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-              {{ getRoleLabel(user.role) }}
+              {{ user.roleLabel || getRoleLabel(user.role) }}
             </span>
           </div>
 
@@ -111,7 +111,7 @@
           <div class="space-y-2 py-3 border-y border-slate-100 text-xs">
             <div class="flex items-center justify-between text-slate-600">
               <span class="font-medium text-slate-400">Rôle système :</span>
-              <span class="font-semibold text-slate-800">{{ getRoleDefinition(user.role).label }}</span>
+              <span class="font-semibold text-slate-800">{{ user.roleLabel || getRoleDefinition(user.role).label }}</span>
             </div>
 
             <div class="flex items-center justify-between text-slate-600">
@@ -264,7 +264,7 @@
               id="hr-form-role"
               formControlName="role"
               class="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium text-slate-800">
-              @for (roleDef of roleList; track roleDef.id) {
+              @for (roleDef of availableRoles(); track roleDef.id) {
                 <option [value]="roleDef.id">
                   {{ roleDef.label }} ({{ roleDef.description }})
                 </option>

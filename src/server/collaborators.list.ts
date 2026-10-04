@@ -98,6 +98,20 @@ export const getCollaboratorsHandler = async (_req: express.Request, res: expres
     }
 
     const profileMap = new Map(allProfiles.map((profile) => [profile.id, profile]));
+
+    // Récupération des rôles actifs pour synchronisation exacte avec le contrôle d'accès
+    const { data: userRoleRows } = await adminClient
+      .from('access_user_roles')
+      .select('user_id, access_roles!inner(role_key, label)');
+
+    const activeRoleByUserId = new Map<string, { roleKey: string; label: string }>();
+    for (const row of userRoleRows || []) {
+      const accessRole = (row as unknown as { access_roles?: { role_key: string; label: string } }).access_roles;
+      if (accessRole?.role_key) {
+        activeRoleByUserId.set(row.user_id, { roleKey: accessRole.role_key, label: accessRole.label });
+      }
+    }
+
     const processedIds = new Set<string>();
     const users: Record<string, unknown>[] = [];
 
@@ -108,7 +122,8 @@ export const getCollaboratorsHandler = async (_req: express.Request, res: expres
       const lastName = profile?.last_name || (authUser.user_metadata?.['last_name'] as string) || (authUser.user_metadata?.['lastName'] as string) || '';
       const email = authUser.email || profile?.email || '';
       const displayName = `${firstName} ${lastName}`.trim() || (authUser.user_metadata?.['display_name'] as string) || email || 'Utilisateur';
-      const rawRole = (authUser.app_metadata?.['role'] as string) || profile?.role || (authUser.user_metadata?.['role'] as string) || 'employe';
+      const activeAccessRole = activeRoleByUserId.get(authUser.id);
+      const rawRole = activeAccessRole?.roleKey || (authUser.app_metadata?.['custom_role'] as string) || (authUser.app_metadata?.['role'] as string) || profile?.role || (authUser.user_metadata?.['role'] as string) || 'employe';
 
       users.push({
         id: authUser.id,
@@ -117,6 +132,8 @@ export const getCollaboratorsHandler = async (_req: express.Request, res: expres
         lastName,
         displayName,
         role: normalizeUserRole(rawRole),
+        customRole: activeAccessRole?.roleKey || null,
+        roleLabel: activeAccessRole?.label || null,
         department: profile?.department || 'Services Généraux',
         phone: profile?.phone || authUser.phone || '',
         isActive: profile?.is_active ?? true,
@@ -130,13 +147,18 @@ export const getCollaboratorsHandler = async (_req: express.Request, res: expres
     for (const profile of allProfiles) {
       if (processedIds.has(profile.id)) continue;
       processedIds.add(profile.id);
+      const activeAccessRole = activeRoleByUserId.get(profile.id);
+      const rawRole = activeAccessRole?.roleKey || profile.role || 'employe';
+
       users.push({
         id: profile.id,
         email: profile.email || '',
         firstName: profile.first_name || '',
         lastName: profile.last_name || '',
         displayName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Utilisateur',
-        role: normalizeUserRole(profile.role),
+        role: normalizeUserRole(rawRole),
+        customRole: activeAccessRole?.roleKey || null,
+        roleLabel: activeAccessRole?.label || null,
         department: profile.department || 'Services Généraux',
         phone: profile.phone || '',
         isActive: profile.is_active ?? true,

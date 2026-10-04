@@ -47,6 +47,7 @@ export interface AccessUserRole {
   userId: string;
   roleId: string;
   roleKey: string;
+  role?: AccessRole | null;
   assignedBy: string | null;
   assignmentSource: RoleAssignmentSource;
   createdAt: string;

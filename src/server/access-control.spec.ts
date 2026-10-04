@@ -166,4 +166,33 @@ describe('hasPermission', () => {
 
     expect(allowed).toBe(true);
   });
+
+  it('autorise un rôle personnalisé comme DAF avec ses permissions dédiées', async () => {
+    const allowed = await hasPermission(
+      'user-daf',
+      'journals.read',
+      undefined,
+      {
+        roleKeys: ['daf'],
+        rules: [
+          {
+            permissionKey: 'journals.read',
+            effect: 'allow',
+            scope: { type: 'all', version: 1 },
+            isUserOverride: false,
+            sourceRoleKey: 'daf',
+          },
+          {
+            permissionKey: 'cashier.read',
+            effect: 'allow',
+            scope: { type: 'all', version: 1 },
+            isUserOverride: false,
+            sourceRoleKey: 'daf',
+          },
+        ],
+      }
+    );
+
+    expect(allowed).toBe(true);
+  });
 });

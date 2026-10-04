@@ -1,6 +1,5 @@
 import express from 'express';
 import { UserRole } from '../app/core/models/auth.model';
-import { normalizeUserRole } from '../app/core/utils/role.utils';
 import { getSupabaseAdmin } from './auth';
 import { syncUserAccessRole } from './access-role-sync';
 
@@ -42,9 +41,9 @@ export const createCollaboratorHandler = async (req: express.Request, res: expre
     return;
   }
 
-  const validRoles: UserRole[] = ['admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe'];
-  if (!role || !validRoles.includes(role)) {
-    res.status(400).json({ error: 'Le rôle Transmex est obligatoire et doit être défini explicitement (admin, manager, tresorier, caissiere, comptable, employe)' });
+  const rawRole = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  if (!rawRole) {
+    res.status(400).json({ error: 'Le rôle Transmex est obligatoire et doit être défini explicitement.' });
     return;
   }
 
@@ -54,11 +53,30 @@ export const createCollaboratorHandler = async (req: express.Request, res: expre
     return;
   }
 
+  const canonicalRoles: UserRole[] = ['admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe'];
+  const isCanonical = canonicalRoles.includes(rawRole as UserRole);
+
+  if (!isCanonical) {
+    const { data: dynamicRole, error: roleCheckError } = await adminClient
+      .from('access_roles')
+      .select('id, role_key, is_active')
+      .eq('role_key', rawRole)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (roleCheckError || !dynamicRole) {
+      res.status(400).json({
+        error: `Le rôle d'accès « ${role} » est introuvable ou inactif dans le système de gestion des accès.`,
+      });
+      return;
+    }
+  }
+
   let authUserId: string | null = null;
 
   try {
     const computedDisplayName = displayName || `${firstName || ''} ${lastName || ''}`.trim() || email;
-    const computedRole = normalizeUserRole(role);
+    const computedRole = rawRole;
     const sitesList = Array.isArray(sites) ? sites : (department ? [department] : []);
 
     // Étape 1 : Création du compte dans auth.users avec métadonnées scellées

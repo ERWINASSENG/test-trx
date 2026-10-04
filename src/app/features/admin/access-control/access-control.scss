@@ -465,6 +465,38 @@ code {
 .access-section + .access-section { padding-top: 16px; border-top: 1px solid var(--access-line); }
 .section-heading { margin-bottom: 10px; }
 
+.current-role-block {
+  margin-bottom: 14px;
+}
+
+.assignment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--access-line);
+  border-radius: 6px;
+  background: var(--access-surface-hover);
+}
+
+.assignment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assignment-info .role-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--access-navy);
+}
+
+.assignment-info small {
+  color: var(--access-muted);
+  font-size: 11px;
+}
+
 .assignment-list li,
 .override-list li {
   display: grid;

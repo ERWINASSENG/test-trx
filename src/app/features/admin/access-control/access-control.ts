@@ -32,6 +32,7 @@ export class AccessControlCenter implements OnInit {
   public readonly roleLabelDraft = signal('');
   public readonly roleDescriptionDraft = signal('');
   public readonly newRoleError = signal<string | null>(null);
+  public readonly userAssignmentError = signal<string | null>(null);
   public readonly scopeError = signal<string | null>(null);
   public readonly feedback = signal<string | null>(null);
   public readonly permissionScopeDrafts = signal<Record<string, string>>({});
@@ -54,6 +55,11 @@ export class AccessControlCenter implements OnInit {
     return this.accessControl.users().filter((user) =>
       !query || `${user.firstName} ${user.lastName} ${user.email}`.toLocaleLowerCase().includes(query)
     );
+  });
+
+  public readonly currentUserRole = computed<AccessUserRole | null>(() => {
+    const assignments = this.accessControl.selectedUserAccess()?.roleAssignments || [];
+    return assignments.length > 0 ? assignments[0] : null;
   });
 
   public readonly permissionGroups = computed<PermissionGroup[]>(() => {
@@ -219,40 +225,51 @@ export class AccessControlCenter implements OnInit {
 
   public async selectUser(user: AccessControlUser): Promise<void> {
     this.selectedUserId.set(user.id);
+    this.userRoleDraft.set('');
+    this.userAssignmentError.set(null);
+    this.scopeError.set(null);
     this.feedback.set(null);
     await this.accessControl.loadUserAccess(user.id);
   }
 
   public isAssignableRole(role: AccessRole): boolean {
-    return ['admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe'].includes(role.roleKey);
+    return role.isActive;
   }
 
   public async assignSelectedRole(): Promise<void> {
     const userId = this.selectedUserId();
     const roleId = this.userRoleDraft();
     if (!userId || !roleId) return;
+
+    this.userAssignmentError.set(null);
+    this.feedback.set(null);
+
     const result = await this.accessControl.assignRole({ userId, roleId });
     if (!result.success) {
-      this.newRoleError.set(result.error || 'Impossible d’attribuer ce rôle.');
+      this.userAssignmentError.set(result.error || 'Impossible d’attribuer ce rôle.');
       return;
     }
     await this.accessControl.loadUserAccess(userId);
     await this.accessControl.loadUsers();
     this.userRoleDraft.set('');
-    this.feedback.set('Rôle attribué.');
+    this.feedback.set('Rôle attribué avec succès.');
   }
 
   public async revokeRole(assignment: AccessUserRole): Promise<void> {
     const userId = this.selectedUserId();
     if (!userId) return;
+
+    this.userAssignmentError.set(null);
+    this.feedback.set(null);
+
     const result = await this.accessControl.revokeRole(userId, assignment.roleId);
     if (!result.success) {
-      this.newRoleError.set(result.error || 'Impossible de retirer ce rôle.');
+      this.userAssignmentError.set(result.error || 'Impossible de retirer ce rôle.');
       return;
     }
     await this.accessControl.loadUserAccess(userId);
     await this.accessControl.loadUsers();
-    this.feedback.set('Rôle retiré.');
+    this.feedback.set('Rôle retiré avec succès.');
   }
 
   public async saveOverride(): Promise<void> {

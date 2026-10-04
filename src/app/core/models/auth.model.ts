@@ -14,6 +14,8 @@ export interface UserProfile {
   lastName: string;
   role: UserRole;
   roles?: UserRole[];
+  customRole?: string | null;
+  roleLabel?: string | null;
   department?: string;
   phone?: string;
   isActive: boolean;

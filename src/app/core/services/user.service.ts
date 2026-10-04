@@ -141,6 +141,8 @@ export class UserService {
         firstName: row.firstName || 'Utilisateur',
         lastName: row.lastName || 'Transmex',
         role: normalizeUserRole(row.role),
+        customRole: row.customRole || null,
+        roleLabel: row.roleLabel || null,
         department: row.department || 'Services Généraux',
         phone: row.phone,
         isActive: row.isActive ?? true,

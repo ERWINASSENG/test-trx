@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HrManagement } from './hr-management';
 import { UserService } from '../../core/services/user.service';
 import { AuthService } from '../../core/services/auth.service';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { UserProfile } from '../../core/models/auth.model';
 import { signal } from '@angular/core';
@@ -18,6 +19,10 @@ describe('HrManagement Component', () => {
   };
   let mockAuthService: {
     isAdmin: () => boolean;
+  };
+  let mockAccessControlService: {
+    roles: () => { id: string; roleKey: string; label: string; description: string | null; isActive: boolean }[];
+    loadRoles: ReturnType<typeof vi.fn>;
   };
 
   const sampleUsers: UserProfile[] = [
@@ -58,11 +63,25 @@ describe('HrManagement Component', () => {
       isAdmin: signal(true),
     };
 
+    mockAccessControlService = {
+      roles: signal([
+        {
+          id: 'role-daf',
+          roleKey: 'daf',
+          label: 'Directeur Administratif & Financier',
+          description: 'Supervision financière et administrative',
+          isActive: true,
+        },
+      ]),
+      loadRoles: vi.fn().mockResolvedValue(undefined),
+    };
+
     TestBed.configureTestingModule({
       imports: [HrManagement],
       providers: [
         { provide: UserService, useValue: mockUserService },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: AccessControlService, useValue: mockAccessControlService },
         { provide: SupabaseService, useValue: { isConfigured: false, supabase: null } },
       ],
     });
@@ -71,10 +90,12 @@ describe('HrManagement Component', () => {
     component = fixture.componentInstance;
   });
 
-  it('devrait être créé avec succès et charger les collaborateurs', () => {
+  it('devrait être créé avec succès et charger les collaborateurs ainsi que les rôles', () => {
     expect(component).toBeTruthy();
     expect(component.users().length).toBe(2);
     expect(component.isAdmin()).toBe(true);
+    const available = component.availableRoles();
+    expect(available.some((r) => r.id === 'daf')).toBe(true);
   });
 
   it('devrait extraire les départements uniques avec "all"', () => {
