@@ -1,5 +1,118 @@
 <div class="cashier-page w-full p-0">
   <div class="w-full">
+    <app-module-control-panel>
+      <div controlPanelStart class="flex items-center gap-2 sm:gap-3">
+        @if (canEdit()) {
+          <button
+            type="button"
+            (click)="startAddInline()"
+            class="inline-flex items-center gap-1 rounded border border-white/15 bg-[#0b5ed7] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#084db1] active:scale-95 dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb]"
+            id="cashier-control-create">
+            Nouveau
+          </button>
+          <button
+            type="button"
+            (click)="onOpenImportModal()"
+            class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-transparent dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+            id="cashier-control-import">
+            Uploader
+          </button>
+        }
+        <div class="hidden flex-col leading-tight sm:flex" aria-label="Fil d’Ariane">
+          <span class="text-xs font-bold text-[#0b5ed7] dark:text-[#8cc2ff]">Tableau de bord</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">Opérations Caisse</span>
+        </div>
+      </div>
+
+      <div controlPanelCenter class="w-full">
+        @if (selectedCount() > 0) {
+          <div class="flex items-center gap-2" id="cashier-selection-bar">
+            <div class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7]/30 bg-[#0b5ed7]/10 px-3 py-1 text-xs font-semibold text-[#0b5ed7] dark:border-[#7cb3ff]/40 dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff]">
+              <span>{{ selectedCount() }} sélectionné(s)</span>
+              <button
+                type="button"
+                (click)="clearSelection()"
+                class="ml-0.5 flex items-center justify-center rounded-full p-0.5 transition-colors hover:bg-[#0b5ed7]/15 dark:hover:bg-[#7cb3ff]/20"
+                aria-label="Annuler la sélection"
+                title="Annuler la sélection">
+                <mat-icon class="!h-3.5 !w-3.5 !text-[13px] leading-none">close</mat-icon>
+              </button>
+            </div>
+
+            <div class="relative" id="cashier-actions-dropdown-container">
+              <button
+                type="button"
+                (click)="toggleActionsMenu($event)"
+                class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7] bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50 dark:border-[#7cb3ff] dark:bg-[#0d1f3a] dark:text-white dark:hover:bg-white/5"
+                [attr.aria-expanded]="isActionsMenuOpen()"
+                aria-haspopup="menu"
+                id="cashier-control-actions">
+                <mat-icon class="!h-4 !w-4 !text-[15px] text-[#0b5ed7] dark:text-[#8cc2ff]">settings</mat-icon>
+                Actions
+              </button>
+
+              @if (isActionsMenuOpen()) {
+                <div
+                  class="absolute left-0 top-full z-50 mt-1.5 w-56 rounded-lg border border-slate-200 bg-white py-1.5 text-xs text-slate-700 shadow-2xl dark:border-white/10 dark:bg-[#212529] dark:text-slate-200"
+                  role="menu"
+                  aria-label="Actions sur les opérations sélectionnées">
+                  <button type="button" (click)="onExportAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem">
+                    <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">upload</mat-icon>
+                    Exporter
+                  </button>
+                  <button type="button" (click)="onExportSpreadsheetAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem">
+                    <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">table_view</mat-icon>
+                    Insérer dans la feuille de calcul
+                  </button>
+                  @if (canEdit()) {
+                    <button type="button" (click)="onDuplicateAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">content_copy</mat-icon>
+                      Dupliquer
+                    </button>
+                  }
+                  @if (canCancelCashierOperations()) {
+                    <button type="button" (click)="onCancelSelectedAction()" [disabled]="isCancelling()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-950/30" role="menuitem">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-rose-500">cancel</mat-icon>
+                      Annuler
+                    </button>
+                    <button type="button" (click)="onResetToDraftAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-normal text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10" role="menuitem">
+                      Remettre en brouillon
+                    </button>
+                  }
+                  <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
+                  <button type="button" (click)="onDownloadAttachmentsAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-normal text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10" role="menuitem">
+                    Télécharger les pièces jointes
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="flex w-full items-center rounded border border-slate-300 bg-white px-2.5 py-1 text-xs transition focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]">
+            <mat-icon aria-hidden="true" class="mr-2 !h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
+            <input
+              type="search"
+              [formControl]="searchControl"
+              placeholder="Rechercher…"
+              aria-label="Rechercher dans les opérations de caisse"
+              class="min-w-[60px] flex-grow bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
+              id="cashier-control-search" />
+          </div>
+        }
+      </div>
+
+      <div controlPanelEnd class="flex items-center gap-3">
+        <span class="select-none text-xs font-medium text-slate-600 dark:text-slate-300" aria-live="polite">{{ paginationLabel() }}</span>
+        <div class="flex items-center overflow-hidden rounded border border-slate-300 bg-white dark:border-[#343a40] dark:bg-white/5" aria-label="Pagination des opérations">
+          <button type="button" (click)="prevPage()" [disabled]="!canPrevPage()" class="p-1 text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page précédente" title="Précédent">
+            <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-[15px]">chevron_left</mat-icon>
+          </button>
+          <button type="button" (click)="nextPage()" [disabled]="!canNextPage()" class="border-l border-slate-300 p-1 text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#343a40] dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page suivante" title="Suivant">
+            <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-[15px]">chevron_right</mat-icon>
+          </button>
+        </div>
+      </div>
+    </app-module-control-panel>
 
     <!-- BANDEAU D'ALERTE D'ERREUR OU DOUBLON (Accessible WCAG AA, Sticky & Haute Visibilité) -->
     @if (error()) {
@@ -212,6 +325,21 @@
                   placeholder=""
                   class="odoo-field-input w-full"
                 />
+                @if (isNativeCaisseSelected()) {
+                  <select
+                    id="inline-input-dossier-id"
+                    formControlName="dossierId"
+                    aria-label="Dossier associé à l’opération"
+                    title="Sélectionner un dossier"
+                    (change)="syncDossierReference(transactionForm, $event)"
+                    class="odoo-field-input mt-1 w-full text-[10px]"
+                  >
+                    <option value="">Aucun dossier lié</option>
+                    @for (dossier of dossierService.dossiers(); track dossier.id) {
+                      <option [value]="dossier.id">{{ dossier.noDossier }} · {{ dossier.client || 'Client' }}</option>
+                    }
+                  </select>
+                }
               </td>
 
               <!-- Services -->
@@ -377,6 +505,21 @@
                       placeholder=""
                       class="odoo-field-input w-full"
                     />
+                    @if (isNativeCaisseTransaction(tx)) {
+                      <select
+                        id="inline-edit-dossier-id"
+                        formControlName="dossierId"
+                        aria-label="Dossier associé à l’opération"
+                        title="Sélectionner un dossier"
+                        (change)="syncDossierReference(editTransactionForm, $event)"
+                        class="odoo-field-input mt-1 w-full text-[10px]"
+                      >
+                        <option value="">Aucun dossier lié</option>
+                        @for (dossier of dossierService.dossiers(); track dossier.id) {
+                          <option [value]="dossier.id">{{ dossier.noDossier }} · {{ dossier.client || 'Client' }}</option>
+                        }
+                      </select>
+                    }
                   </td>
 
                   <!-- Services -->

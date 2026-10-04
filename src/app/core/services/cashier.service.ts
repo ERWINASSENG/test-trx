@@ -29,6 +29,7 @@ export interface CashierDbRow {
   category: 'entree' | 'sortie';
   status: 'draft' | 'posted' | 'cancelled';
   no_dossier?: string | null;
+  dossier_id?: string | null;
   matricule_vehicule?: string | null;
   first_name?: string | null;
   partenaire?: string | null;
@@ -238,6 +239,7 @@ export class CashierService implements OnDestroy {
             category: (row['category'] === 'sortie' ? 'sortie' : 'entree') as 'entree' | 'sortie',
             status: (row['status'] as 'draft' | 'posted' | 'cancelled') || 'draft',
             noDossier: row['no_dossier'] ? String(row['no_dossier']) : (row['noDossier'] ? String(row['noDossier']) : ''),
+            dossierId: typeof row['dossier_id'] === 'string' ? row['dossier_id'] : null,
             firstName: '',
             employee: emp,
             partenaire: part,
@@ -707,6 +709,7 @@ export class CashierService implements OnDestroy {
           category: op.category,
           status: op.status || 'draft',
           noDossier: op.noDossier || null,
+          dossierId: op.dossierId ?? null,
           firstName: op.firstName || null,
           employee: op.employee || op.partenaire || null,
           partenaire: op.partenaire || op.employee || null,
@@ -765,6 +768,7 @@ export class CashierService implements OnDestroy {
       category: savedRow.category as 'entree' | 'sortie',
       status: (savedRow.status as 'draft' | 'posted' | 'cancelled') || op.status || 'draft',
       noDossier: savedRow.no_dossier || savedRow.matricule_vehicule || '',
+      dossierId: savedRow.dossier_id || undefined,
       firstName: savedRow.first_name || '',
       employee: savedRow.employee || '',
       partenaire: savedRow.partenaire || savedRow.employee || '',
@@ -991,6 +995,7 @@ export class CashierService implements OnDestroy {
         if (updatedFields.category !== undefined) bodyPayload['category'] = updatedFields.category;
         if (updatedFields.status !== undefined) bodyPayload['status'] = updatedFields.status;
         if (updatedFields.noDossier !== undefined) bodyPayload['noDossier'] = updatedFields.noDossier;
+        if (updatedFields.dossierId !== undefined) bodyPayload['dossierId'] = updatedFields.dossierId;
         if (updatedFields.firstName !== undefined) bodyPayload['firstName'] = updatedFields.firstName;
         if (updatedFields.employee !== undefined) bodyPayload['employee'] = updatedFields.employee;
         if (updatedFields.partenaire !== undefined) bodyPayload['partenaire'] = updatedFields.partenaire;
@@ -1529,6 +1534,7 @@ export class CashierService implements OnDestroy {
       category: (row.category || (numMontant >= 0 ? 'entree' : 'sortie')) as 'entree' | 'sortie',
       status: (row.status as 'draft' | 'posted' | 'cancelled') || 'draft',
       noDossier: row.no_dossier || row.matricule_vehicule || '',
+      dossierId: row.dossier_id || undefined,
       firstName: row.first_name || '',
       employee: row.employee || '',
       partenaire: row.partenaire || row.employee || '',
@@ -1583,6 +1589,7 @@ export class CashierService implements OnDestroy {
         category: (row.category || (numMontant >= 0 ? 'entree' : 'sortie')) as 'entree' | 'sortie',
         status: (row.status as 'draft' | 'posted' | 'cancelled') || 'draft',
         noDossier: row.no_dossier || row.matricule_vehicule || '',
+        dossierId: row.dossier_id || undefined,
         firstName: row.first_name || '',
         employee: row.employee || '',
         partenaire: row.partenaire || row.employee || '',

@@ -77,6 +77,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       category: 'sortie' as const,
       status: 'posted' as const,
       matricule_vehicule: 'LT-5544-AA',
+      dossier_id: 'dossier-1',
       first_name: 'Samuel',
       employee: 'Samuel Eboa',
       quantity: 50,
@@ -108,6 +109,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       category: 'sortie',
       status: 'posted',
       matriculeVehicule: 'LT-5544-AA',
+      dossierId: 'dossier-1',
       firstName: 'Samuel',
       employee: 'Samuel Eboa',
       quantity: 50,
@@ -123,14 +125,45 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     // Vérifie que pieceComptable n'est pas imposé côté client (null envoyé pour laisser le trigger l'assigner comme Odoo)
     const bodySent = JSON.parse(String(fetchCalledWithInit?.body || '{}'));
     expect(bodySent.pieceComptable).toBeNull();
+    expect(bodySent.dossierId).toBe('dossier-1');
 
     // 2. Vérification de la mise à jour immédiate du Signal avec la pièce retournée par le serveur
     expect(result.success).toBe(true);
     expect(service.allTransactions().length).toBe(1);
     expect(service.allTransactions()[0].id).toBe('tx-uuid-123');
     expect(service.allTransactions()[0].pieceComptable).toBe('CSH1/2026/00001');
+    expect(service.allTransactions()[0].dossierId).toBe('dossier-1');
     expect(service.allTransactions()[0].libelle).toBe('Plein carburant camion');
     expect(service.currentBalance()).toBe(-75000);
+  });
+
+  it('devrait transmettre le dossier lié lors de la modification d’une opération Caisse', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-existing',
+      date: '2026-10-01',
+      libelle: 'Dépense existante',
+      category: 'sortie',
+      status: 'posted',
+      montant: -10000,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+
+    let updateBody: Record<string, unknown> = {};
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        updateBody = JSON.parse(String(init.body || '{}')) as Record<string, unknown>;
+      }
+      return new Response(JSON.stringify({ summary: { solde_global: -10000 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch;
+
+    const result = await service.updateTransaction('tx-existing', { dossierId: 'dossier-2' });
+
+    expect(result.success).toBe(true);
+    expect(updateBody['dossierId']).toBe('dossier-2');
+    expect(service.allTransactions()[0].dossierId).toBe('dossier-2');
   });
 
   it('devrait refuser l’écriture si l’API serveur-relais renvoie une erreur', async () => {

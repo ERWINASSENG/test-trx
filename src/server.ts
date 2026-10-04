@@ -18,7 +18,8 @@ import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from '.
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
-import { getOperationsHandler } from './server/cashier.read';
+import { getDossierExpenseSummaryHandler, getOperationsHandler } from './server/cashier.read';
+import { createDossierHandler, listDossiersHandler } from './server/dossiers';
 import { writeAuditLog } from './server/audit-log';
 import {
   createProspectHandler,
@@ -1103,6 +1104,15 @@ app.get('/api/prospects', requireAuth, requirePermission('prospects.read'), list
 app.post('/api/prospects', requireAuth, requirePermission('prospects.create'), createProspectHandler);
 app.patch('/api/prospects/:id', requireAuth, requirePermission('prospects.update'), updateProspectHandler);
 app.delete('/api/prospects/:id', requireAuth, requirePermission('prospects.delete'), deleteProspectHandler);
+
+// Module Dossiers : lecture et création protégées par les permissions Caisse.
+app.get('/api/dossiers', requireAuth, requirePermission('cashier.read'), listDossiersHandler);
+app.get('/api/dossiers/expenses', requireAuth, requirePermission('cashier.read'), getDossierExpenseSummaryHandler);
+app.post('/api/dossiers', requireAuth, (req, res, next) => {
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string } | undefined;
+  const permission = authenticatedUser?.role === 'manager' ? 'cashier.read' : 'cashier.create';
+  requirePermission(permission)(req, res, next);
+}, createDossierHandler);
 
 // Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
 app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);

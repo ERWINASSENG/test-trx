@@ -18,7 +18,6 @@ describe('MainLayout Component', () => {
   let cashierService: CashierService;
   let themeService: ThemeService;
   let logoutCalled = false;
-  let statusUpdateAllowed = signal(false);
 
   const mockUser: UserProfile = {
     id: 'test-admin',
@@ -36,6 +35,7 @@ describe('MainLayout Component', () => {
     { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'prospects.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
@@ -43,13 +43,13 @@ describe('MainLayout Component', () => {
 
   beforeEach(() => {
     logoutCalled = false;
-    statusUpdateAllowed = signal(false);
     currentUser = signal<UserProfile | null>(mockUser);
     currentRole = signal<UserRole>(mockUser.role);
     effectivePermissions = signal([
       { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'prospects.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
@@ -59,6 +59,7 @@ describe('MainLayout Component', () => {
       providers: [
         provideRouter([
           { path: 'caisse', component: MainLayout },
+          { path: 'dossiers', component: MainLayout },
           { path: 'configuration', component: MainLayout },
           { path: '**', component: MainLayout },
         ]),
@@ -86,7 +87,6 @@ describe('MainLayout Component', () => {
             effectivePermissions,
             hasPermission: (permission: string) => {
               if (permission === 'cashier.create') return currentRole() === 'admin' || currentRole() === 'caissiere';
-              if (permission === 'cashier.status_update') return currentRole() === 'admin' || (currentRole() === 'caissiere' && statusUpdateAllowed());
               return effectivePermissions().some((item) => item.permissionKey === permission && item.effect === 'allow');
             },
             hasPermissionForResource: (_permission: string, resource: { ownerUserId?: string }) =>
@@ -167,17 +167,11 @@ describe('MainLayout Component', () => {
     expect(component.isMenuOpen()).toBe(false);
   });
 
-  it('devrait mettre à jour la chaîne de recherche et synchroniser avec CashierService', () => {
-    const fakeEvent = { target: { value: 'Facture' } } as unknown as Event;
-    component.onSearchInput(fakeEvent);
-    expect(component.searchQuery()).toBe('Facture');
-    expect(cashierService.filterState().searchQuery).toBe('Facture');
-  });
+  it('ne rend pas de Control Panel global sur la route Dossiers', async () => {
+    await component.router.navigateByUrl('/dossiers');
+    fixture.detectChanges();
 
-  it('devrait déclencher la création de nouvelle transaction via onNouveau()', () => {
-    expect(cashierService.isAddingRow()).toBe(false);
-    component.onNouveau();
-    expect(cashierService.isAddingRow()).toBe(true);
+    expect(fixture.nativeElement.querySelector('#app-control-panel')).toBeNull();
   });
 
   it('réserve l’écriture dans la caisse native à admin et caissiere', () => {
@@ -190,51 +184,11 @@ describe('MainLayout Component', () => {
     expect(component.canEditCaisse()).toBe(false);
   });
 
-  it('affiche Annuler uniquement avec le droit de mise à jour du statut', async () => {
-    currentRole.set('caissiere');
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(JSON.stringify({
-      success: true,
-      operation: {
-        id: 'tx-cancel-guard',
-        piece_comptable: 'CSH1/2026/00001',
-        date: '2026-10-03',
-        libelle: 'Transaction de test',
-        category: 'entree',
-        status: 'draft',
-        montant: 1,
-      },
-    }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as typeof globalThis.fetch;
-
-    try {
-      const result = await cashierService.saveOperationViaApi({
-        libelle: 'Transaction de test',
-        category: 'entree',
-        montant: 1,
-      });
-      expect(result.success).toBe(true);
-      cashierService.toggleSelectTransaction('tx-cancel-guard');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-
+  it('ne rend pas de Control Panel global sur la route Caisse', async () => {
     await component.router.navigateByUrl('/caisse');
     fixture.detectChanges();
-    component.toggleActionsMenu();
-    fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('#cp-action-duplicate')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('#cp-action-cancel-selected')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#cp-action-reset-draft')).toBeNull();
-
-    statusUpdateAllowed.set(true);
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#cp-action-cancel-selected')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('#cp-action-reset-draft')).not.toBeNull();
-
-    const resetSelectedToDraft = vi.spyOn(cashierService, 'resetSelectedToDraft').mockResolvedValue(true);
-    await component.onResetToDraftAction();
-    expect(resetSelectedToDraft).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('#app-control-panel')).toBeNull();
   });
 
   it('autorise le trésorier uniquement sur ses journaux personnalisés', () => {
@@ -286,7 +240,8 @@ describe('MainLayout Component', () => {
     expect(component.isConfigDropdownOpen()).toBe(false);
   });
 
-  it('devrait masquer le Control Panel si la route n\'est pas caisse', () => {
-    expect(component.isCashierRoute()).toBe(false);
+  it('ne rend pas de Control Panel global sur la route initiale', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#app-control-panel')).toBeNull();
   });
 });

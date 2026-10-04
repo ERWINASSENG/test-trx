@@ -32,6 +32,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
 import { JournalService } from '../../../core/services/journal.service';
 import { JournalEntryService } from '../../../core/services/journal-entry.service';
+import { DossierService } from '../../../core/services/dossier.service';
 import { Journal } from '../../../core/models/journal.model';
 import { JournalChartData } from '../../../core/models/journal-entry.model';
 
@@ -87,11 +88,22 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   private readonly cashierService = inject(CashierService);
   private readonly journalService = inject(JournalService, { optional: true });
   private readonly journalEntryService = inject(JournalEntryService);
+  private readonly dossierService = inject(DossierService);
   private readonly platformId = inject(PLATFORM_ID);
 
   public readonly currentUser = this.authService.currentUser;
   public readonly caisseTransactions = this.cashierService.caisseTransactions;
   public readonly caisseBalance = this.cashierService.caisseBalance;
+  public readonly canViewDossierExpenseSummary = computed(() => this.currentUser()?.role === 'manager');
+  public readonly dossierExpenseSummary = this.dossierService.expenseSummary;
+  public readonly dossierExpenseSummaryError = this.dossierService.expenseSummaryError;
+  public readonly isDossierExpenseSummaryLoading = this.dossierService.isExpenseSummaryLoading;
+  public readonly totalDossierExpenses = computed(() =>
+    this.dossierExpenseSummary().reduce((total, dossier) => total + dossier.totalExpenses, 0)
+  );
+  public readonly totalDossierExpenseCount = computed(() =>
+    this.dossierExpenseSummary().reduce((total, dossier) => total + dossier.expenseCount, 0)
+  );
 
   // Données de graphiques en cache par journal
   private readonly journalChartsMap = new Map<string, Chart>();
@@ -194,6 +206,9 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
   public ngOnInit(): void {
     void this.cashierService.loadTransactions();
+    if (this.canViewDossierExpenseSummary()) {
+      void this.dossierService.loadExpenseSummary();
+    }
     if (this.journalService) {
       void this.journalService.loadJournals();
     }

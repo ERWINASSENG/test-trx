@@ -44,3 +44,43 @@ export const requiresCashierDraftBeforeEdit = (
   status: string | null | undefined,
   role: string | null | undefined
 ): boolean => role === 'caissiere' && status === 'posted';
+
+export interface DossierExpenseTransaction {
+  dossier_id?: unknown;
+  status?: unknown;
+  category?: unknown;
+  montant?: unknown;
+}
+
+export interface DossierExpenseAggregate {
+  dossierId: string;
+  expenseCount: number;
+  totalExpenses: number;
+}
+
+export const aggregateDossierExpenses = (
+  transactions: readonly DossierExpenseTransaction[]
+): DossierExpenseAggregate[] => {
+  const aggregates = new Map<string, DossierExpenseAggregate>();
+
+  for (const transaction of transactions) {
+    if (transaction.status !== 'posted' || transaction.category !== 'sortie') continue;
+    if (typeof transaction.dossier_id !== 'string' || !transaction.dossier_id) continue;
+
+    const amount = Math.abs(Number(transaction.montant));
+    if (!Number.isFinite(amount) || amount === 0) continue;
+
+    const aggregate = aggregates.get(transaction.dossier_id) ?? {
+      dossierId: transaction.dossier_id,
+      expenseCount: 0,
+      totalExpenses: 0,
+    };
+    aggregate.expenseCount += 1;
+    aggregate.totalExpenses += amount;
+    aggregates.set(transaction.dossier_id, aggregate);
+  }
+
+  return [...aggregates.values()].sort((a, b) =>
+    b.totalExpenses - a.totalExpenses || a.dossierId.localeCompare(b.dossierId)
+  );
+};

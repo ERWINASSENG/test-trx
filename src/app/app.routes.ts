@@ -61,6 +61,14 @@ export const routes: Routes = [
         title: 'Transmex - Prospects',
       },
       {
+        path: 'dossiers',
+        loadComponent: () =>
+          import('./features/dossiers/dossier-management').then((m) => m.DossierManagementComponent),
+        canActivate: [roleGuard],
+        data: { permission: 'cashier.read' },
+        title: 'Transmex - Dossiers',
+      },
+      {
         path: 'admin/users',
         loadComponent: () =>
           import('./features/admin/access-control/access-control').then(

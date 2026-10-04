@@ -24,6 +24,7 @@ export interface CashierTransaction {
   noDossier?: string; // Requis si service === 'Opérations' (ex: Matricule véhicule / Dossier)
   /** Alias historique du numéro de dossier/matricule. */
   matriculeVehicule?: string;
+  dossierId?: string | null;
   firstName?: string; // Optionnel pour rétrocompatibilité
   partenaire?: string; // Nom du partenaire ou de l'employé associé
   employee?: string; // Alias employé

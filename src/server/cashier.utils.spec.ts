@@ -1,11 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import {
+  aggregateDossierExpenses,
   formatPersistedPieceComptable,
   normalizeDateToDay,
   requiresCashierDraftBeforeEdit,
 } from './cashier.utils';
 
 describe('cashier.utils', () => {
+  describe('aggregateDossierExpenses', () => {
+    it('agrège les dépenses comptabilisées par dossier sans inclure les autres états', () => {
+      expect(aggregateDossierExpenses([
+        { dossier_id: 'dossier-1', status: 'posted', category: 'sortie', montant: -125 },
+        { dossier_id: 'dossier-1', status: 'posted', category: 'sortie', montant: 75 },
+        { dossier_id: 'dossier-1', status: 'draft', category: 'sortie', montant: -900 },
+        { dossier_id: 'dossier-1', status: 'posted', category: 'entree', montant: 500 },
+        { dossier_id: null, status: 'posted', category: 'sortie', montant: -50 },
+      ])).toEqual([{ dossierId: 'dossier-1', expenseCount: 2, totalExpenses: 200 }]);
+    });
+
+    it('ignore les montants vides ou nuls et retourne une liste vide sans dépense', () => {
+      expect(aggregateDossierExpenses([
+        { dossier_id: 'dossier-1', status: 'posted', category: 'sortie', montant: 0 },
+        { dossier_id: 'dossier-2', status: 'posted', category: 'sortie', montant: 'invalide' },
+      ])).toEqual([]);
+      expect(aggregateDossierExpenses([])).toEqual([]);
+    });
+  });
+
   describe('formatPersistedPieceComptable', () => {
     it('normalise une pièce existante sans inventer de numéro', () => {
       expect(formatPersistedPieceComptable({ piece_comptable: ' csh1 / 2026 / 00042 ' })['piece_comptable'])

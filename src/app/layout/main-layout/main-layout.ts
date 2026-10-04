@@ -45,20 +45,11 @@ export class MainLayout {
   public readonly isMenuOpen = signal<boolean>(false);
   public readonly isUserDropdownOpen = signal<boolean>(false);
   public readonly isConfigDropdownOpen = signal<boolean>(false);
-  public readonly isActionsMenuOpen = signal<boolean>(false);
-  public readonly isCancelling = signal<boolean>(false);
-  public readonly searchQuery = signal<string>('');
-  public readonly activeView = signal<'graph' | 'list'>('list');
-
-  public readonly selectedTransactionsCount = computed(() => {
-    return this.cashierService.allTransactions().filter((t) => t.selected).length;
-  });
 
   // Thème actuel
   public readonly currentTheme = this.themeService.currentTheme;
   public readonly isDarkMode = computed(() => this.themeService.isDarkMode());
 
-  // Suivi réactif de l'URL pour déterminer si nous sommes dans le module Caisse
   public readonly currentUrl = toSignal(
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
@@ -66,12 +57,6 @@ export class MainLayout {
     ),
     { initialValue: this.router.url }
   );
-
-  // Le Control Panel s'affiche exclusivement dans le module Caisse (et pas dans le tableau de bord)
-  public readonly isCashierRoute = computed(() => {
-    const url = this.currentUrl();
-    return url ? url.includes('/caisse') : false;
-  });
 
   // Indicateur si la route active est sous Configuration
   public readonly isConfigActive = computed(() => {
@@ -95,33 +80,6 @@ export class MainLayout {
       ownerUserId: activeJournal?.created_by,
     });
   });
-
-  public readonly canCancelCashierOperations = computed(() => {
-    const journalId = this.cashierService.activeJournalId();
-    const isMainCashier =
-      !journalId ||
-      journalId === 'native-caisse-principal' ||
-      journalId === 'CSH1' ||
-      this.cashierService.activeJournalPrefix() === 'CSH1';
-    return isMainCashier && this.accessControl.hasPermission('cashier.status_update');
-  });
-
-  // Nom dynamique du journal actif (Caisse Principale ou journal personnalisé)
-  public readonly activeJournalName = computed<string>(() => {
-    const activeId = this.cashierService.activeJournalId();
-    if (!activeId || activeId === 'native-caisse-principal') {
-      return 'Caisse Principale';
-    }
-    const found = this.journalService.journals().find((j) => j.id === activeId);
-    return found ? found.name : 'Journal';
-  });
-
-  public readonly canViewJournals = computed(() => this.accessControl.hasPermission('journals.read'));
-
-  // Synchronisation pagination et état avec le module Caisse
-  public readonly paginationLabel = computed(() => this.cashierService.paginationLabel());
-  public readonly hasPrevPage = computed(() => this.cashierService.hasPrevPage());
-  public readonly hasNextPage = computed(() => this.cashierService.hasNextPage());
 
   // Pour rétrocompatibilité
   public readonly isSidebarOpen = this.isMenuOpen;
@@ -203,7 +161,6 @@ export class MainLayout {
       event.stopPropagation();
     }
     this.closeConfigDropdown();
-    this.closeActionsMenu();
     this.isUserDropdownOpen.update((open) => !open);
   }
 
@@ -224,7 +181,6 @@ export class MainLayout {
       event.stopPropagation();
     }
     this.closeUserDropdown();
-    this.closeActionsMenu();
     this.isConfigDropdownOpen.update((open) => !open);
   }
 
@@ -242,107 +198,12 @@ export class MainLayout {
     if (!target.closest('#config-dropdown-container')) {
       this.closeConfigDropdown();
     }
-    // Si le clic s'est produit en dehors du menu d'actions de caisse, on le ferme
-    if (!target.closest('#cp-actions-dropdown-container')) {
-      this.closeActionsMenu();
-    }
   }
 
   public onEscape(): void {
     this.closeUserDropdown();
     this.closeConfigDropdown();
-    this.closeActionsMenu();
     this.closeMenu();
-  }
-
-  public toggleActionsMenu(event?: Event): void {
-    if (event) {
-      event.stopPropagation();
-    }
-    this.isActionsMenuOpen.update((open) => !open);
-  }
-
-  public closeActionsMenu(): void {
-    this.isActionsMenuOpen.set(false);
-  }
-
-  public async onCancelSelectedAction(): Promise<void> {
-    if (!this.canCancelCashierOperations()) return;
-    const count = this.selectedTransactionsCount();
-    if (count === 0 || this.isCancelling()) return;
-    if (!confirm(`Annuler ${count} opération(s) sélectionnée(s) ? Les numéros de pièce seront conservés.`)) return;
-    this.isCancelling.set(true);
-    this.closeActionsMenu();
-
-    try {
-      const success = await this.cashierService.cancelSelected();
-      if (!success) {
-        const err = this.cashierService.error();
-        if (err) {
-          console.warn('Avertissement suppression:', err);
-        }
-      }
-    } finally {
-      this.isCancelling.set(false);
-    }
-  }
-
-  public onExportAction(): void {
-    const hasSelection = this.selectedTransactionsCount() > 0;
-    this.cashierService.exportTransactions(hasSelection);
-    this.closeActionsMenu();
-  }
-
-  public clearSelection(): void {
-    this.cashierService.toggleSelectAll(false);
-    this.closeActionsMenu();
-  }
-
-  public async onDuplicateAction(): Promise<void> {
-    if (!this.canEditCaisse()) return;
-    if (this.selectedTransactionsCount() === 0) return;
-    this.closeActionsMenu();
-    await this.cashierService.duplicateSelected();
-  }
-
-  public async onResetToDraftAction(): Promise<void> {
-    if (!this.canCancelCashierOperations()) return;
-    if (this.selectedTransactionsCount() === 0) return;
-    this.closeActionsMenu();
-    await this.cashierService.resetSelectedToDraft();
-  }
-
-  public onExportSpreadsheetAction(): void {
-    this.cashierService.exportSpreadsheet();
-    this.closeActionsMenu();
-  }
-
-  public onDownloadAttachmentsAction(): void {
-    this.cashierService.downloadAttachments();
-    this.closeActionsMenu();
-  }
-
-  public onSearchInput(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const value = input?.value ?? '';
-    this.searchQuery.set(value);
-    this.cashierService.setSearchQuery(value);
-  }
-
-  public onNouveau(): void {
-    if (!this.canEditCaisse()) return;
-    if (!this.router.url.includes('/caisse')) {
-      void this.router.navigate(['/caisse']);
-    }
-    this.cashierService.startAddTransaction();
-  }
-
-  public onOpenImportModal(): void {
-    if (!this.canEditCaisse()) return;
-    if (!this.router.url.includes('/caisse')) {
-      void this.router.navigate(['/caisse']);
-    }
-    this.cashierService.openImportModal();
   }
 
   public async onImportConfirmed(rows: ParsedImportRow[]): Promise<void> {
@@ -366,14 +227,6 @@ export class MainLayout {
       const isDuplicate = result.errors.some((error) => error.toLowerCase().includes('doublon'));
       this.notificationService.warning(message, isDuplicate ? 'Doublon détecté' : 'Erreurs lors de l’import');
     }
-  }
-
-  public prevPage(): void {
-    this.cashierService.prevPage();
-  }
-
-  public nextPage(): void {
-    this.cashierService.nextPage();
   }
 
   public async logout(): Promise<void> {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -7,8 +7,10 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
 import { JournalService } from '../../../core/services/journal.service';
 import { JournalEntryService } from '../../../core/services/journal-entry.service';
+import { DossierService } from '../../../core/services/dossier.service';
 import { UserProfile } from '../../../core/models/auth.model';
 import { CashierTransaction } from '../../../core/models/cashier-transaction.model';
+import { DossierExpenseSummary } from '../../../core/models/dossier.model';
 
 describe('DashboardManager', () => {
   let component: DashboardManager;
@@ -55,6 +57,7 @@ describe('DashboardManager', () => {
   const transactionsSignal = signal<CashierTransaction[]>(mockTransactions);
   const balanceSignal = signal<number>(450000);
   const journalBalanceRefreshVersionSignal = signal(0);
+  const dossierExpenseSummarySignal = signal<DossierExpenseSummary[]>([]);
 
   const authServiceMock = {
     currentUser: currentUserSignal,
@@ -78,9 +81,17 @@ describe('DashboardManager', () => {
     getChartData: () => Promise.resolve(null),
   };
 
+  const dossierServiceMock = {
+    expenseSummary: dossierExpenseSummarySignal,
+    expenseSummaryError: signal<string | null>(null),
+    isExpenseSummaryLoading: signal(false),
+    loadExpenseSummary: vi.fn().mockResolvedValue(true),
+  };
+
   beforeEach(async () => {
     transactionsSignal.set(mockTransactions);
     balanceSignal.set(450000);
+    dossierExpenseSummarySignal.set([]);
 
     await TestBed.configureTestingModule({
       imports: [DashboardManager],
@@ -90,6 +101,7 @@ describe('DashboardManager', () => {
         { provide: CashierService, useValue: cashierServiceMock },
         { provide: JournalService, useValue: journalServiceMock },
         { provide: JournalEntryService, useValue: journalEntryServiceMock },
+        { provide: DossierService, useValue: dossierServiceMock },
       ],
     }).compileComponents();
 
@@ -105,6 +117,28 @@ describe('DashboardManager', () => {
   it('should format currency correctly in FCFA', () => {
     expect(component.formatCurrency(450000)).toContain('450');
     expect(component.formatCurrency(450000)).toContain('FCFA');
+  });
+
+  it('should display dossier expenses and compute the overall total', () => {
+    dossierExpenseSummarySignal.set([{
+      id: 'dossier-1',
+      prospectId: 'prospect-1',
+      noDossier: 'DOS-001',
+      client: 'Client test',
+      statut: 'ouvert',
+      description: null,
+      createdBy: null,
+      createdAt: '',
+      updatedAt: '',
+      expenseCount: 2,
+      totalExpenses: 125000,
+    }]);
+    fixture.detectChanges();
+
+    expect(component.totalDossierExpenses()).toBe(125000);
+    expect(component.totalDossierExpenseCount()).toBe(2);
+    expect(fixture.nativeElement.textContent).toContain('DOS-001');
+    expect(fixture.nativeElement.textContent).toContain('Client test');
   });
 
   it('should compute chart timeline data correctly from transactions', () => {

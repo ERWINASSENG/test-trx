@@ -48,6 +48,15 @@ export const APP_MODULES: readonly AppModule[] = [
     permissionKey: 'prospects.read',
   },
   {
+    id: 'dossiers',
+    label: 'Dossiers',
+    description: 'Suivi des dossiers et dépenses liées aux prospects',
+    route: '/dossiers',
+    icon: '/assets/module-icons/dossier.svg',
+    accent: '#008f8c',
+    permissionKey: 'cashier.read',
+  },
+  {
     id: 'administration',
     label: 'Paramètres',
     description: 'Utilisateurs, rôles et configuration',

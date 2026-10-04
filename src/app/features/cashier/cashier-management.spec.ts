@@ -121,6 +121,47 @@ describe('CashierManagement', () => {
     expect(component).toBeTruthy();
   });
 
+  it('rend la barre partagée avec les contrôles propres à la Caisse', () => {
+    expect(fixture.nativeElement.querySelector('app-module-control-panel')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#cashier-control-create')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#cashier-control-import')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#cashier-control-search')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Pagination des opérations"]')).not.toBeNull();
+  });
+
+  it('masque les actions de création pour un rôle sans droit cashier.create', () => {
+    currentRole.set('tresorier');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#cashier-control-create')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#cashier-control-import')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#cashier-control-search')).not.toBeNull();
+  });
+
+  it('affiche le menu d’actions Caisse quand une opération est sélectionnée', () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'selected-cashier-action',
+      date: '2026-10-04',
+      libelle: 'Dépense de test',
+      category: 'sortie',
+      status: 'posted',
+      montant: -1000,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    service.toggleSelectTransaction('selected-cashier-action');
+    fixture.detectChanges();
+
+    const actionsButton = fixture.nativeElement.querySelector('#cashier-control-actions') as HTMLButtonElement | null;
+    expect(actionsButton).not.toBeNull();
+    actionsButton?.click();
+    fixture.detectChanges();
+
+    const actionsMenu = fixture.nativeElement.querySelector('[aria-label="Actions sur les opérations sélectionnées"]');
+    expect(actionsMenu?.textContent).toContain('Exporter');
+    expect(actionsMenu?.textContent).toContain('Dupliquer');
+    expect(actionsMenu?.textContent).toContain('Annuler');
+  });
+
   it('devrait être initialisé avec une caisse vide par défaut', () => {
     expect(component.pagedTransactions().length).toBe(0);
     expect(component.currentBalance()).toBe(0);

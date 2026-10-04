@@ -38,6 +38,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { JournalService } from '../../core/services/journal.service';
+import { DossierService } from '../../core/services/dossier.service';
 import {
   CASHIER_SERVICES,
   CashierTransaction,
@@ -51,6 +52,7 @@ import {
   normalizePieceComptable,
 } from '../../core/utils/cashier-duplicate.util';
 import { OdooDatepicker } from '../../shared/components/odoo-datepicker/odoo-datepicker';
+import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
 
 // Enregistrement des composants nécessaires de Chart.js
 Chart.register(
@@ -71,12 +73,13 @@ export interface CaisseTimelineData {
 
 @Component({
   selector: 'app-cashier-management',
-  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker],
+  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker, ModuleControlPanel],
   templateUrl: './cashier-management.html',
   styleUrl: './cashier-management.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:click)': 'onDocumentClick($event)',
+    '(document:keydown.escape)': 'closeActionsMenu()',
     '(document:touchstart)': 'onDocumentTouchStart($event)',
     '(document:touchmove)': 'onDocumentTouchMove($event)',
     '(document:touchend)': 'onDocumentTouchEnd($event)',
@@ -93,6 +96,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   public readonly journalService = inject(JournalService);
+  public readonly dossierService = inject(DossierService);
   private readonly elementRef = inject(ElementRef);
   private readonly cdr = inject(ChangeDetectorRef);
   protected readonly Math = Math;
@@ -186,6 +190,16 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     return role !== 'comptable';
   });
 
+  public readonly canCancelCashierOperations = computed(() => {
+    const journalId = this.cashierService.activeJournalId();
+    const isMainCashier =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+    return isMainCashier && this.accessControlService.hasPermission('cashier.status_update');
+  });
+
   // Données réactives issues du service
   public readonly pagedTransactions = this.cashierService.pagedTransactions;
   public readonly allTransactions = this.cashierService.allTransactions;
@@ -208,7 +222,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   // Contrôles UI synchronisés avec le service
   public readonly isAddingRow = this.cashierService.isAddingRow;
   public readonly isSubmitting = signal<boolean>(false);
+  public readonly isCancelling = signal<boolean>(false);
   public readonly isFilterDropdownOpen = signal<boolean>(false);
+  public readonly isActionsMenuOpen = signal<boolean>(false);
   public readonly searchControl = new FormControl<string>('', {
     nonNullable: true,
   });
@@ -322,6 +338,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       validators: [Validators.required],
     }),
     noDossier: new FormControl<string>('', { nonNullable: true }),
+    dossierId: new FormControl<string>('', { nonNullable: true }),
     employee: new FormControl<string>('', { nonNullable: true }),
     quantity: new FormControl<number | null>(null),
     montant: new FormControl<number | null>(null, {
@@ -363,6 +380,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       validators: [Validators.required],
     }),
     noDossier: new FormControl<string>('', { nonNullable: true }),
+    dossierId: new FormControl<string>('', { nonNullable: true }),
     employee: new FormControl<string>('', { nonNullable: true }),
     quantity: new FormControl<number | null>(null),
     montant: new FormControl<number | null>(null, {
@@ -385,6 +403,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
           category: 'sortie',
           status: 'draft',
           noDossier: '',
+          dossierId: '',
           employee: '',
           quantity: null,
           montant: null,
@@ -476,6 +495,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public ngOnInit(): void {
     this.cashierService.loadTransactions();
+    void this.dossierService.loadAllDossiers();
 
     // Prise en compte du paramètre d'URL journalId (ex: depuis le Tableau de bord)
     this.route.queryParams.subscribe((params) => {
@@ -652,6 +672,73 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     this.cashierService.toggleSelectAll(!this.isAllSelected());
   }
 
+  public clearSelection(): void {
+    this.cashierService.toggleSelectAll(false);
+    this.closeActionsMenu();
+  }
+
+  public toggleActionsMenu(event?: Event): void {
+    event?.stopPropagation();
+    this.isActionsMenuOpen.update((open) => !open);
+  }
+
+  public closeActionsMenu(): void {
+    this.isActionsMenuOpen.set(false);
+  }
+
+  public onExportAction(): void {
+    this.cashierService.exportTransactions(this.selectedCount() > 0);
+    this.closeActionsMenu();
+  }
+
+  public async onDuplicateAction(): Promise<void> {
+    if (!this.canEdit() || this.selectedCount() === 0) return;
+    this.closeActionsMenu();
+    await this.cashierService.duplicateSelected();
+  }
+
+  public async onCancelSelectedAction(): Promise<void> {
+    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
+    if (this.isCancelling() || !confirm(`Annuler ${this.selectedCount()} opération(s) sélectionnée(s) ? Les numéros de pièce seront conservés.`)) return;
+
+    this.isCancelling.set(true);
+    this.closeActionsMenu();
+    try {
+      const success = await this.cashierService.cancelSelected();
+      if (!success && this.error()) console.warn('Avertissement annulation:', this.error());
+    } finally {
+      this.isCancelling.set(false);
+    }
+  }
+
+  public async onResetToDraftAction(): Promise<void> {
+    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
+    this.closeActionsMenu();
+    await this.cashierService.resetSelectedToDraft();
+  }
+
+  public onExportSpreadsheetAction(): void {
+    this.cashierService.exportSpreadsheet();
+    this.closeActionsMenu();
+  }
+
+  public onDownloadAttachmentsAction(): void {
+    this.cashierService.downloadAttachments();
+    this.closeActionsMenu();
+  }
+
+  public onOpenImportModal(): void {
+    if (this.canEdit()) this.cashierService.openImportModal();
+  }
+
+  public prevPage(): void {
+    this.cashierService.prevPage();
+  }
+
+  public nextPage(): void {
+    this.cashierService.nextPage();
+  }
+
   public async startAddInline(): Promise<void> {
     if (!this.canEdit()) return;
 
@@ -678,6 +765,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       category: 'sortie',
       status: 'draft',
       noDossier: '',
+      dossierId: '',
       employee: '',
       quantity: null,
       montant: null,
@@ -696,6 +784,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       category: 'sortie',
       status: 'draft',
       noDossier: '',
+      dossierId: '',
       employee: '',
       quantity: null,
       montant: null,
@@ -777,6 +866,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         category: resolvedCategory,
         status: (formValues.status as TransactionStatus) || 'draft',
         noDossier: formValues.noDossier || undefined,
+        dossierId: formValues.dossierId || null,
         employee: formValues.employee || undefined,
         quantity: formValues.quantity !== null && formValues.quantity !== undefined ? Number(formValues.quantity) : undefined,
         montant: finalMontant,
@@ -850,6 +940,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       category: tx.category || 'sortie',
       status: tx.status || 'draft',
       noDossier: tx.noDossier || '',
+      dossierId: tx.dossierId || '',
       employee: tx.employee || '',
       quantity: tx.quantity !== undefined && tx.quantity !== null ? tx.quantity : null,
       montant: tx.montant !== undefined && tx.montant !== null ? Math.abs(tx.montant) : null,
@@ -892,6 +983,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     if (this.isSubmitting() || this.isEditingSubmitting()) return;
     const target = event.target as HTMLElement | null;
     if (!target) return;
+
+    if (target.closest('#cashier-actions-dropdown-container')) return;
+    this.closeActionsMenu();
 
     // Ignorer si l'élément n'est plus dans le DOM ou fait partie d'un composant flottant (popover, datepicker, dropdown)
     if (
@@ -957,6 +1051,25 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       this.isAddDatePickerOpen.set(false);
       this.cancelAddInline();
     }
+  }
+
+  public isNativeCaisseTransaction(tx: CashierTransaction): boolean {
+    const journalId = tx.journalId ?? tx.journal_id;
+    return !journalId || journalId === 'native-caisse-principal' || journalId === 'CSH1';
+  }
+
+  public isNativeCaisseSelected(): boolean {
+    const journalId = this.activeJournalId();
+    return journalId === 'native-caisse-principal' || journalId === 'CSH1';
+  }
+
+  public syncDossierReference(form: FormGroup, event: Event): void {
+    const dossierId = (event.target as HTMLSelectElement | null)?.value || '';
+    const dossier = this.dossierService.dossiers().find((item) => item.id === dossierId);
+    form.patchValue({
+      dossierId,
+      ...(dossier ? { noDossier: dossier.noDossier } : {}),
+    });
   }
 
   public openAddDatePicker(event?: Event): void {
@@ -1091,6 +1204,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
         category: resolvedCategory,
         status: (formValues.status as TransactionStatus) || 'draft',
         noDossier: formValues.noDossier || undefined,
+        dossierId: formValues.dossierId || null,
         employee: formValues.employee || undefined,
         quantity: formValues.quantity !== null && formValues.quantity !== undefined ? Number(formValues.quantity) : undefined,
         montant: finalMontant,
