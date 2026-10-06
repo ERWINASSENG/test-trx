@@ -34,6 +34,19 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Run CI test command",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"test",
+				"--",
+				"--watch=false",
+				"--no-progress"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

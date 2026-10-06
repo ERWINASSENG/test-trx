@@ -53,6 +53,7 @@ import {
 } from '../../core/utils/cashier-duplicate.util';
 import { OdooDatepicker } from '../../shared/components/odoo-datepicker/odoo-datepicker';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
+import { ModuleDataTable } from '../../shared/components/module-data-table/module-data-table';
 
 // Enregistrement des composants nécessaires de Chart.js
 Chart.register(
@@ -73,7 +74,7 @@ export interface CaisseTimelineData {
 
 @Component({
   selector: 'app-cashier-management',
-  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker, ModuleControlPanel],
+  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker, ModuleControlPanel, ModuleDataTable],
   templateUrl: './cashier-management.html',
   styleUrl: './cashier-management.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
