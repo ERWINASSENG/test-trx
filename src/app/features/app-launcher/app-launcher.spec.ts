@@ -11,6 +11,7 @@ describe('AppLauncher', () => {
 
   const mockAccessControl = {
     effectivePermissions: signal([]),
+    isLoading: signal(false),
     loadMyPermissions: vi.fn().mockResolvedValue(undefined),
     hasPermission: vi.fn((key: string) => key === 'dashboard.view' || key === 'cashier.read'),
   };

@@ -141,21 +141,43 @@ export class DossierService {
     body?: unknown
   ): Promise<DossierApiResult<T>> {
     const token = this.authService.token();
-    if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
+    if (!token) {
+      this.authService.handleUnauthorizedSession();
+      return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
+    }
 
     this._isLoading.set(true);
     try {
-      const response = await fetch(`/api/dossiers${path}`, {
+      const url = `/api/dossiers${path}`;
+      const sendRequest = (accessToken: string) => fetch(url, {
         method,
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+
+      let response = await sendRequest(token);
+      if (response.status === 401) {
+        const refresh = await this.authService.refreshAccessTokenAfterUnauthorized();
+        if (refresh.status === 'refreshed') {
+          response = await sendRequest(refresh.accessToken);
+        } else if (refresh.status === 'unavailable') {
+          return { success: false, error: 'La vérification de session est temporairement indisponible. Réessayez.' };
+        }
+      }
+
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
       if (!response.ok) {
+        if (response.status === 401) {
+          this._dossiers.set([]);
+          this._total.set(0);
+          this._expenseSummary.set([]);
+          this.authService.handleUnauthorizedSession();
+          return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
+        }
         return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
       }
       return { success: true, data: payload };

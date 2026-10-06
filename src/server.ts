@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
+import { UpstashRateLimitStore } from './server/upstash-rate-limit.store';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
@@ -68,6 +69,22 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
+const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
+  const value = process.env[name];
+  if (!value) return defaultValue;
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} doit être un entier supérieur à zéro.`);
+  }
+  return parsed;
+};
+
+const createRateLimitStore = (prefix: string): UpstashRateLimitStore | undefined =>
+  process.env['VERCEL'] === '1' || process.env['NODE_ENV'] === 'production'
+    ? new UpstashRateLimitStore(prefix)
+    : undefined;
+
 // Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
 app.set('trust proxy', 1);
 
@@ -112,10 +129,12 @@ app.use(express.json({ limit: '256kb' }));
  * ==============================================================================
  */
 
-// 1. Limiteur global sur toutes les routes de l'API /api/* (200 requêtes / 15 minutes par IP)
+// 1. Limiteur global sur toutes les routes de l'API /api/* (configurable par IP)
 const apiGlobalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 200,
+  windowMs: readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+  limit: readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 200),
+  store: createRateLimitStore('transmex:api:global:'),
+  passOnStoreError: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
@@ -130,6 +149,8 @@ app.use('/api', apiGlobalLimiter);
 const authSyncLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 40,
+  store: createRateLimitStore('transmex:api:auth:'),
+  passOnStoreError: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
@@ -145,6 +166,8 @@ app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSync
 const mutationsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 100,
+  store: createRateLimitStore('transmex:api:mutations:'),
+  passOnStoreError: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,

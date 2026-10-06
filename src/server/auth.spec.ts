@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { resolveServerRole, updateExistingUserProfileRole } from './auth';
+import { getSupabaseAdmin, resolveServerRole, updateExistingUserProfileRole } from './auth';
 
 const createSupabaseMock = (profile: unknown, queryError: unknown = null) => {
   const maybeSingle = vi.fn().mockResolvedValue({ data: profile, error: queryError });
@@ -90,5 +90,34 @@ describe('updateExistingUserProfileRole', () => {
       updated_at: expect.any(String),
     });
     expect(eq).toHaveBeenCalledWith('id', 'user-7');
+  });
+});
+
+describe('getSupabaseAdmin', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('reuses the admin client for the same server configuration', () => {
+    vi.stubEnv('SUPABASE_URL', 'https://cache-test.supabase.co');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'cache-test-service-role-key');
+
+    const firstClient = getSupabaseAdmin();
+    const secondClient = getSupabaseAdmin();
+
+    expect(firstClient).not.toBeNull();
+    expect(secondClient).toBe(firstClient);
+  });
+
+  it('creates a new client when the server credentials change', () => {
+    vi.stubEnv('SUPABASE_URL', 'https://credential-test.supabase.co');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'old-service-role-key');
+    const firstClient = getSupabaseAdmin();
+
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'new-service-role-key');
+    const secondClient = getSupabaseAdmin();
+
+    expect(secondClient).not.toBeNull();
+    expect(secondClient).not.toBe(firstClient);
   });
 });

@@ -91,6 +91,7 @@ export class AccessControlService {
     );
     if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope.type === 'all')) return false;
     if (matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all')) return true;
+    if (matchingPermissions.length > 0) return false;
 
     // 4. Repli canonique robuste selon le rôle Transmex du collaborateur
     const userRole = this.authService.currentRole();
@@ -102,12 +103,27 @@ export class AccessControlService {
       case 'manager':
         return ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey);
       case 'tresorier':
-      case 'comptable':
         return [
           'cashier.read',
           'cashier.write',
           'cashier.update',
           'cashier.status_update',
+          'cashier.duplicate',
+          'journals.read',
+          'journals.write',
+          'journals.create',
+          'journals.update',
+          'journals.delete',
+          'journal_entries.read',
+          'journal_entries.chart_read',
+          'journal_entries.create',
+          'journal_entries.update',
+          'journal_entries.delete',
+        ].includes(permissionKey);
+      case 'comptable':
+        return [
+          'cashier.read',
+          'cashier.write',
           'cashier.duplicate',
           'journals.read',
           'journals.write',

@@ -6,14 +6,21 @@ import { DossierService } from './dossier.service';
 describe('DossierService', () => {
   let service: DossierService;
   let fetchMock: ReturnType<typeof vi.fn>;
+  let handleUnauthorizedSession: ReturnType<typeof vi.fn>;
+  let refreshAccessTokenAfterUnauthorized: ReturnType<typeof vi.fn>;
   let token: string | null;
 
   beforeEach(() => {
     token = 'mock-jwt-token';
+    handleUnauthorizedSession = vi.fn();
+    refreshAccessTokenAfterUnauthorized = vi.fn().mockResolvedValue({ status: 'invalid' });
     TestBed.configureTestingModule({
       providers: [
         DossierService,
-        { provide: AuthService, useValue: { token: () => token } },
+        {
+          provide: AuthService,
+          useValue: { token: () => token, handleUnauthorizedSession, refreshAccessTokenAfterUnauthorized },
+        },
       ],
     });
     service = TestBed.inject(DossierService);
@@ -31,9 +38,10 @@ describe('DossierService', () => {
     await expect(service.loadDossiers()).resolves.toBe(false);
     await expect(service.createDossier({ noDossier: 'DOS-001' })).resolves.toMatchObject({
       success: false,
-      error: 'Session authentifiée introuvable.',
+      error: 'Session expirée. Veuillez vous reconnecter.',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(handleUnauthorizedSession).toHaveBeenCalled();
   });
 
   it('charge et mappe les dossiers avec pagination, recherche et lien prospect', async () => {
@@ -69,6 +77,79 @@ describe('DossierService', () => {
     });
     expect(service.total()).toBe(12);
     expect(service.error()).toBeNull();
+  });
+
+  it('efface les dossiers en cache et invalide la session après un 401', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        dossiers: [{ id: 'dossier-1', noDossier: 'DOS-001' }],
+        total: 1,
+      }),
+    });
+    await service.loadDossiers();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Jeton d’authentification invalide ou expiré' }),
+    });
+    await service.loadDossiers();
+
+    expect(service.dossiers()).toEqual([]);
+    expect(service.total()).toBe(0);
+    expect(service.error()).toBe('Session expirée. Veuillez vous reconnecter.');
+    expect(handleUnauthorizedSession).toHaveBeenCalledOnce();
+  });
+
+  it('rafraîchit le token puis réessaie une seule fois après un 401', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'Jeton invalide' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ dossiers: [{ id: 'dossier-2', noDossier: 'DOS-002' }], total: 1 }),
+      });
+    refreshAccessTokenAfterUnauthorized.mockResolvedValue({
+      status: 'refreshed',
+      accessToken: 'fresh-jwt-token',
+    });
+
+    await expect(service.loadDossiers()).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[1][1] as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer fresh-jwt-token',
+    });
+    expect(service.dossiers()[0].noDossier).toBe('DOS-002');
+    expect(handleUnauthorizedSession).not.toHaveBeenCalled();
+  });
+
+  it('conserve les dossiers en cache si le refresh est momentanément indisponible', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ dossiers: [{ id: 'dossier-1', noDossier: 'DOS-001' }], total: 1 }),
+    });
+    await service.loadDossiers();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Jeton invalide' }),
+    });
+    refreshAccessTokenAfterUnauthorized.mockResolvedValue({ status: 'unavailable' });
+
+    await expect(service.loadDossiers()).resolves.toBe(false);
+
+    expect(service.dossiers()[0].noDossier).toBe('DOS-001');
+    expect(service.error()).toBe('La vérification de session est temporairement indisponible. Réessayez.');
+    expect(handleUnauthorizedSession).not.toHaveBeenCalled();
   });
 
   it('charge toutes les pages de dossiers pour remplir le sélecteur', async () => {

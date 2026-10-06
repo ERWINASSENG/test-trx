@@ -3,18 +3,31 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { normalizeUserRole } from '../app/core/utils/role.utils';
 import { UserRole } from '../app/core/models/auth.model';
 
+let cachedAdminClient: {
+  url: string;
+  serviceRoleKey: string;
+  client: SupabaseClient;
+} | null = null;
+
 export function getSupabaseAdmin(): SupabaseClient | null {
   const url = process.env['SUPABASE_URL'] || '';
   const serviceRoleKey = process.env['SUPABASE_SERVICE_ROLE_KEY'] || '';
   if (!url || !serviceRoleKey) {
     return null;
   }
-  return createClient(url, serviceRoleKey, {
+
+  if (cachedAdminClient?.url === url && cachedAdminClient.serviceRoleKey === serviceRoleKey) {
+    return cachedAdminClient.client;
+  }
+
+  const client = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   });
+  cachedAdminClient = { url, serviceRoleKey, client };
+  return client;
 }
 
 export async function updateExistingUserProfileRole(

@@ -226,17 +226,37 @@ export const hasPermission = async (
   if (matchingRules.some((rule) => !rule.isUserOverride && scopeAllows(rule.scope, actor, resource))) {
     return true;
   }
+  if (matchingRules.some((rule) => !rule.isUserOverride)) {
+    return false;
+  }
 
   // 3. Repli métier par rôle canonique côté serveur
   const hasRole = (role: string) => accessRules.roleKeys.includes(role);
   if (hasRole('manager') && ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey)) {
     return true;
   }
-  if ((hasRole('tresorier') || hasRole('comptable')) && [
+  if (hasRole('tresorier') && [
     'cashier.read',
     'cashier.write',
     'cashier.update',
     'cashier.status_update',
+    'cashier.duplicate',
+    'journals.read',
+    'journals.write',
+    'journals.create',
+    'journals.update',
+    'journals.delete',
+    'journal_entries.read',
+    'journal_entries.chart_read',
+    'journal_entries.create',
+    'journal_entries.update',
+    'journal_entries.delete',
+  ].includes(permissionKey)) {
+    return true;
+  }
+  if (hasRole('comptable') && [
+    'cashier.read',
+    'cashier.write',
     'cashier.duplicate',
     'journals.read',
     'journals.write',

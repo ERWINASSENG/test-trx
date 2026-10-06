@@ -188,17 +188,19 @@ export class AuthService {
         const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
         const session = sessionData?.session;
 
-        if (session?.access_token) {
-          this._token.set(session.access_token);
-          this.saveSessionToken(session.access_token);
+        if (!session?.access_token) {
+          this.clearLocalSession();
+          return;
         }
+
+        this._token.set(session.access_token);
+        this.saveSessionToken(session.access_token);
 
         // 2. Validation / rafraîchissement avec le serveur Supabase Auth
         const { data: userData, error: userError } = await this.supabaseService.supabase.auth.getUser();
-        
+
         if (userData?.user && !userError) {
-          const accessToken = session?.access_token || this._token() || '';
-          
+          const accessToken = session.access_token;
           const profile = await this.loadUserProfileFromSupabase(
             userData.user.id,
             userData.user.email || '',
@@ -208,8 +210,8 @@ export class AuthService {
           if (profile && !profile.isActive) {
             this.clearLocalSession();
           }
-        } else if (!session && !this._currentUser()) {
-          this.clearLocalSession();
+        } else if (userError?.status === 401 || (!userError && !userData?.user)) {
+          this.clearInvalidLocalSession();
         }
       }
     } catch (err) {
@@ -246,6 +248,9 @@ export class AuthService {
 
       if (!response.ok) {
         console.warn(`Lecture profil serveur échouée (HTTP ${response.status}).`);
+        if (response.status === 401 || response.status === 403) {
+          this.handleUnauthorizedSession();
+        }
         return null;
       }
 
@@ -457,6 +462,49 @@ export class AuthService {
 
     this.clearLocalSession();
     this.router.navigate(['/auth/login']);
+  }
+
+  public async refreshAccessTokenAfterUnauthorized(): Promise<
+    | { status: 'refreshed'; accessToken: string }
+    | { status: 'invalid' }
+    | { status: 'unavailable' }
+  > {
+    const auth = this.supabaseService.supabase?.auth;
+    if (!auth) return { status: 'invalid' };
+
+    try {
+      const { data, error } = await auth.refreshSession();
+      if (error) {
+        return error.status === 0 || error.name === 'AuthRetryableFetchError'
+          ? { status: 'unavailable' }
+          : { status: 'invalid' };
+      }
+
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return { status: 'invalid' };
+
+      this._token.set(accessToken);
+      this.saveSessionToken(accessToken);
+      return { status: 'refreshed', accessToken };
+    } catch {
+      return { status: 'unavailable' };
+    }
+  }
+
+  public handleUnauthorizedSession(): void {
+    const returnUrl = this.router.url;
+    this.clearInvalidLocalSession();
+    if (!returnUrl.startsWith('/auth/login')) {
+      void this.router.navigate(['/auth/login'], { queryParams: { returnUrl } });
+    }
+  }
+
+  private clearInvalidLocalSession(): void {
+    this.clearLocalSession();
+    const auth = this.supabaseService.supabase?.auth;
+    if (auth) {
+      void auth.signOut({ scope: 'local' }).catch(() => undefined);
+    }
   }
 
   private clearLocalSession(): void {
