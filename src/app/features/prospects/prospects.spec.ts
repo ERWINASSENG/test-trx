@@ -77,25 +77,47 @@ describe('ProspectsComponent', () => {
     const component = fixture.componentInstance;
     component.openCreate();
     component.form.patchValue({
-      name: 'Prospect Démo',
       companyName: 'Société Démo',
       contactName: 'Amina Test',
+      contactRole: 'Directrice logistique',
+      country: 'Cameroun',
+      sector: 'Logistique',
+      phone: '+237 600000000',
       email: 'amina@example.com',
-      source: 'Recommandation',
-      status: 'new',
-      estimatedValue: 50000,
-      currency: 'XAF',
     });
 
     await component.saveProspect();
 
     expect(mockProspectService.createProspect).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Prospect Démo',
+      companyName: 'Société Démo',
+      contactName: 'Amina Test',
+      contactRole: 'Directrice logistique',
+      country: 'Cameroun',
+      sector: 'Logistique',
       email: 'amina@example.com',
-      estimatedValue: 50000,
     }));
     expect(mockProspectService.loadProspects).toHaveBeenCalledTimes(2);
     expect(component.feedback()).toBe('Prospect créé.');
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('fait disparaître le message de feedback automatiquement après 10 secondes', () => {
+    vi.useFakeTimers();
+    const fixture = createComponent();
+    const component = fixture.componentInstance;
+    component.showFeedback('Prospect créé.');
+    expect(component.feedback()).toBe('Prospect créé.');
+
+    // À 9 secondes : toujours visible
+    vi.advanceTimersByTime(9000);
+    expect(component.feedback()).toBe('Prospect créé.');
+
+    // À 10 secondes : réinitialisé à null
+    vi.advanceTimersByTime(1000);
+    expect(component.feedback()).toBeNull();
+
+    vi.useRealTimers();
     fixture.destroy();
     TestBed.resetTestingModule();
   });

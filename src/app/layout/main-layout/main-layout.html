@@ -112,44 +112,6 @@
           </mat-icon>
         </button>
 
-        <!-- Icônes utilitaires (IA, Chat avec badge, Historique, Outils) -->
-        <div class="hidden lg:flex items-center gap-1 text-slate-600 dark:text-slate-300" id="topbar-utility-icons">
-          <!-- Icône IA Sparkles -->
-          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-amber-500 dark:text-amber-400 transition-colors" title="Assistant IA">
-            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">auto_awesome</mat-icon>
-          </button>
-
-          <!-- Icône Chat / Notifications avec badge 4 -->
-          <button type="button" class="utility-icon-btn relative p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Messages & Notifications">
-            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">chat</mat-icon>
-            <span class="notification-badge absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-bold px-1 rounded-full flex items-center justify-center min-w-[14px] h-[14px]">
-              4
-            </span>
-          </button>
-
-          <!-- Icône Horloge / Activités -->
-          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Historique & Horloge">
-            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">schedule</mat-icon>
-          </button>
-
-          <!-- Icône Outils / Configuration -->
-          <button type="button" class="utility-icon-btn p-1.5 rounded hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors" title="Outils système">
-            <mat-icon class="!text-[17px] !w-4.5 !h-4.5">build</mat-icon>
-          </button>
-
-          <!-- Bouton direct Administration réservé aux administrateurs -->
-          @if (currentUser()?.role === 'admin') {
-            <a
-              routerLink="/admin/view"
-              class="utility-icon-btn p-1.5 rounded hover:bg-amber-400/20 text-amber-600 dark:text-amber-300 transition-colors flex items-center gap-1 text-xs font-semibold"
-              id="topbar-admin-shortcut"
-              title="Accès Panneau d'Administration">
-              <mat-icon class="!text-[17px] !w-4.5 !h-4.5 text-amber-500 dark:text-amber-400">admin_panel_settings</mat-icon>
-              <span class="hidden xl:inline">Admin</span>
-            </a>
-          }
-        </div>
-
         @if (currentUser(); as user) {
           <!-- Menu Déroulant Profil Utilisateur avec Avatar & Badges -->
           <div class="relative" id="user-dropdown-container">

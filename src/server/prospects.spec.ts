@@ -30,7 +30,7 @@ describe('validateProspectPayload', () => {
   });
 
   it('rejette un nom absent, un statut inconnu et un e-mail invalide', () => {
-    expect(validateProspectPayload({}).error).toContain('nom du prospect');
+    expect(validateProspectPayload({}).error).toContain('nom');
     expect(validateProspectPayload({ name: 'Acme', status: 'pending' }).error).toContain('statut');
     expect(validateProspectPayload({ name: 'Acme', email: 'invalid' }).error).toContain('e-mail');
   });

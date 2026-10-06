@@ -4,22 +4,31 @@
 }
 
 .prospects-page {
-  --prospects-accent: var(--brand-action, #0b5ed7);
-  --prospects-danger: var(--brand-red, #d52b1e);
-  --prospects-bg: var(--app-bg, #edf5ff);
-  --prospects-surface: var(--app-surface, #fff);
-  --prospects-muted: var(--app-surface-muted, #e4efff);
-  --prospects-hover: var(--app-surface-hover, #e7f0ff);
-  --prospects-border: var(--app-border, #bfd3ee);
-  --prospects-text: var(--app-text, #123c6d);
-  --prospects-secondary: var(--app-text-muted, #35517a);
+  --accounting-accent: #0b5ed7;
+  --accounting-accent-hover: #084db1;
+  --accounting-surface: #ffffff;
+  --accounting-surface-muted: #f4f8ff;
+  --accounting-border: #d5e2f2;
+  --accounting-text: #123c6d;
+  --prospects-accent: var(--accounting-accent);
+  --prospects-danger: #d52b1e;
+  --prospects-bg: #edf5ff;
+  --prospects-surface: var(--accounting-surface);
+  --prospects-muted: var(--accounting-surface-muted);
+  --prospects-hover: #f2f7ff;
+  --prospects-border: var(--accounting-border);
+  --prospects-text: var(--accounting-text);
+  --prospects-secondary: #35517a;
+
   min-height: calc(100vh - 50px);
   padding: 0 0 32px;
-  color: var(--prospects-text);
+  color: var(--accounting-text);
   background:
     radial-gradient(circle at top right, rgba(11, 94, 215, 0.08), transparent 27%),
     radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.05), transparent 28%),
     var(--prospects-bg);
+  font-family: inherit;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .prospects-title-group,
@@ -50,13 +59,14 @@
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 h1, h2, h3, p { margin-top: 0; }
 
 h1 {
   margin-bottom: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -67,14 +77,14 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 7px 12px;
+  padding: 7px 14px;
   border: 1px solid transparent;
   border-radius: 4px;
   font: inherit;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .primary-action {
@@ -82,7 +92,9 @@ h1 {
   color: #fff;
 }
 
-.primary-action:hover { background: var(--brand-action-hover, #084db1); }
+.primary-action:hover {
+  background: var(--accounting-accent-hover);
+}
 .primary-action mat-icon { width: 18px; height: 18px; font-size: 18px; }
 
 .secondary-action {
@@ -91,158 +103,737 @@ h1 {
   color: var(--prospects-text);
 }
 
-.prospects-title-group h1 {
-  font-size: 16px;
-  line-height: 20px;
-}
-
-.prospects-control-search {
-  width: 100%;
-  gap: 8px;
-}
-
-.prospects-control-end {
-  gap: 12px;
-}
-
-.search-form {
-  display: flex;
-  min-width: min(100%, 280px);
-  flex: 1 1 320px;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+.view-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--prospects-border);
   border-radius: 4px;
-  background: var(--prospects-surface);
+  background: var(--prospects-muted);
 }
-
-.search-form:focus-within { border-color: var(--prospects-accent); box-shadow: 0 0 0 1px var(--prospects-accent); }
-.search-form > mat-icon { color: var(--prospects-secondary); }
-.search-form input { flex: 1; min-width: 80px; border: 0; outline: 0; background: transparent; color: var(--prospects-text); font: inherit; font-size: 12px; }
-
-.status-filter { display: inline-flex; align-items: center; gap: 8px; color: var(--prospects-secondary); font-size: 11px; }
-.status-filter select,
-.field input,
-.field select,
-.field textarea {
-  min-height: 36px;
-  padding: 7px 9px;
-  border: 1px solid var(--prospects-border);
-  border-radius: 4px;
-  background: var(--prospects-surface);
-  color: var(--prospects-text);
-  font: inherit;
-  font-size: 12px;
+.view-switch button {
+  display: grid;
+  width: 32px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--prospects-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-
-.view-switch { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--prospects-border); border-radius: 4px; background: var(--prospects-muted); }
-.view-switch button { display: grid; width: 32px; height: 30px; place-items: center; border: 0; border-radius: 3px; background: transparent; color: var(--prospects-secondary); cursor: pointer; }
-.view-switch button.active { background: var(--prospects-surface); color: var(--prospects-accent); box-shadow: 0 1px 3px rgba(18, 60, 109, 0.14); }
+.view-switch button.active {
+  background: var(--prospects-surface);
+  color: var(--prospects-accent);
+  box-shadow: 0 1px 3px rgba(18, 60, 109, 0.14);
+}
 .view-switch mat-icon { font-size: 18px; }
-.pagination { display: inline-flex; align-items: center; gap: 5px; color: var(--prospects-secondary); font-size: 11px; white-space: nowrap; }
-.icon-action { display: inline-grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--prospects-secondary); cursor: pointer; }
-.icon-action:hover:not(:disabled) { border-color: var(--prospects-border); background: var(--prospects-hover); color: var(--prospects-accent); }
+
+.pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--prospects-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.icon-action {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--prospects-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.icon-action:hover:not(:disabled) {
+  border-color: var(--prospects-border);
+  background: var(--prospects-hover);
+  color: var(--prospects-accent);
+}
 .icon-action:disabled { opacity: 0.45; cursor: not-allowed; }
 .danger-action:hover:not(:disabled) { color: #b42336; }
 
-.table-scroll { width: 100%; overflow-x: auto; }
-.prospects-table { width: 100%; min-width: 920px; border-collapse: collapse; background: var(--prospects-surface); text-align: left; font-size: 12px; }
-.prospects-table th { position: sticky; top: 0; padding: 10px 12px; border-bottom: 2px solid var(--prospects-border); background: var(--prospects-muted); color: var(--prospects-secondary); font-size: 10px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
-.prospects-table td { padding: 10px 12px; border-bottom: 1px solid var(--prospects-border); vertical-align: middle; }
-.prospects-table tbody tr:hover { background: var(--prospects-hover); }
-.prospects-table td strong,
-.prospects-table td small { display: block; }
-.prospects-table td small { margin-top: 3px; color: var(--prospects-secondary); font-size: 10px; }
-.row-actions { white-space: nowrap; }
+/* ─── TABLEAU DU MODULE COMPTABILITÉ (STYLE ODOO FLAT TREE VIEW) ──── */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 14px;
+  background: var(--accounting-surface);
+  border: 1px solid var(--accounting-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
 
-.status-pill { display: inline-flex; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
-.status-new { background: rgba(11, 94, 215, 0.09); border-color: rgba(11, 94, 215, 0.22); color: #0750b8; }
-.status-contacted { background: rgba(180, 83, 9, 0.1); border-color: rgba(180, 83, 9, 0.24); color: #92400e; }
-.status-qualified { background: rgba(22, 131, 79, 0.1); border-color: rgba(22, 131, 79, 0.24); color: #166534; }
-.status-converted { background: rgba(13, 148, 136, 0.1); border-color: rgba(13, 148, 136, 0.24); color: #0f766e; }
-.status-lost { background: rgba(213, 43, 30, 0.08); border-color: rgba(213, 43, 30, 0.22); color: #b42336; }
+.odoo-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 960px;
+  margin: 0;
+  border: none;
+  background: var(--accounting-surface);
+  text-align: left;
 
-.kanban-board { display: grid; grid-auto-columns: minmax(220px, 1fr); grid-auto-flow: column; gap: 12px; overflow-x: auto; padding: 14px 0; align-items: start; }
-.kanban-column { min-height: 240px; padding: 10px; border: 1px solid var(--prospects-border); border-radius: 4px; background: color-mix(in srgb, var(--prospects-muted) 55%, transparent); }
-.kanban-column > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 2px 10px; border-bottom: 1px solid var(--prospects-border); }
-.kanban-column h2 { margin: 0; font-size: 12px; font-weight: 700; }
-.kanban-column > header span { color: var(--prospects-secondary); font-size: 11px; }
-.prospect-card { margin-top: 9px; padding: 11px; border: 1px solid var(--prospects-border); border-radius: 4px; background: var(--prospects-surface); box-shadow: 0 1px 3px rgba(18, 60, 109, 0.06); }
-.prospect-card-heading { align-items: flex-start; }
-.prospect-card h3 { margin: 0; font-size: 12px; line-height: 1.4; }
-.prospect-card p { margin: 5px 0; color: var(--prospects-secondary); font-size: 11px; overflow-wrap: anywhere; }
-.prospect-card .company-name { font-weight: 650; color: var(--prospects-text); }
-.prospect-card footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--prospects-border); color: var(--prospects-secondary); font-size: 10px; }
-.prospect-card footer strong { color: var(--prospects-text); white-space: nowrap; }
-.column-empty { padding: 18px 4px; color: var(--prospects-secondary); text-align: center; font-size: 11px; }
+  .odoo-head-row {
+    border-bottom: 2px solid var(--accounting-border);
+    background-color: var(--accounting-surface-muted);
 
+    th {
+      color: var(--accounting-text);
+      font-weight: 700;
+      font-size: 0.8125rem;
+      letter-spacing: 0;
+      padding: 0.625rem 0.75rem;
+      white-space: nowrap;
+
+      .th-header-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: inherit;
+        font-weight: inherit;
+      }
+
+      .sort-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+        color: var(--accounting-text);
+        opacity: 0.6;
+      }
+    }
+  }
+
+  tbody {
+    .odoo-data-row {
+      border-bottom: 1px solid var(--accounting-border);
+      transition: background-color 0.12s ease;
+      background-color: var(--accounting-surface);
+      cursor: pointer;
+      user-select: none;
+
+      &:hover {
+        background-color: #f2f7ff;
+      }
+
+      &.odoo-row-selected {
+        background-color: #e8f1ff;
+      }
+
+      td {
+        vertical-align: middle;
+        padding: 0.625rem 0.75rem;
+        font-size: 0.8125rem;
+        color: #17324f;
+        border: none;
+      }
+    }
+  }
+}
+
+/* Case à cocher Odoo fidèle au module Comptabilité */
+.odoo-checkbox {
+  accent-color: var(--accounting-accent);
+  width: 0.95rem;
+  height: 0.95rem;
+  cursor: pointer;
+  background: #ffffff;
+  border: 1.5px solid #64748b;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.th-checkbox,
+.td-checkbox {
+  width: 40px;
+  padding: 0.625rem 0.5rem 0.625rem 0.75rem !important;
+  text-align: center;
+}
+
+/* Colonne Client avec Avatar Monogramme */
+.client-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.company-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.client-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.company-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accounting-text);
+}
+
+.company-sub {
+  font-size: 10.5px;
+  color: #4b6b94;
+}
+
+/* Colonne Pays avec Vrai Drapeau SVG */
+.country-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.country-flag {
+  width: 19px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.country-name {
+  font-size: 12px;
+  color: #17324f;
+  font-weight: 500;
+}
+
+/* Colonne Secteur */
+.sector-text {
+  font-size: 12px;
+  color: #2c4a6f;
+}
+
+/* Colonne Contact principal */
+.contact-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.contact-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accounting-text);
+}
+
+.contact-sub {
+  font-size: 10.5px;
+  color: #5a769a;
+}
+
+/* Colonne Téléphone & Email */
+.phone-text {
+  font-size: 12px;
+  color: #17324f;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.email-text {
+  font-size: 12px;
+  color: #0b5ed7;
+  text-decoration: none;
+}
+
+.email-text:hover {
+  text-decoration: underline;
+}
+
+.email-empty {
+  color: #94a3b8;
+}
+
+/* Badges de Statut (alignés sur le style Odoo du module Comptabilité) */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.status-badge-active {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge-prospect {
+  background-color: #dbeafe;
+  color: #123c6d;
+  border: 1px solid #bfdbfe;
+}
+
+.status-badge-lost {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* Actions discrètes */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ─── KANBAN BOARD ─────────────────────────────────────────────────── */
+.kanban-board {
+  display: grid;
+  grid-auto-columns: minmax(260px, 1fr);
+  grid-auto-flow: column;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 14px 0;
+  align-items: start;
+}
+
+.kanban-column {
+  min-height: 240px;
+  padding: 10px;
+  border: 1px solid var(--accounting-border);
+  border-radius: 6px;
+  background: var(--accounting-surface);
+}
+
+.kanban-column > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--accounting-border);
+}
+
+.kanban-column h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accounting-text);
+}
+
+.kanban-column > header span {
+  color: var(--prospects-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accounting-surface-muted);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.prospect-card {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--accounting-border);
+  border-radius: 4px;
+  background: var(--accounting-surface);
+  box-shadow: 0 1px 2px rgba(18, 60, 109, 0.05);
+}
+
+.prospect-card-heading {
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.prospect-card h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--accounting-text);
+}
+
+.prospect-card p {
+  margin: 4px 0;
+  color: var(--prospects-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.prospect-card footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #eef3f9;
+}
+
+.prospect-card footer strong {
+  color: var(--accounting-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.column-empty {
+  padding: 20px 4px;
+  color: var(--prospects-secondary);
+  text-align: center;
+  font-size: 11px;
+}
+
+/* ─── ÉTATS VIDES & CHARGEMENT ─────────────────────────────────────── */
 .empty-state,
-.loading-state { padding: 42px 16px !important; color: var(--prospects-secondary); text-align: center; }
-.loading-state { display: flex; align-items: center; justify-content: center; gap: 9px; }
-.loading-state mat-icon { animation: prospects-spin 1.2s linear infinite; }
-@keyframes prospects-spin { to { transform: rotate(360deg); } }
-.feedback { margin: 10px 0; padding: 9px 12px; border-left: 3px solid #16834f; background: rgba(22, 131, 79, 0.08); font-size: 12px; }
-.feedback-error { border-color: var(--prospects-danger); background: rgba(213, 43, 30, 0.08); color: #b42336; }
-
-.modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(7, 26, 48, 0.58); }
-.prospect-modal { width: min(760px, 100%); max-height: min(92vh, 920px); overflow-y: auto; padding: 20px; border: 1px solid var(--prospects-border); border-radius: 6px; background: var(--prospects-surface); color: var(--prospects-text); box-shadow: 0 18px 55px rgba(4, 25, 48, 0.3); }
-.prospect-modal > header { padding-bottom: 12px; border-bottom: 1px solid var(--prospects-border); }
-.prospect-modal h2 { margin: 0; font-size: 18px; }
-.prospect-modal form { padding-top: 14px; }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.field { display: grid; align-content: start; gap: 5px; color: var(--prospects-secondary); font-size: 11px; font-weight: 650; }
-.field input, .field select, .field textarea { width: 100%; box-sizing: border-box; }
-.field textarea { resize: vertical; }
-.field-wide { grid-column: 1 / -1; }
-.field-error { color: #b42336; font-weight: 500; }
-.modal-actions { justify-content: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--prospects-border); }
-:where(button, input, select, textarea):focus-visible { outline: 2px solid var(--prospects-accent); outline-offset: 2px; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-
-:host-context(html.dark) .prospects-page,
-:host-context(.dark) .prospects-page,
-:host-context([data-theme="dark"]) .prospects-page {
-  --prospects-accent: #8cc2ff;
-  --prospects-danger: #ed5143;
-  --prospects-bg: #0a2342;
-  --prospects-surface: #0d1f3a;
-  --prospects-muted: #123c6d;
-  --prospects-hover: rgba(124, 179, 255, 0.12);
-  --prospects-border: rgba(207, 227, 255, 0.16);
-  --prospects-text: #f3f8ff;
-  --prospects-secondary: #a9c4e5;
-  background:
-    radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 27%),
-    radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.1), transparent 28%),
-    var(--prospects-bg);
-  .status-new { color: #a6ccff; }
-  .status-contacted { color: #fdba74; }
-  .status-qualified { color: #86efac; }
-  .status-converted { color: #5eead4; }
-  .status-lost, .field-error { color: #ffb2ad; }
+.loading-state {
+  padding: 38px 16px !important;
+  color: var(--prospects-secondary);
+  text-align: center;
 }
 
-@media (max-width: 720px) {
-  .prospects-title-group { align-items: flex-start; }
-  .prospects-control-search { flex-wrap: wrap; }
-  .search-form { flex-basis: 100%; }
-  .status-filter { flex: 1; justify-content: space-between; }
-  .status-filter select { flex: 1; }
-  .prospects-control-end { flex-wrap: wrap; justify-content: flex-end; }
-  .pagination { margin-left: auto; }
-  .kanban-board { grid-auto-columns: minmax(250px, 82vw); }
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-@media (max-width: 520px) {
-  .prospects-page { padding-bottom: 24px; }
-  .prospects-title-group { flex-direction: column; align-items: stretch; }
+.loading-state mat-icon {
+  animation: prospects-spin 1.2s linear infinite;
+}
+
+@keyframes prospects-spin {
+  to { transform: rotate(360deg); }
+}
+
+.feedback {
+  margin: 10px 0;
+  padding: 9px 12px;
+  border-left: 3px solid #16a34a;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.feedback-error {
+  border-color: var(--prospects-danger);
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* ─── MODALE DE SAISIE ─────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(7, 26, 48, 0.58);
+}
+
+.prospect-modal {
+  width: min(720px, 100%);
+  max-height: min(92vh, 880px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--accounting-border);
+  border-radius: 6px;
+  background: var(--accounting-surface);
+  color: var(--accounting-text);
+  box-shadow: 0 18px 50px rgba(4, 25, 48, 0.28);
+}
+
+.prospect-modal > header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--accounting-border);
+}
+
+.prospect-modal h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.prospect-modal form {
+  padding-top: 14px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  color: var(--prospects-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.field input {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--accounting-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--accounting-text);
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input:focus {
+  border-color: var(--accounting-accent);
+  box-shadow: 0 0 0 2px rgba(11, 94, 215, 0.15);
+  outline: none;
+}
+
+.field-error {
+  color: #dc2626;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--accounting-border);
+  gap: 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── ADAPTATIONS SPÉCIFIQUES MODE SOMBRE (ODOO ERP DARK) ─────────── */
+:host-context(html.dark),
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  .prospects-page {
+    --accounting-accent: #7cb3ff;
+    --accounting-accent-hover: #a6ccff;
+    --accounting-surface: rgba(13, 31, 58, 0.82);
+    --accounting-surface-muted: rgba(255, 255, 255, 0.05);
+    --accounting-border: rgba(207, 227, 255, 0.14);
+    --accounting-text: #f3f8ff;
+    --prospects-accent: #7cb3ff;
+    --prospects-danger: #ed5143;
+    --prospects-bg: #0a2342;
+    --prospects-surface: rgba(13, 31, 58, 0.82);
+    --prospects-muted: rgba(255, 255, 255, 0.05);
+    --prospects-hover: rgba(124, 179, 255, 0.12);
+    --prospects-border: rgba(207, 227, 255, 0.14);
+    --prospects-text: #f3f8ff;
+    --prospects-secondary: #a9c4e5;
+
+    color: #f3f8ff;
+    background:
+      radial-gradient(circle at top right, rgba(11, 94, 215, 0.18), transparent 26%),
+      radial-gradient(circle at bottom left, rgba(213, 43, 30, 0.10), transparent 28%),
+      #0a2342;
+
+    .table-scroll {
+      background: rgba(13, 31, 58, 0.65);
+      border-color: rgba(207, 227, 255, 0.14);
+    }
+
+    .odoo-table {
+      background-color: transparent !important;
+
+      .odoo-head-row {
+        border-bottom-color: rgba(207, 227, 255, 0.14);
+        background-color: rgba(255, 255, 255, 0.05);
+
+        th {
+          color: #f3f8ff;
+
+          .sort-icon {
+            color: #cbd5e1;
+            opacity: 0.8;
+          }
+        }
+      }
+
+      tbody {
+        .odoo-data-row {
+          border-bottom-color: rgba(207, 227, 255, 0.12);
+          background-color: transparent;
+          cursor: pointer;
+          user-select: none;
+
+          &:hover {
+            background-color: rgba(124, 179, 255, 0.12);
+          }
+
+          &.odoo-row-selected {
+            background-color: rgba(11, 94, 215, 0.28);
+          }
+
+          td {
+            color: #e5efff;
+          }
+        }
+      }
+    }
+
+    .odoo-checkbox {
+      background: transparent;
+      border-color: #7cb3ff;
+    }
+
+    .company-name {
+      color: #f3f8ff;
+    }
+
+    .company-sub {
+      color: #94a3b8;
+    }
+
+    .country-name {
+      color: #e2e8f0;
+    }
+
+    .sector-text {
+      color: #cbd5e1;
+    }
+
+    .contact-name {
+      color: #f3f8ff;
+    }
+
+    .contact-sub {
+      color: #94a3b8;
+    }
+
+    .phone-text {
+      color: #e2e8f0;
+    }
+
+    .email-text {
+      color: #7cb3ff;
+    }
+
+    .status-badge-active {
+      background-color: rgba(34, 197, 94, 0.18);
+      color: #86efac;
+      border-color: rgba(34, 197, 94, 0.35);
+    }
+
+    .status-badge-prospect {
+      background-color: rgba(124, 179, 255, 0.2);
+      color: #a6ccff;
+      border-color: rgba(124, 179, 255, 0.35);
+    }
+
+    .status-badge-lost {
+      background-color: rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    .kanban-column {
+      background: rgba(13, 31, 58, 0.7);
+      border-color: rgba(207, 227, 255, 0.14);
+
+      h2 {
+        color: #f3f8ff;
+      }
+
+      > header span {
+        background: rgba(255, 255, 255, 0.08);
+        color: #cbd5e1;
+      }
+    }
+
+    .prospect-card {
+      background: rgba(22, 42, 74, 0.85);
+      border-color: rgba(207, 227, 255, 0.14);
+
+      h3 {
+        color: #f3f8ff;
+      }
+
+      footer {
+        border-top-color: rgba(207, 227, 255, 0.12);
+
+        strong {
+          color: #f3f8ff;
+        }
+      }
+    }
+
+    .secondary-action {
+      background: #142a4a;
+      border-color: rgba(207, 227, 255, 0.18);
+      color: #f3f8ff;
+    }
+
+    .view-switch {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(207, 227, 255, 0.14);
+
+      button.active {
+        background: #142a4a;
+        color: #7cb3ff;
+      }
+    }
+
+    .prospect-modal {
+      background: #0d1f3a;
+      border-color: rgba(207, 227, 255, 0.16);
+      color: #f3f8ff;
+
+      > header {
+        border-bottom-color: rgba(207, 227, 255, 0.14);
+      }
+    }
+
+    .field input {
+      background: #142a4a;
+      border-color: rgba(207, 227, 255, 0.18);
+      color: #f3f8ff;
+
+      &:focus {
+        border-color: #7cb3ff;
+        box-shadow: 0 0 0 2px rgba(124, 179, 255, 0.2);
+      }
+    }
+
+    .modal-actions {
+      border-top-color: rgba(207, 227, 255, 0.14);
+    }
+  }
+}
+
+@media (max-width: 640px) {
   .form-grid { grid-template-columns: 1fr; }
-  .field-wide { grid-column: auto; }
-  .prospect-modal { padding: 15px; }
-  .pagination > span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .prospect-modal { padding: 16px; }
 }

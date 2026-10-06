@@ -111,20 +111,40 @@ export class ProspectService {
   private mapProspect(row: Record<string, unknown>): Prospect {
     const rawValue = row['estimated_value'];
     const parsedValue = rawValue === null || rawValue === undefined || rawValue === '' ? null : Number(rawValue);
+    const rawNotes = String(row['notes'] ?? '');
+    let country: string | null = typeof row['country'] === 'string' ? row['country'] : null;
+    let contactRole: string | null = typeof row['contact_role'] === 'string' ? row['contact_role'] : null;
+
+    if (rawNotes.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawNotes) as { country?: string; contactRole?: string };
+        if (typeof parsed.country === 'string' && !country) country = parsed.country || null;
+        if (typeof parsed.contactRole === 'string' && !contactRole) contactRole = parsed.contactRole || null;
+      } catch {
+        if (!country) country = rawNotes || null;
+      }
+    } else if (!country && rawNotes) {
+      country = rawNotes;
+    }
+
+    const source = typeof row['source'] === 'string' ? row['source'] : null;
     return {
       id: String(row['id'] ?? ''),
       name: String(row['name'] ?? ''),
       companyName: typeof row['company_name'] === 'string' ? row['company_name'] : null,
       contactName: typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
+      contactRole,
+      country,
+      sector: typeof row['sector'] === 'string' ? row['sector'] : source,
       email: typeof row['email'] === 'string' ? row['email'] : null,
       phone: typeof row['phone'] === 'string' ? row['phone'] : null,
-      source: typeof row['source'] === 'string' ? row['source'] : null,
+      source,
       status: row['status'] as ProspectStatus,
       assignedTo: typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
       estimatedValue: parsedValue !== null && Number.isFinite(parsedValue) ? parsedValue : null,
       currency: String(row['currency'] ?? 'XAF'),
       nextFollowUp: typeof row['next_follow_up'] === 'string' ? row['next_follow_up'] : null,
-      notes: String(row['notes'] ?? ''),
+      notes: rawNotes,
       createdBy: typeof row['created_by'] === 'string' ? row['created_by'] : null,
       createdAt: String(row['created_at'] ?? ''),
       updatedAt: String(row['updated_at'] ?? ''),

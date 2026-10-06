@@ -85,10 +85,12 @@
         }
       }
 
-      // Ligne active en cours d'édition / création
+      // Ligne active en cours d'édition / création (Focus & Surbrillance accentuée)
       .odoo-row-editing {
         background-color: #eff6ff;
-        border-bottom: 2px solid var(--accounting-accent);
+        border-bottom: 2px solid var(--accounting-accent, #0b5ed7);
+        border-left: 3px solid var(--accounting-accent, #0b5ed7);
+        animation: odoo-row-highlight 0.45s ease-out;
 
         td {
           vertical-align: middle;
@@ -265,8 +267,10 @@
         }
 
         .odoo-row-editing {
-          background-color: rgba(11, 94, 215, 0.2);
-          border-bottom-color: var(--accounting-accent);
+          background-color: rgba(11, 94, 215, 0.25);
+          border-bottom-color: var(--accounting-accent, #7cb3ff);
+          border-left: 3px solid var(--accounting-accent, #7cb3ff);
+          animation: odoo-row-highlight-dark 0.45s ease-out;
 
           td {
             color: #ffffff;
@@ -300,3 +304,20 @@
   }
 }
 
+@keyframes odoo-row-highlight {
+  0% {
+    background-color: #bfdbfe;
+  }
+  100% {
+    background-color: #eff6ff;
+  }
+}
+
+@keyframes odoo-row-highlight-dark {
+  0% {
+    background-color: rgba(11, 94, 215, 0.5);
+  }
+  100% {
+    background-color: rgba(11, 94, 215, 0.25);
+  }
+}

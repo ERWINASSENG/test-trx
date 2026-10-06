@@ -14,6 +14,9 @@ export interface Prospect {
   name: string;
   companyName: string | null;
   contactName: string | null;
+  contactRole?: string | null;
+  country?: string | null;
+  sector?: string | null;
   email: string | null;
   phone: string | null;
   source: string | null;
@@ -28,10 +31,22 @@ export interface Prospect {
   updatedAt: string;
 }
 
-export type CreateProspectInput = Pick<
-  Prospect,
-  'name' | 'companyName' | 'contactName' | 'email' | 'phone' | 'source' | 'status' |
-  'assignedTo' | 'estimatedValue' | 'currency' | 'nextFollowUp' | 'notes'
->;
+export interface CreateProspectInput {
+  name?: string;
+  companyName?: string | null;
+  contactName?: string | null;
+  contactRole?: string | null;
+  country?: string | null;
+  sector?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  source?: string | null;
+  status?: ProspectStatus;
+  assignedTo?: string | null;
+  estimatedValue?: number | null;
+  currency?: string;
+  nextFollowUp?: string | null;
+  notes?: string;
+}
 
 export type UpdateProspectInput = Partial<CreateProspectInput>;

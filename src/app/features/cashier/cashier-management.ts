@@ -53,7 +53,6 @@ import {
 } from '../../core/utils/cashier-duplicate.util';
 import { OdooDatepicker } from '../../shared/components/odoo-datepicker/odoo-datepicker';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
-import { ModuleDataTable } from '../../shared/components/module-data-table/module-data-table';
 
 // Enregistrement des composants nécessaires de Chart.js
 Chart.register(
@@ -74,7 +73,7 @@ export interface CaisseTimelineData {
 
 @Component({
   selector: 'app-cashier-management',
-  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker, ModuleControlPanel, ModuleDataTable],
+  imports: [ReactiveFormsModule, MatIconModule, OdooDatepicker, ModuleControlPanel],
   templateUrl: './cashier-management.html',
   styleUrl: './cashier-management.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -773,6 +772,35 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     });
     this.isOperationsType.set(false);
     this.cashierService.startAddTransaction();
+    this.focusInlineAddRow();
+  }
+
+  private focusInlineAddRow(): void {
+    setTimeout(() => {
+      const row = document.getElementById('inline-add-row');
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      const libelleInput = document.getElementById('inline-input-libelle') as HTMLInputElement | null;
+      if (libelleInput) {
+        libelleInput.focus();
+        libelleInput.select();
+      }
+    }, 50);
+  }
+
+  private focusInlineEditRow(id: string): void {
+    setTimeout(() => {
+      const row = document.getElementById(`inline-edit-row-${id}`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      const libelleInput = document.getElementById('inline-edit-libelle') as HTMLInputElement | null;
+      if (libelleInput) {
+        libelleInput.focus();
+        libelleInput.select();
+      }
+    }, 50);
   }
 
   public cancelAddInline(): void {
@@ -948,6 +976,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.editingTxId.set(tx.id);
+    this.focusInlineEditRow(tx.id);
   }
 
   public onDocumentTouchStart(event: TouchEvent): void {

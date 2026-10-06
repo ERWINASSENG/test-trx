@@ -27,8 +27,9 @@ export function validateProspectPayload(value: unknown, partial = false): { data
   const input = value as Record<string, unknown>;
   const data: ProspectMutation = {};
   const allowed = new Set([
-    'name', 'companyName', 'contactName', 'email', 'phone', 'source', 'status',
+    'name', 'companyName', 'contactName', 'contactRole', 'email', 'phone', 'source', 'status',
     'assignedTo', 'estimatedValue', 'currency', 'nextFollowUp', 'notes',
+    'country', 'sector',
   ]);
   if (Object.keys(input).some((key) => !allowed.has(key))) return { error: 'La demande contient un champ non autorisé.' };
 
@@ -46,18 +47,39 @@ export function validateProspectPayload(value: unknown, partial = false): { data
     return trimmed;
   };
 
-  const name = readString('name', 'name', 200, false);
-  if (name === null || (!partial && name === undefined)) return { error: 'Le nom du prospect est obligatoire (2 à 200 caractères).' };
+  const companyName = readString('companyName', 'company_name', 200);
+  const contactName = readString('contactName', 'contact_name', 200);
+
+  let name = readString('name', 'name', 200, true);
+  if (!name && companyName) {
+    name = companyName;
+    data.name = companyName;
+  } else if (!name && contactName) {
+    name = contactName;
+    data.name = contactName;
+  }
+
+  if (name === null || (!partial && name === undefined)) return { error: 'Le nom de la société est obligatoire (2 à 200 caractères).' };
   if (name && name.length < 2) return { error: 'Le nom du prospect doit contenir au moins 2 caractères.' };
 
+  const sector = typeof input['sector'] === 'string' ? input['sector'].trim().slice(0, 100) : '';
+  const country = typeof input['country'] === 'string' ? input['country'].trim().slice(0, 100) : '';
+  const contactRole = typeof input['contactRole'] === 'string' ? input['contactRole'].trim().slice(0, 100) : '';
+
+  if (sector && !input['source']) {
+    data.source = sector;
+  }
+  if ((country || contactRole || Object.hasOwn(input, 'country') || Object.hasOwn(input, 'contactRole')) && !input['notes']) {
+    data.notes = JSON.stringify({ country, contactRole });
+  }
+
   const boundedFields: [string, keyof ProspectMutation, number][] = [
-    ['companyName', 'company_name', 200],
-    ['contactName', 'contact_name', 200],
     ['phone', 'phone', 40],
     ['source', 'source', 100],
     ['notes', 'notes', 10000],
   ];
   for (const [key, column, max] of boundedFields) {
+    if (column === 'notes' && data.notes) continue;
     const parsed = readString(key, column, max);
     if (parsed === null) return { error: `Le champ ${key} est invalide ou trop long.` };
   }

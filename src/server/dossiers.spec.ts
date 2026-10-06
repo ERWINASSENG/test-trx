@@ -2,12 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response as ExpressResponse } from 'express';
 import { createDossierHandler, listDossiersHandler } from './dossiers';
 
-interface QueryResult {
-  data: unknown;
-  error: { code?: string; message?: string } | null;
-  count?: number | null;
-}
-
 const createResponse = (): ExpressResponse & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> } => {
   const response = {
     status: vi.fn(),
