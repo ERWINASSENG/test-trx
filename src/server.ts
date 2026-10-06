@@ -84,6 +84,7 @@ const createRateLimitStore = (prefix: string): UpstashRateLimitStore | undefined
   process.env['VERCEL'] === '1' || process.env['NODE_ENV'] === 'production'
     ? new UpstashRateLimitStore(prefix)
     : undefined;
+const slowApiRequestThresholdMs = readPositiveIntegerEnv('API_SLOW_REQUEST_LOG_MS', 1000);
 
 // Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
 app.set('trust proxy', 1);
@@ -122,6 +123,24 @@ app.use(
 
 // Parsing JSON pour les requêtes d'API avec limite explicite de payload
 app.use(express.json({ limit: '256kb' }));
+
+app.use('/api', (req, res, next): void => {
+  const startedAt = performance.now();
+  res.once('finish', () => {
+    const durationMs = performance.now() - startedAt;
+    if (durationMs < slowApiRequestThresholdMs) return;
+
+    const route = typeof req.route?.path === 'string' ? req.route.path : 'unmatched';
+    console.warn(JSON.stringify({
+      event: 'slow_api_request',
+      method: req.method,
+      route,
+      status: res.statusCode,
+      durationMs: Math.round(durationMs),
+    }));
+  });
+  next();
+});
 
 /**
  * ==============================================================================

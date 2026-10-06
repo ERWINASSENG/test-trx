@@ -13,6 +13,7 @@ variables suivantes dans l'environnement **Preview** et **Production** de Vercel
 - `UPSTASH_REDIS_REST_TOKEN`
 - `API_RATE_LIMIT_MAX` (facultatif ; valeur par défaut : `200`)
 - `API_RATE_LIMIT_WINDOW_MS` (facultatif ; valeur par défaut : `900000`)
+- `API_SLOW_REQUEST_LOG_MS` (facultatif ; valeur par défaut : `1000`)
 
 Les deux variables Upstash sont des secrets : les ajouter dans le tableau de bord
 Vercel, jamais dans le dépôt ou dans le navigateur. Le nombre et la durée de
@@ -35,3 +36,9 @@ Si Upstash devient temporairement indisponible ou si ses variables manquent,
 l'API continue à répondre : la limitation distribuée est temporairement ignorée
 et l'incident est journalisé. Cela préserve la disponibilité, mais réduit la
 protection contre les abus jusqu'au rétablissement du store.
+
+En Preview et en Production, les requêtes `/api` dépassant
+`API_SLOW_REQUEST_LOG_MS` génèrent un log JSON `slow_api_request` avec le verbe,
+le modèle de route Express, le statut HTTP et la durée en millisecondes. Ces logs
+permettent d'identifier les endpoints lents sans enregistrer de jeton, d'adresse
+email, de paramètre d'URL ou de données métier.
