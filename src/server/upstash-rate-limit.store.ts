@@ -29,10 +29,10 @@ end
 return total
 `;
 
-type UpstashResult = {
+interface UpstashResult {
   result?: unknown;
   error?: unknown;
-};
+}
 
 export class UpstashRateLimitStore implements Store {
   readonly localKeys = false;

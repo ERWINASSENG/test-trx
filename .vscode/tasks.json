@@ -23,6 +23,17 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Lint project",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"run",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
