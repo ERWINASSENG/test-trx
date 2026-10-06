@@ -10,7 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
-import { getSupabaseAdmin, requireAuth } from './server/auth';
+import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
 import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
@@ -226,18 +226,15 @@ app.post('/api/auth/sync-role', requireAuth, async (req: express.Request, res: e
     });
 
     // Scellement dans public.profiles
-    const { error: profileUpsertError } = await supabaseAdmin.from('profiles').upsert(
-      {
-        id: user.id,
-        email: user.email,
-        role: targetRole,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
+    const { error: profileUpdateError } = await updateExistingUserProfileRole(
+      supabaseAdmin,
+      user.id,
+      targetRole,
+      user.email
     );
 
-    if (profileUpsertError) {
-      console.error('Erreur upsert profile dans sync-role:', profileUpsertError.message);
+    if (profileUpdateError) {
+      console.error('Erreur mise à jour profile dans sync-role:', profileUpdateError.message);
       res.status(500).json({ error: 'Échec de synchronisation du profil utilisateur.' });
       return;
     }

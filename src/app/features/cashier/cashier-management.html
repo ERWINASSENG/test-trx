@@ -173,9 +173,12 @@
     </div>
 
     <!-- TABLEAU DE CAISSE PLEINE LARGEUR STYLE ODOO TREE VIEW -->
-    <div class="w-full overflow-x-auto min-h-[380px] pb-32">
-      <table class="w-full text-left text-sm border-collapse bg-white dark:bg-transparent odoo-table shadow-xs border border-slate-200 dark:border-none rounded-lg" id="cashier-transactions-table">
-        <thead>
+    <div class="w-full min-h-[380px] pb-32">
+      <app-module-data-table
+        [ariaLabel]="'Opérations de caisse'"
+        [tableId]="'cashier-transactions-table'"
+        [tableClass]="'w-full text-left text-sm border-collapse bg-white dark:bg-transparent odoo-table shadow-xs border border-slate-200 dark:border-none rounded-lg'">
+        <thead moduleTableHead>
           <tr class="odoo-head-row select-none">
             <th scope="col" class="py-2.5 px-3 text-center w-8">
               @if (canSelect()) {
@@ -251,7 +254,7 @@
             <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-28">Statut</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
+        <tbody moduleTableBody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
           <!-- LIGNE D'AJOUT RAPIDE STYLE ODOO (INLINE EDITABLE FLAT SANS BOX) -->
           @if (isAddingRow() && canEdit()) {
             <tr class="odoo-row-editing" id="inline-add-row" [formGroup]="transactionForm" (keydown)="onAddKeydown($event)">
@@ -687,7 +690,7 @@
             }
           }
         </tbody>
-      </table>
+      </app-module-data-table>
     </div>
 
   </div>

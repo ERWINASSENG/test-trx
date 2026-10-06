@@ -10,6 +10,7 @@ import { ModuleDataTable } from './module-data-table';
     <app-module-data-table
       [ariaLabel]="'Journaux comptables'"
       [minWidth]="'720px'"
+      [tableId]="'cashier-transactions-table'"
       [tableClass]="'journals-table'">
       <thead moduleTableHead>
         <tr><th scope="col">Nom du journal</th></tr>
@@ -38,6 +39,7 @@ describe('ModuleDataTable', () => {
     const table = fixture.nativeElement.querySelector('table.module-data-table') as HTMLTableElement | null;
 
     expect(table).not.toBeNull();
+    expect(table?.id).toBe('cashier-transactions-table');
     expect(table?.getAttribute('aria-label')).toBe('Journaux comptables');
     expect(table?.classList.contains('journals-table')).toBe(true);
     expect(table?.style.minWidth).toBe('720px');

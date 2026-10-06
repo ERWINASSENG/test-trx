@@ -121,6 +121,16 @@ describe('CashierManagement', () => {
     expect(component).toBeTruthy();
   });
 
+  it('rend le tableau partagé sans perdre la structure ni les colonnes de la Caisse', () => {
+    const table = fixture.nativeElement.querySelector('#cashier-transactions-table') as HTMLTableElement | null;
+
+    expect(table?.tagName).toBe('TABLE');
+    expect(table?.getAttribute('aria-label')).toBe('Opérations de caisse');
+    expect(table?.classList.contains('odoo-table')).toBe(true);
+    expect([...table!.children].map((element) => element.tagName)).toEqual(['THEAD', 'TBODY']);
+    expect(table?.querySelectorAll('thead th')).toHaveLength(11);
+  });
+
   it('rend la barre partagée avec les contrôles propres à la Caisse', () => {
     expect(fixture.nativeElement.querySelector('app-module-control-panel')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#cashier-control-create')).not.toBeNull();

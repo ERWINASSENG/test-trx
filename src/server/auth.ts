@@ -17,6 +17,21 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   });
 }
 
+export async function updateExistingUserProfileRole(
+  adminClient: SupabaseClient,
+  userId: string,
+  role: UserRole,
+  email?: string | null
+) {
+  const profileUpdates: { role: UserRole; email?: string; updated_at: string } = {
+    role,
+    updated_at: new Date().toISOString(),
+  };
+  if (email) profileUpdates.email = email;
+
+  return adminClient.from('profiles').update(profileUpdates).eq('id', userId);
+}
+
 const getAdminEmailsFromEnv = (): string[] => {
   return (process.env['ADMIN_EMAILS'] || '')
     .split(',')
@@ -145,15 +160,15 @@ export async function requireAdmin(req: express.Request, res: express.Response, 
         await supabaseAdmin.auth.admin.updateUserById(user.id, {
           app_metadata: { ...user.app_metadata, role: 'admin' },
         });
-        await supabaseAdmin.from('profiles').upsert(
-          {
-            id: user.id,
-            email: user.email,
-            role: 'admin',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
+        const { error: profileUpdateError } = await updateExistingUserProfileRole(
+          supabaseAdmin,
+          user.id,
+          'admin',
+          user.email
         );
+        if (profileUpdateError) {
+          console.warn('Auto-réparation du profil admin échouée :', profileUpdateError.message);
+        }
       } catch (syncErr) {
         console.warn('Auto-réparation du rôle admin (non-bloquante) :', syncErr);
       }

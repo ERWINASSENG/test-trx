@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { resolveServerRole } from './auth';
+import { resolveServerRole, updateExistingUserProfileRole } from './auth';
 
 const createSupabaseMock = (profile: unknown, queryError: unknown = null) => {
   const maybeSingle = vi.fn().mockResolvedValue({ data: profile, error: queryError });
@@ -71,5 +71,24 @@ describe('resolveServerRole', () => {
       id: 'user-6',
       email: 'admin@example.com',
     })).resolves.toBeNull();
+  });
+});
+
+describe('updateExistingUserProfileRole', () => {
+  it('met à jour uniquement le rôle du profil existant sans passer par un insert', async () => {
+    const eq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ update });
+    const client = { from } as unknown as SupabaseClient;
+
+    await updateExistingUserProfileRole(client, 'user-7', 'admin', 'admin@example.com');
+
+    expect(from).toHaveBeenCalledWith('profiles');
+    expect(update).toHaveBeenCalledWith({
+      role: 'admin',
+      email: 'admin@example.com',
+      updated_at: expect.any(String),
+    });
+    expect(eq).toHaveBeenCalledWith('id', 'user-7');
   });
 });

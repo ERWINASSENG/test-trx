@@ -8,6 +8,7 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
         class="module-data-table"
         [class]="tableClass()"
         [style.min-width]="minWidth()"
+        [attr.id]="tableId() || null"
         [attr.aria-label]="ariaLabel()">
         <ng-content select="[moduleTableHead]"></ng-content>
         <ng-content select="[moduleTableBody]"></ng-content>
@@ -25,7 +26,7 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
       overflow-x: auto;
     }
 
-    app-module-data-table table.module-data-table {
+    app-module-data-table table.module-data-table:not(.odoo-table) {
       width: 100%;
       border-collapse: collapse;
       background: var(--app-surface, #fff);
@@ -34,7 +35,7 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
       font-size: 12px;
     }
 
-    app-module-data-table table.module-data-table > thead > tr > th {
+    app-module-data-table table.module-data-table:not(.odoo-table) > thead > tr > th {
       position: sticky;
       top: 0;
       z-index: 1;
@@ -49,18 +50,18 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
       white-space: nowrap;
     }
 
-    app-module-data-table table.module-data-table > tbody > tr > td {
+    app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr > td {
       padding: 10px 12px;
       border-bottom: 1px solid var(--app-border, #bfd3ee);
       vertical-align: middle;
     }
 
-    app-module-data-table table.module-data-table > tbody > tr:hover:not(.odoo-row-editing) {
+    app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing) {
       background: var(--app-surface-hover, #e7f0ff);
     }
 
-    :host-context(html.dark) app-module-data-table table.module-data-table > tbody > tr:hover:not(.odoo-row-editing),
-    :host-context([data-theme='dark']) app-module-data-table table.module-data-table > tbody > tr:hover:not(.odoo-row-editing) {
+    :host-context(html.dark) app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing),
+    :host-context([data-theme='dark']) app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing) {
       background: var(--app-surface-hover, rgba(124, 179, 255, 0.12));
     }
 
@@ -78,5 +79,6 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
 export class ModuleDataTable {
   public readonly ariaLabel = input.required<string>();
   public readonly minWidth = input<string>('640px');
+  public readonly tableId = input<string>('');
   public readonly tableClass = input<string>('');
 }
