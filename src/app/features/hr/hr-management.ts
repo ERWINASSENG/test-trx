@@ -177,7 +177,7 @@ export class HrManagement implements OnInit {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.role,
+      role: user.customRole || user.role,
       department: user.department || 'Services Généraux',
       phone: user.phone || '',
       tempPassword: '',
@@ -210,16 +210,39 @@ export class HrManagement implements OnInit {
       const editId = this.editingUserId();
       if (editId) {
         // Mode mise à jour du profil et rôle
+        const existingUser = this.users().find((user) => user.id === editId);
+        const isCanonicalRole = Object.prototype.hasOwnProperty.call(ROLE_DEFINITIONS, formVal.role);
+        const customRole = isCanonicalRole
+          ? null
+          : this.dynamicRoles().find((role) => role.roleKey === formVal.role && role.isActive) || null;
+
+        if (!isCanonicalRole && !customRole) {
+          throw new Error('Ce rôle personnalisé est introuvable ou inactif. Recharge la liste des rôles.');
+        }
+
         const res = await this.userService.updateUser(editId, {
           firstName: formVal.firstName.trim(),
           lastName: formVal.lastName.trim(),
-          role: formVal.role as UserRole,
+          ...(isCanonicalRole ? { role: formVal.role as UserRole } : {}),
           department: formVal.department.trim(),
           phone: formVal.phone.trim(),
         });
         if (!res.success) {
           throw new Error(res.error || 'Échec de la mise à jour du collaborateur');
         }
+
+        const currentRole = existingUser?.customRole || existingUser?.role;
+        if (customRole && currentRole !== customRole.roleKey) {
+          const assignment = await this.accessControlService.assignRole({
+            userId: editId,
+            roleId: customRole.id,
+          });
+          if (!assignment.success) {
+            throw new Error(assignment.error || 'Échec de l’attribution du rôle personnalisé.');
+          }
+          await this.userService.loadInitialUsers();
+        }
+
         this.successMessage.set(`Collaborateur ${formVal.firstName} mis à jour avec le rôle ${this.getRoleLabel(formVal.role)}.`);
       } else {
         // Mode création nouvel utilisateur avec rôle

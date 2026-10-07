@@ -16,6 +16,7 @@ describe('HrManagement Component', () => {
     error: () => string | null;
     createUser: ReturnType<typeof vi.fn>;
     updateUser: ReturnType<typeof vi.fn>;
+    loadInitialUsers: ReturnType<typeof vi.fn>;
   };
   let mockAuthService: {
     isAdmin: () => boolean;
@@ -23,6 +24,7 @@ describe('HrManagement Component', () => {
   let mockAccessControlService: {
     roles: () => { id: string; roleKey: string; label: string; description: string | null; isActive: boolean }[];
     loadRoles: ReturnType<typeof vi.fn>;
+    assignRole: ReturnType<typeof vi.fn>;
   };
 
   const sampleUsers: UserProfile[] = [
@@ -57,6 +59,7 @@ describe('HrManagement Component', () => {
       error: () => null,
       createUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
       updateUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
+      loadInitialUsers: vi.fn().mockResolvedValue(undefined),
     };
 
     mockAuthService = {
@@ -74,6 +77,7 @@ describe('HrManagement Component', () => {
         },
       ]),
       loadRoles: vi.fn().mockResolvedValue(undefined),
+      assignRole: vi.fn().mockResolvedValue({ success: true }),
     };
 
     TestBed.configureTestingModule({
@@ -124,6 +128,31 @@ describe('HrManagement Component', () => {
     expect(component.userForm.controls.firstName.value).toBe(user.firstName);
     expect(component.userForm.controls.lastName.value).toBe(user.lastName);
     expect(component.userForm.controls.role.value).toBe(user.role);
+  });
+
+  it('devrait préserver le rôle personnalisé lors de l’ouverture de la modale d’édition', () => {
+    const userWithCustomRole: UserProfile = {
+      ...sampleUsers[1],
+      customRole: 'daf',
+      roleLabel: 'Directeur Administratif & Financier',
+    };
+
+    component.openEditModal(userWithCustomRole);
+
+    expect(component.userForm.controls.role.value).toBe('daf');
+    expect(component.getRoleLabel(component.userForm.controls.role.value)).toBe('Directeur Administratif & Financier');
+  });
+
+  it('devrait affecter un rôle personnalisé via le service d’accès sans l’envoyer au endpoint RH', async () => {
+    component.openEditModal(sampleUsers[1]);
+    component.userForm.controls.role.setValue('daf');
+
+    await component.onSubmit();
+
+    expect(mockUserService.updateUser).toHaveBeenCalledWith('usr-2', expect.not.objectContaining({ role: 'daf' }));
+    expect(mockAccessControlService.assignRole).toHaveBeenCalledWith({ userId: 'usr-2', roleId: 'role-daf' });
+    expect(mockUserService.loadInitialUsers).toHaveBeenCalledOnce();
+    expect(component.successMessage()).toContain('Directeur Administratif & Financier');
   });
 
   it('devrait invalider le formulaire si les champs requis sont vides', () => {
