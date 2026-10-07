@@ -47,6 +47,49 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Find access mutation SQL",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"--no-pager",
+				"grep",
+				"-n",
+				"access_control_mutate"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find invalid SQL checks",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"--no-pager",
+				"grep",
+				"-n",
+				"22023\\|invalid\\|unsupported\\|role.permissions.replace",
+				"--",
+				"supabase"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Locate deployed RPC versions",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"--no-pager",
+				"grep",
+				"-n",
+				"Unsupported access-control operation",
+				"--",
+				"supabase"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
