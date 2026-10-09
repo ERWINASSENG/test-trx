@@ -228,6 +228,16 @@ describe('CashierManagement', () => {
     expect(component.isAddingRow()).toBe(false);
   });
 
+  it('garde la ligne de saisie ouverte après le clic sur Nouveau', () => {
+    const createButton = fixture.nativeElement.querySelector('#cashier-control-create') as HTMLButtonElement;
+
+    createButton.click();
+    fixture.detectChanges();
+
+    expect(component.isAddingRow()).toBe(true);
+    expect(fixture.nativeElement.querySelector('#inline-add-row')).not.toBeNull();
+  });
+
   it('devrait formater correctement les montants monétaires en FCFA', () => {
     expect(component.formatCurrency(500000)).toContain('500 000 FCFA');
     expect(component.formatCurrency(-45000)).toContain('-45 000 FCFA');

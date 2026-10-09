@@ -1021,7 +1021,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     // Ignorer si l'élément n'est plus dans le DOM ou fait partie d'un composant flottant (popover, datepicker, dropdown)
     if (
       !document.body.contains(target) ||
-      target.closest('#cp-btn-nouveau') ||
+      target.closest('#cashier-control-create, #cp-btn-nouveau') ||
       target.closest('app-odoo-datepicker') ||
       target.closest('.odoo-datepicker-popover') ||
       target.closest('.p-dropdown') ||
