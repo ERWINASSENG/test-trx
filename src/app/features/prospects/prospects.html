@@ -100,6 +100,12 @@
                 <mat-icon class="sort-icon">unfold_more</mat-icon>
               </div>
             </th>
+            <th scope="col" class="th-assignee">
+              <div class="th-header-label">
+                <span>Commercial</span>
+                <mat-icon class="sort-icon">unfold_more</mat-icon>
+              </div>
+            </th>
             <th scope="col" class="th-status">
               <div class="th-header-label">
                 <span>Statut</span>
@@ -173,6 +179,9 @@
                   <span class="email-empty">—</span>
                 }
               </td>
+              <td class="td-assignee">
+                <span class="text-xs text-slate-600 dark:text-slate-300">{{ assigneeName(prospect.assignedTo) }}</span>
+              </td>
               <td class="td-status">
                 <span class="status-pill" [class]="getDisplayStatus(prospect.status).class">
                   {{ getDisplayStatus(prospect.status).label }}
@@ -181,7 +190,7 @@
             </tr>
           } @empty {
             <tr>
-              <td class="empty-state" colspan="8">Aucun prospect ne correspond aux critères.</td>
+              <td class="empty-state" colspan="9">Aucun prospect ne correspond aux critères.</td>
             </tr>
           }
         </tbody>
@@ -220,6 +229,10 @@
                 <span class="country-name">{{ prospect.country || prospect.notes || '—' }}</span>
               </div>
               <p>{{ prospect.contactName || prospect.email || 'Contact non renseigné' }}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <mat-icon class="!h-3.5 !w-3.5 !text-[13px] align-middle mr-0.5 text-slate-400">person</mat-icon>
+                <span>{{ assigneeName(prospect.assignedTo) }}</span>
+              </p>
               <footer>
                 <span class="status-pill" [class]="getDisplayStatus(prospect.status).class">{{ getDisplayStatus(prospect.status).label }}</span>
                 <strong>{{ formatValue(prospect.estimatedValue, prospect.currency) }}</strong>
@@ -279,13 +292,27 @@
               <input type="tel" formControlName="phone" autocomplete="tel" placeholder="+237 6..." />
             </label>
 
-            <!-- Ligne 4 : E-mail -->
-            <label class="field field-wide">
+            <!-- Ligne 4 : E-mail | Commercial attribué -->
+            <label class="field">
               E-mail
               <input type="email" formControlName="email" autocomplete="email" placeholder="contact@exemple.com" />
               @if (form.controls.email.touched && form.controls.email.invalid) {
                 <small class="field-error">Adresse e-mail invalide.</small>
               }
+            </label>
+            <label class="field">
+              Commercial attribué
+              <select
+                formControlName="assignedTo"
+                aria-label="Commercial attribué"
+                class="h-9 w-full rounded border border-slate-300 dark:border-white/20 bg-white dark:bg-[#142a4a] px-2.5 py-1.5 text-xs text-slate-800 dark:text-white transition focus:border-[#0b5ed7] focus:outline-none focus:ring-2 focus:ring-[#0b5ed7]/15">
+                <option [ngValue]="null">Non attribué</option>
+                @for (assignee of prospectService.assignees(); track assignee.id) {
+                  <option [value]="assignee.id">
+                    {{ assignee.firstName }} {{ assignee.lastName }} ({{ assignee.email }})
+                  </option>
+                }
+              </select>
             </label>
           </div>
           <footer class="modal-actions">

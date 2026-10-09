@@ -69,6 +69,7 @@ export class ProspectsComponent {
     sector: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(100)] }),
     phone: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(40)] }),
     email: new FormControl('', { nonNullable: true, validators: [Validators.email, Validators.maxLength(320)] }),
+    assignedTo: new FormControl<string | null>(null),
   });
 
   public constructor() {
@@ -203,6 +204,7 @@ export class ProspectsComponent {
       sector: '',
       phone: '',
       email: '',
+      assignedTo: null,
     });
     this.isModalOpen.set(true);
   }
@@ -219,6 +221,7 @@ export class ProspectsComponent {
       sector: prospect.sector || prospect.source || '',
       phone: prospect.phone || '',
       email: prospect.email || '',
+      assignedTo: prospect.assignedTo || null,
     });
     this.isModalOpen.set(true);
   }
@@ -240,6 +243,9 @@ export class ProspectsComponent {
     const contactRole = values.contactRole.trim() || null;
     const country = values.country.trim() || null;
     const sector = values.sector.trim() || null;
+    const assignedTo = values.assignedTo && typeof values.assignedTo === 'string' && values.assignedTo.trim()
+      ? values.assignedTo.trim()
+      : null;
 
     const input: CreateProspectInput = {
       name: companyName || contactName || 'Prospect',
@@ -252,6 +258,7 @@ export class ProspectsComponent {
       notes: JSON.stringify({ country: country || '', contactRole: contactRole || '' }),
       phone: values.phone.trim() || null,
       email: values.email.trim().toLowerCase() || null,
+      assignedTo,
       status: 'new',
     };
 

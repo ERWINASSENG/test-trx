@@ -316,6 +316,30 @@ export class CashierService implements OnDestroy {
     return list.reduce((acc, curr) => acc + (curr.status === 'posted' ? Number(curr.montant) || 0 : 0), 0);
   });
 
+  // Total officiel des décaissements (sorties) de la Caisse Principale
+  public readonly caisseTotalSorties = computed(() => {
+    const summary = this._serverSummary();
+    if (summary && summary.total_sorties !== undefined) {
+      return Number(summary.total_sorties);
+    }
+    const list = this.caisseTransactions();
+    return list
+      .filter((tx) => tx.status === 'posted' && (tx.category === 'sortie' || tx.montant < 0))
+      .reduce((acc, curr) => acc + Math.abs(Number(curr.montant) || 0), 0);
+  });
+
+  // Total officiel des encaissements (entrées) de la Caisse Principale
+  public readonly caisseTotalEntrees = computed(() => {
+    const summary = this._serverSummary();
+    if (summary && summary.total_entrees !== undefined) {
+      return Number(summary.total_entrees);
+    }
+    const list = this.caisseTransactions();
+    return list
+      .filter((tx) => tx.status === 'posted' && (tx.category === 'entree' || tx.montant > 0))
+      .reduce((acc, curr) => acc + Math.abs(Number(curr.montant) || 0), 0);
+  });
+
   // Transactions appartenant exclusivement au journal sélectionné
   public readonly journalTransactions = computed(() => {
     const list = this._transactions();
@@ -1488,13 +1512,13 @@ export class CashierService implements OnDestroy {
 
       let balance = 0;
       const updatedGroup = chronological.map((tx) => {
-        if (tx.status === 'cancelled') {
-          return { ...tx, soldeApres: balance };
+        const isPosted = tx.status === 'posted';
+        if (isPosted) {
+          balance += Number(tx.montant) || 0;
         }
-        balance += Number(tx.montant) || 0;
         return {
           ...tx,
-          soldeApres: balance,
+          soldeApres: isPosted ? balance : 0,
         };
       });
 

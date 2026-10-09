@@ -232,6 +232,38 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.allTransactions().length).toBe(3);
     expect(service.allTransactions().find((tx) => tx.id === 'row-1')?.libelle).toBe('Versement Caisse');
     expect(service.currentBalance()).toBe(500000);
+    expect(service.caisseTotalEntrees()).toBe(500000);
+    expect(service.caisseTotalSorties()).toBe(0);
+  });
+
+  it('devrait donner la priorité absolue à serverSummary pour caisseBalance, caisseTotalEntrees et caisseTotalSorties', async () => {
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.includes('/summary')) {
+        return new Response(
+          JSON.stringify({
+            summary: {
+              solde_global: 4200000,
+              total_entrees: 5000000,
+              total_sorties: 800000,
+              total_count: 42,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(JSON.stringify({ operations: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch;
+
+    await service.loadCashierSummary();
+
+    expect(service.caisseBalance()).toBe(4200000);
+    expect(service.currentBalance()).toBe(4200000);
+    expect(service.caisseTotalEntrees()).toBe(5000000);
+    expect(service.caisseTotalSorties()).toBe(800000);
   });
 
   it('devrait annuler les éléments sélectionnés sans supprimer leur pièce comptable', async () => {

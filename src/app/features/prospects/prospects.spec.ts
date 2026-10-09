@@ -5,6 +5,13 @@ import { AccessControlService } from '../../core/services/access-control.service
 import { ProspectService } from '../../core/services/prospect.service';
 import { ProspectsComponent } from './prospects';
 
+const mockAssignee = {
+  id: 'c1d2e3f4-a5b6-4789-8123-111111111111',
+  firstName: 'Jean',
+  lastName: 'Commercial',
+  email: 'jean.commercial@example.com',
+};
+
 const prospect = {
   id: 'a1b2c3d4-e5f6-4789-8123-456789abcdef',
   name: 'Prospect Démo',
@@ -14,7 +21,7 @@ const prospect = {
   phone: null,
   source: 'Recommandation',
   status: 'new' as const,
-  assignedTo: null,
+  assignedTo: mockAssignee.id,
   estimatedValue: 50000,
   currency: 'XAF',
   nextFollowUp: null,
@@ -27,7 +34,7 @@ const prospect = {
 describe('ProspectsComponent', () => {
   const mockProspectService = {
     prospects: signal<typeof prospect[]>([]),
-    assignees: signal([]),
+    assignees: signal([mockAssignee]),
     total: signal(0),
     isLoading: signal(false),
     error: signal<string | null>(null),
@@ -95,9 +102,52 @@ describe('ProspectsComponent', () => {
       country: 'Cameroun',
       sector: 'Logistique',
       email: 'amina@example.com',
+      assignedTo: null,
     }));
     expect(mockProspectService.loadProspects).toHaveBeenCalledTimes(2);
     expect(component.feedback()).toBe('Prospect créé.');
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('attribue un commercial lors de la création et lors de la modification', async () => {
+    const fixture = createComponent();
+    const component = fixture.componentInstance;
+
+    // 1. Création avec attribution
+    component.openCreate();
+    component.form.patchValue({
+      companyName: 'Transmex SARL',
+      contactName: 'Pierre Paul',
+      assignedTo: mockAssignee.id,
+    });
+    await component.saveProspect();
+    expect(mockProspectService.createProspect).toHaveBeenCalledWith(expect.objectContaining({
+      companyName: 'Transmex SARL',
+      assignedTo: mockAssignee.id,
+    }));
+
+    // 2. Modification avec pré-remplissage du commercial
+    component.openEdit(prospect);
+    expect(component.form.controls.assignedTo.value).toBe(mockAssignee.id);
+
+    // Retrait de l'attribution
+    component.form.controls.assignedTo.setValue(null);
+    await component.saveProspect();
+    expect(mockProspectService.updateProspect).toHaveBeenCalledWith(prospect.id, expect.objectContaining({
+      assignedTo: null,
+    }));
+
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('affiche le nom du commercial attribué ou "Non attribué"', () => {
+    const fixture = createComponent();
+    const component = fixture.componentInstance;
+    expect(component.assigneeName(mockAssignee.id)).toBe('Jean Commercial');
+    expect(component.assigneeName(null)).toBe('Non attribué');
+    expect(component.assigneeName('inconnu')).toBe('Responsable indisponible');
     fixture.destroy();
     TestBed.resetTestingModule();
   });
