@@ -276,6 +276,8 @@ export class AuthService {
       const payload = await response.json() as {
         profile?: Record<string, unknown>;
         role?: string;
+        customRole?: string | null;
+        roleLabel?: string | null;
       };
       const profile = payload.profile;
       if (!profile || profile['id'] !== userId) {
@@ -294,6 +296,8 @@ export class AuthService {
         lastName: String(profile['last_name'] || authUser?.user_metadata?.['last_name'] || 'Transmex'),
         role: resolvedRole,
         roles: [resolvedRole],
+        customRole: typeof payload.customRole === 'string' ? payload.customRole : null,
+        roleLabel: typeof payload.roleLabel === 'string' ? payload.roleLabel : null,
         department: String(profile['department'] || 'Services Généraux'),
         phone: typeof profile['phone'] === 'string' ? profile['phone'] : undefined,
         isActive: profile['is_active'] !== false,

@@ -224,6 +224,15 @@ describe('MainLayout Component', () => {
     expect(component.roleLabel('manager')).toBe('Manager');
   });
 
+  it('affiche le libellé du rôle d’accès dynamique dans le badge utilisateur', () => {
+    currentUser.set({ ...mockUser, role: 'employe', customRole: 'daf', roleLabel: 'DAF' });
+    component.isUserDropdownOpen.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#dropdown-user-role-badge')?.textContent).toContain('DAF');
+    expect(fixture.nativeElement.querySelector('#dropdown-user-role-badge')?.textContent).not.toContain('Employé');
+  });
+
   it('devrait ouvrir, basculer et fermer le menu déroulant Configuration', () => {
     expect(component.isConfigDropdownOpen()).toBe(false);
 

@@ -1,6 +1,34 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
 
+type AccessRoleAssignment = {
+  created_at: string;
+  expires_at: string | null;
+  access_roles: { role_key: string; label: string; is_active: boolean } |
+    { role_key: string; label: string; is_active: boolean }[] | null;
+};
+
+export function getActiveAccessRole(assignments: AccessRoleAssignment[], now = Date.now()): {
+  customRole: string;
+  roleLabel: string;
+} | null {
+  const activeAssignment = assignments
+    .filter((assignment) => {
+      const accessRole = Array.isArray(assignment.access_roles)
+        ? assignment.access_roles[0]
+        : assignment.access_roles;
+      const expiresAt = assignment.expires_at ? Date.parse(assignment.expires_at) : Number.POSITIVE_INFINITY;
+      return accessRole?.is_active === true && expiresAt > now;
+    })
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  if (!activeAssignment) return null;
+
+  const accessRole = Array.isArray(activeAssignment.access_roles)
+    ? activeAssignment.access_roles[0]
+    : activeAssignment.access_roles;
+  return accessRole ? { customRole: accessRole.role_key, roleLabel: accessRole.label } : null;
+}
+
 export const getCurrentUserProfileHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string; email?: string; role?: string } | undefined;
   const userId = user?.id;
@@ -33,9 +61,29 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
       return;
     }
 
+    const { data: roleAssignmentsData, error: roleAssignmentsError } = await adminClient
+      .from('access_user_roles')
+      .select('created_at, expires_at, access_roles!inner(role_key, label, is_active)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (roleAssignmentsError) {
+      console.error('Échec de lecture du rôle attribué à l’utilisateur:', roleAssignmentsError.message);
+      res.status(500).json({ error: 'Impossible de récupérer le rôle attribué.' });
+      return;
+    }
+
+    const now = Date.now();
+    const activeAccessRole = getActiveAccessRole(
+      (roleAssignmentsData || []) as AccessRoleAssignment[],
+      now
+    );
+
     res.json({
       profile,
       role: user.role || profile.role,
+      customRole: activeAccessRole?.customRole || null,
+      roleLabel: activeAccessRole?.roleLabel || null,
     });
   } catch (err: unknown) {
     console.error('Erreur getCurrentUserProfileHandler:', err);

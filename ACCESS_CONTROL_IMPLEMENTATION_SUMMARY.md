@@ -104,6 +104,11 @@ Le nouveau centre est disponible à :
 /admin/access-control
 ```
 
+Le badge du menu utilisateur affiche le libellé de l’affectation dynamique active
+chargé avec le profil (`access_user_roles` / `access_roles`). Le champ `role`
+historique reste normalisé pour les usages qui attendent un rôle canonique ;
+il ne doit pas remplacer le libellé dynamique dans l’interface.
+
 Les anciens chemins `/admin`, `/admin/view` et `/admin/users` convergent vers ce centre.
 
 ### Icône

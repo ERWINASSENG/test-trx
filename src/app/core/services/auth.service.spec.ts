@@ -148,6 +148,36 @@ describe('AuthService', () => {
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
+  it('charge le rôle d’accès dynamique et son libellé dans le profil de session', async () => {
+    const user = createCachedUser();
+    configureSupabaseAuth(
+      { access_token: 'valid-token' },
+      { data: { user: { id: user.id, email: user.email, app_metadata: { role: 'employe' } } }, error: null }
+    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        profile: {
+          id: user.id,
+          role: 'employe',
+          is_active: true,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          email: user.email,
+        },
+        role: 'employe',
+        customRole: 'daf',
+        roleLabel: 'DAF',
+      }),
+    }));
+
+    await service.restoreSession();
+
+    expect(service.currentUser()?.role).toBe('employe');
+    expect(service.currentUser()?.customRole).toBe('daf');
+    expect(service.currentUser()?.roleLabel).toBe('DAF');
+  });
+
   it('conserve la session en mémoire sur une panne réseau transitoire', async () => {
     const user = createCachedUser();
     service.setLocalSession(user, 'possibly-valid-token');
