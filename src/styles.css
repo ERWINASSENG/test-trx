@@ -507,3 +507,66 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
 
+/* Keep Cotations' Kanban board styles outside the component stylesheet budget. */
+.quotes-page .quotes-kanban {
+  display: grid;
+  grid-auto-columns: minmax(240px, 280px);
+  grid-auto-flow: column;
+  align-items: start;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 14px 12px;
+}
+
+.quotes-page .quotes-kanban-column {
+  min-height: 220px;
+  padding: 10px;
+  border: 1px solid var(--quote-border);
+  border-radius: 5px;
+  background: var(--quote-surface-muted);
+}
+
+.quotes-page .quotes-kanban-column > header,
+.quotes-page .quote-kanban-card-heading,
+.quotes-page .quote-kanban-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quotes-page .quotes-kanban-column > header {
+  padding: 3px 2px 10px;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.quotes-page .quotes-kanban-column h2,
+.quotes-page .quote-kanban-card h3 {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.quotes-page .quotes-kanban-column > header > span {
+  color: var(--quote-muted);
+  font-size: 11px;
+}
+
+.quotes-page .quote-kanban-card {
+  margin-top: 9px;
+  padding: 11px;
+  border: 1px solid var(--quote-border);
+  border-radius: 5px;
+  background: var(--quote-surface);
+  box-shadow: 0 1px 3px rgba(18, 60, 109, .06);
+}
+
+.quotes-page .quote-kanban-card h3 { color: var(--quote-accent); }
+.quotes-page .quote-kanban-card p { margin: 6px 0 0; color: var(--quote-muted); font-size: 11px; overflow-wrap: anywhere; }
+.quotes-page .quote-kanban-card .quote-kanban-title { color: var(--quote-text); font-size: 12px; font-weight: 650; }
+.quotes-page .quote-kanban-details { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.quotes-page .quote-kanban-details strong { color: var(--quote-text); font-size: 13px; font-variant-numeric: tabular-nums; }
+.quotes-page .quote-kanban-details span,
+.quotes-page .quote-kanban-footer > span { color: var(--quote-subtle); font-size: 10px; }
+.quotes-page .quote-kanban-footer { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--quote-border); }
+.quotes-page .quotes-kanban-empty { margin: 12px 2px; color: var(--quote-subtle); font-size: 11px; text-align: center; }

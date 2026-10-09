@@ -313,6 +313,47 @@ CREATE INDEX idx_prospects_status_created ON public.prospects (status, created_a
 CREATE INDEX idx_prospects_assigned_to ON public.prospects (assigned_to);
 CREATE INDEX idx_prospects_email_lower ON public.prospects (lower(email)) WHERE (email IS NOT NULL);
 
+-- Cotations commerciales à structure personnalisable par cotation
+CREATE SEQUENCE public.sales_quote_number_seq;
+
+CREATE TABLE public.sales_quotes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  quote_number text NOT NULL UNIQUE DEFAULT (
+    'COT-' || to_char(now() AT TIME ZONE 'UTC', 'YYYY') || '-' ||
+    lpad(nextval('public.sales_quote_number_seq'::regclass)::text, 7, '0')
+  ),
+  prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE RESTRICT,
+  assigned_to uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  title text NOT NULL DEFAULT 'Cotation' CHECK (length(btrim(title)) BETWEEN 2 AND 200),
+  currency varchar(3) NOT NULL DEFAULT 'XAF' CHECK (currency ~ '^[A-Z]{3}$'),
+  columns jsonb NOT NULL CHECK (jsonb_typeof(columns) = 'array'),
+  rows jsonb NOT NULL CHECK (jsonb_typeof(rows) = 'array'),
+  total_column_id text NOT NULL,
+  total_amount numeric(14, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'sent', 'accepted', 'rejected', 'expired')),
+  valid_until date,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_sales_quotes_assigned_updated ON public.sales_quotes (assigned_to, updated_at DESC);
+CREATE INDEX idx_sales_quotes_prospect_created ON public.sales_quotes (prospect_id, created_at DESC);
+CREATE INDEX idx_sales_quotes_status_valid_until ON public.sales_quotes (status, valid_until)
+  WHERE status IN ('draft', 'sent') AND valid_until IS NOT NULL;
+
+CREATE TABLE public.sales_quote_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 2 AND 120),
+  columns jsonb NOT NULL CHECK (jsonb_typeof(columns) = 'array'),
+  total_column_id text NOT NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_sales_quote_templates_name ON public.sales_quote_templates (name);
+CREATE INDEX idx_sales_quote_templates_creator ON public.sales_quote_templates (created_by);
+
 -- ------------------------------------------------------------------
 -- Système RBAC (catalogue de rôles/permissions)
 -- ------------------------------------------------------------------
@@ -1184,6 +1225,14 @@ CREATE TRIGGER trg_prospects_updated_at
   BEFORE UPDATE ON public.prospects
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+CREATE TRIGGER trg_sales_quotes_updated_at
+  BEFORE UPDATE ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_sales_quote_templates_updated_at
+  BEFORE UPDATE ON public.sales_quote_templates
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- Audit automatique (écrit dans public.audit_logs)
 CREATE TRIGGER trg_audit_cashier_transactions
   AFTER INSERT OR UPDATE OR DELETE ON public.cashier_transactions
@@ -1209,6 +1258,8 @@ ALTER TABLE public.journal_piece_counters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cashier_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prospects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_quotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_quote_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_role_permissions ENABLE ROW LEVEL SECURITY;
@@ -1219,6 +1270,7 @@ ALTER TABLE public.access_audit_log ENABLE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
   public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
   public.audit_logs, public.cashier_transactions, public.prospects,
+  public.sales_quotes, public.sales_quote_templates,
   public.access_roles, public.access_permissions, public.access_role_permissions,
   public.access_user_roles, public.access_user_overrides, public.access_audit_log
   FROM PUBLIC, anon, authenticated;
@@ -1231,12 +1283,14 @@ GRANT SELECT ON TABLE public.cashier_balance_summary, public.cashier_transaction
 GRANT ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
   public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
   public.audit_logs, public.cashier_transactions, public.prospects,
+  public.sales_quotes, public.sales_quote_templates,
   public.access_roles, public.access_permissions, public.access_role_permissions,
   public.access_user_roles, public.access_user_overrides, public.access_audit_log,
   public.cashier_balance_summary, public.cashier_transactions_with_balance
   TO service_role;
 
 GRANT USAGE, SELECT ON SEQUENCE public.access_audit_log_id_seq TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.sales_quote_number_seq TO service_role;
 
 -- profiles
 CREATE POLICY "Acces complet admin service_role" ON public.profiles
@@ -1520,6 +1574,10 @@ CREATE POLICY audit_logs_service_role_all ON public.audit_logs
 -- prospects : service_role uniquement (aucun accès direct authenticated)
 CREATE POLICY prospects_service_role_all ON public.prospects
   FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_quotes_service_role_all ON public.sales_quotes
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_quote_templates_service_role_all ON public.sales_quote_templates
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- access_* (RBAC) : service_role uniquement, catalogue non branché aux policies ci-dessus
 CREATE POLICY access_roles_service_role_all ON public.access_roles
@@ -1572,6 +1630,7 @@ ON CONFLICT (sequence_prefix) DO NOTHING;
 INSERT INTO public.access_roles (role_key, label, description, is_system)
 VALUES
   ('admin', 'Administrateur', 'Administration complète de la plateforme.', true),
+  ('commercial', 'Commercial', 'Création et suivi des cotations commerciales attribuées.', true),
   ('manager', 'Manager', 'Supervision des opérations et des équipes.', true),
   ('caissiere', 'Caissière', 'Opérations autorisées sur la caisse.', true),
   ('comptable', 'Comptable', 'Consultation et opérations comptables autorisées.', true),
@@ -1614,6 +1673,15 @@ VALUES
   ('prospects.create', 'prospects', 'create', 'Créer un prospect', 'Créer un nouveau prospect.', true),
   ('prospects.update', 'prospects', 'update', 'Modifier un prospect', 'Modifier les informations et le suivi d''un prospect.', true),
   ('prospects.delete', 'prospects', 'delete', 'Supprimer un prospect', 'Supprimer un prospect.', true),
+  ('quotes.read', 'quotes', 'read', 'Consulter les cotations', 'Consulter les cotations attribuées au commercial.', true),
+  ('quotes.create', 'quotes', 'create', 'Créer une cotation', 'Créer une cotation et en définir les colonnes.', true),
+  ('quotes.update', 'quotes', 'update', 'Modifier une cotation', 'Modifier une cotation attribuée au commercial.', true),
+  ('quotes.delete', 'quotes', 'delete', 'Supprimer une cotation', 'Supprimer une cotation attribuée au commercial.', true),
+  ('quotes.assign', 'quotes', 'assign', 'Attribuer les cotations', 'Attribuer et réattribuer les cotations aux commerciaux.', true),
+  ('quotes.templates.read', 'quotes.templates', 'read', 'Consulter les modèles de cotation', 'Consulter les modèles partagés de cotation.', true),
+  ('quotes.templates.create', 'quotes.templates', 'create', 'Créer un modèle de cotation', 'Enregistrer une structure de cotation comme modèle partagé.', true),
+  ('quotes.templates.update', 'quotes.templates', 'update', 'Modifier un modèle de cotation', 'Modifier un modèle de cotation créé par soi-même.', true),
+  ('quotes.templates.delete', 'quotes.templates', 'delete', 'Supprimer un modèle de cotation', 'Supprimer un modèle de cotation créé par soi-même.', true),
   ('access.roles.read', 'access.roles', 'read', 'Consulter les rôles', 'Afficher le catalogue des rôles.', true),
   ('access.roles.manage', 'access.roles', 'manage', 'Gérer les rôles', 'Créer et modifier les rôles applicatifs.', true),
   ('access.permissions.read', 'access.permissions', 'read', 'Consulter les permissions', 'Afficher le catalogue des permissions.', true),
@@ -1645,6 +1713,14 @@ WITH initial_grants(role_key, permission_key) AS (
     ('tresorier', 'configuration.read'), ('tresorier', 'configuration.manage'),
     ('employe', 'apps.view'), ('employe', 'dashboard.view'), ('employe', 'profile.read'), ('employe', 'profile.update')
   ) AS grants(role_key, permission_key)
+  UNION ALL
+  SELECT 'commercial', permission_key FROM public.access_permissions
+  WHERE permission_key IN (
+    'apps.view', 'dashboard.view', 'profile.read', 'profile.update',
+    'quotes.read', 'quotes.create', 'quotes.update', 'quotes.delete',
+    'quotes.templates.read', 'quotes.templates.create',
+    'quotes.templates.update', 'quotes.templates.delete'
+  )
 )
 INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
 SELECT roles.id, permissions.permission_key, '{"type":"all","version":1}'::jsonb, NULL

@@ -30,6 +30,22 @@ import {
   updateProspectHandler,
 } from './server/prospects';
 import {
+  createQuoteHandler,
+  createQuoteProspectHandler,
+  createQuoteTemplateHandler,
+  deleteQuoteHandler,
+  deleteQuoteTemplateHandler,
+  listQuoteAssigneesHandler,
+  listQuoteProspectsHandler,
+  listQuoteTemplatesHandler,
+  listQuotesHandler,
+  resolveQuoteCollectionContext,
+  resolveQuoteOwnerContext,
+  resolveQuoteTemplateOwnerContext,
+  updateQuoteHandler,
+  updateQuoteTemplateHandler,
+} from './server/quotes';
+import {
   createJournalHandler,
   deleteJournalHandler,
   getJournalsHandler,
@@ -1136,6 +1152,19 @@ app.post('/api/journals/:journalId/entries', requireAuth, requirePermission('jou
 app.put('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
 app.patch('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.update', resolveJournalOwnerContext), updateJournalEntryHandler);
 app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.delete', resolveJournalOwnerContext), deleteJournalEntryHandler);
+
+// Module Cotations : l'API applique en plus les règles de propriété des commerciaux.
+app.get('/api/quotes/assignees', requireAuth, requirePermission('quotes.assign'), listQuoteAssigneesHandler);
+app.get('/api/quotes/prospects', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteProspectsHandler);
+app.post('/api/quotes/prospects', requireAuth, requirePermission('quotes.create', resolveQuoteCollectionContext), createQuoteProspectHandler);
+app.get('/api/quotes/templates', requireAuth, requirePermission('quotes.templates.read'), listQuoteTemplatesHandler);
+app.post('/api/quotes/templates', requireAuth, requirePermission('quotes.templates.create'), createQuoteTemplateHandler);
+app.patch('/api/quotes/templates/:id', requireAuth, requirePermission('quotes.templates.update', resolveQuoteTemplateOwnerContext), updateQuoteTemplateHandler);
+app.delete('/api/quotes/templates/:id', requireAuth, requirePermission('quotes.templates.delete', resolveQuoteTemplateOwnerContext), deleteQuoteTemplateHandler);
+app.get('/api/quotes', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuotesHandler);
+app.post('/api/quotes', requireAuth, requirePermission('quotes.create', resolveQuoteCollectionContext), createQuoteHandler);
+app.patch('/api/quotes/:id', requireAuth, requirePermission('quotes.update', resolveQuoteOwnerContext), updateQuoteHandler);
+app.delete('/api/quotes/:id', requireAuth, requirePermission('quotes.delete', resolveQuoteOwnerContext), deleteQuoteHandler);
 
 // Module Prospects : contrôles serveur dédiés à chaque capacité.
 app.get('/api/prospects/assignees', requireAuth, requirePermission('prospects.read'), listProspectAssigneesHandler);

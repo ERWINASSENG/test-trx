@@ -13,7 +13,9 @@ describe('AppLauncher', () => {
     effectivePermissions: signal([]),
     isLoading: signal(false),
     loadMyPermissions: vi.fn().mockResolvedValue(undefined),
-    hasPermission: vi.fn((key: string) => key === 'dashboard.view' || key === 'cashier.read'),
+    hasPermission: vi.fn((key: string) =>
+      key === 'dashboard.view' || key === 'cashier.read' || key === 'quotes.read'
+    ),
   };
 
   const mockAuthService = {
@@ -49,6 +51,13 @@ describe('AppLauncher', () => {
     const visibleIds = visible.map((m) => m.id);
     expect(visibleIds).toContain('dashboard');
     expect(visibleIds).toContain('comptabilite');
+    expect(visibleIds).toContain('quotes');
+  });
+
+  it('devrait afficher l’icône SVG Cotations issue des assets du lanceur', () => {
+    const tile = fixture.nativeElement.querySelector('a[href="/quotes"]');
+    expect(tile?.querySelector('img')?.getAttribute('src')).toBe('/assets/module-icons/quotes.svg');
+    expect(tile?.querySelector('mat-icon')).toBeNull();
   });
 
   it('devrait filtrer les modules via la recherche (cas nominal et insensible à la casse)', () => {

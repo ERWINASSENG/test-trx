@@ -48,6 +48,15 @@ export const APP_MODULES: readonly AppModule[] = [
     permissionKey: 'prospects.read',
   },
   {
+    id: 'quotes',
+    label: 'Cotations',
+    description: 'Créer, personnaliser et suivre les offres commerciales',
+    route: '/quotes',
+    icon: '/assets/module-icons/quotes.svg',
+    accent: '#2563eb',
+    permissionKey: 'quotes.read',
+  },
+  {
     id: 'dossiers',
     label: 'Dossiers',
     description: 'Suivi des dossiers et dépenses liées aux prospects',

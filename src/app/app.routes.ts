@@ -61,6 +61,14 @@ export const routes: Routes = [
         title: 'Transmex - Prospects',
       },
       {
+        path: 'quotes',
+        loadComponent: () =>
+          import('./features/quotes/quotes').then((m) => m.QuotesComponent),
+        canActivate: [roleGuard],
+        data: { permission: 'quotes.read' },
+        title: 'Transmex - Cotations',
+      },
+      {
         path: 'dossiers',
         loadComponent: () =>
           import('./features/dossiers/dossier-management').then((m) => m.DossierManagementComponent),

@@ -1,0 +1,443 @@
+<main class="quotes-page" aria-labelledby="quotes-title">
+  <app-module-control-panel>
+    <div controlPanelStart class="quotes-control-start">
+      @if (canCreate()) {
+        <button type="button" class="cashier-action-primary" (click)="openCreate()">
+          Nouveau
+        </button>
+      }
+      <div class="quotes-breadcrumb" aria-label="Fil d’Ariane">
+        <span>Cotations</span>
+        <small>Développement commercial</small>
+      </div>
+    </div>
+    <div controlPanelCenter class="quotes-control-center">
+      <div class="quotes-search">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <input
+          id="quotes-control-search"
+          type="search"
+          [value]="quoteSearch()"
+          (input)="searchQuotes($any($event.target).value)"
+          placeholder="Rechercher…"
+          aria-label="Rechercher dans les cotations" />
+      </div>
+      <select
+        id="quote-status-filter"
+        class="quotes-status-filter"
+        [value]="statusFilter()"
+        aria-label="Filtrer par statut"
+        (change)="filterByStatus($any($event.target).value)">
+        <option value="">Tous les statuts</option>
+        @for (quoteStatus of statuses; track quoteStatus) {
+          <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
+        }
+      </select>
+    </div>
+    <div controlPanelEnd class="quotes-control-end">
+      <div class="quotes-view-switch" role="group" aria-label="Vue des cotations">
+        <button
+          type="button"
+          [class.active]="view() === 'list'"
+          [attr.aria-pressed]="view() === 'list'"
+          aria-label="Vue liste"
+          title="Vue liste"
+          (click)="view.set('list')">
+          <mat-icon aria-hidden="true">reorder</mat-icon>
+        </button>
+        <button
+          type="button"
+          [class.active]="view() === 'kanban'"
+          [attr.aria-pressed]="view() === 'kanban'"
+          aria-label="Vue Kanban"
+          title="Vue Kanban"
+          (click)="view.set('kanban')">
+          <mat-icon aria-hidden="true">view_kanban</mat-icon>
+        </button>
+      </div>
+      <span class="quotes-pagination-label" aria-live="polite">{{ paginationLabel() }}</span>
+      <div class="quotes-pagination" aria-label="Pagination des cotations">
+        <button type="button" (click)="previousPage()" [disabled]="!canPrevPage()" aria-label="Page précédente" title="Précédent">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <button type="button" (click)="nextPage()" [disabled]="!canNextPage()" aria-label="Page suivante" title="Suivant">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+  </app-module-control-panel>
+
+  @if (feedback()) {
+    <p class="feedback" role="status">{{ feedback() }}</p>
+  }
+  @if (quoteService.error()) {
+    <p class="feedback feedback-error" role="alert">{{ quoteService.error() }}</p>
+  }
+
+  @if (quoteService.isLoading()) {
+    <div class="loading-state" role="status"><mat-icon>progress_activity</mat-icon>Chargement des cotations…</div>
+  } @else if (filteredQuotes().length === 0) {
+    <section class="empty-state">
+      <div class="empty-icon"><mat-icon>request_quote</mat-icon></div>
+      <h2>{{ quoteService.quotes().length === 0 ? 'Aucune cotation pour le moment' : 'Aucun résultat' }}</h2>
+      <p>{{ quoteService.quotes().length === 0
+        ? 'Créez une cotation personnalisée et suivez son avancement avec vos clients.'
+        : 'Modifiez la recherche ou le filtre pour afficher des cotations.' }}</p>
+      @if (canCreate() && quoteService.quotes().length === 0) {
+        <button type="button" class="primary-action" (click)="openCreate()">
+          <mat-icon>add</mat-icon>Créer une cotation
+        </button>
+      }
+    </section>
+  } @else {
+    @if (view() === 'list') {
+      <div class="table-scroll">
+        <table class="quotes-table">
+          <thead>
+            <tr>
+              <th scope="col">Référence</th>
+              <th scope="col">Client</th>
+              <th scope="col">Objet</th>
+              <th scope="col">Commercial</th>
+              <th scope="col">Total</th>
+              <th scope="col">Validité</th>
+              <th scope="col">Statut</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (quote of displayedQuotes(); track quote.id) {
+              <tr>
+                <td class="reference-cell">{{ quote.quoteNumber }}</td>
+                <td>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</td>
+                <td>{{ quote.title }}</td>
+                <td>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</td>
+                <td class="amount-cell">{{ formatAmount(quote.totalAmount, quote.currency) }}</td>
+                <td>{{ quote.validUntil ? (quote.validUntil | date:'dd/MM/yyyy') : '—' }}</td>
+                <td><span [class]="'status-pill ' + statusClass(quote.status)">{{ statusLabel(quote.status) }}</span></td>
+                <td class="row-actions">
+                  @if (canUpdate()) {
+                    <button type="button" class="icon-action" aria-label="Modifier la cotation" title="Modifier" (click)="openEdit(quote)">
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                  }
+                  @if (canDelete()) {
+                    <button type="button" class="icon-action danger-action" aria-label="Supprimer la cotation" title="Supprimer" (click)="deleteQuote(quote)">
+                      <mat-icon>delete_outline</mat-icon>
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="quotes-kanban" aria-label="Cotations par statut">
+        @for (column of statusColumns(); track column.status) {
+          <section class="quotes-kanban-column" [attr.aria-label]="'Statut ' + statusLabel(column.status)">
+            <header>
+              <h2>{{ statusLabel(column.status) }}</h2>
+              <span>{{ column.quotes.length }}</span>
+            </header>
+            @for (quote of column.quotes; track quote.id) {
+              <article class="quote-kanban-card">
+                <div class="quote-kanban-card-heading">
+                  <h3>{{ quote.quoteNumber }}</h3>
+                  <span [class]="'status-pill ' + statusClass(quote.status)">{{ statusLabel(quote.status) }}</span>
+                </div>
+                <p class="quote-kanban-title">{{ quote.title }}</p>
+                <p>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</p>
+                <div class="quote-kanban-details">
+                  <strong>{{ formatAmount(quote.totalAmount, quote.currency) }}</strong>
+                  @if (quote.validUntil) {
+                    <span>Valide jusqu’au {{ quote.validUntil | date:'dd/MM/yyyy' }}</span>
+                  }
+                </div>
+                <div class="quote-kanban-footer">
+                  <span>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</span>
+                  <div class="row-actions">
+                    @if (canUpdate()) {
+                      <button type="button" class="icon-action" aria-label="Modifier la cotation" title="Modifier" (click)="openEdit(quote)">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                    }
+                    @if (canDelete()) {
+                      <button type="button" class="icon-action danger-action" aria-label="Supprimer la cotation" title="Supprimer" (click)="deleteQuote(quote)">
+                        <mat-icon>delete_outline</mat-icon>
+                      </button>
+                    }
+                  </div>
+                </div>
+              </article>
+            } @empty {
+              <p class="quotes-kanban-empty">Aucune cotation</p>
+            }
+          </section>
+        }
+      </div>
+    }
+  }
+
+  @if (quoteService.templates().length > 0) {
+    <section class="templates-section" aria-labelledby="templates-title">
+      <div>
+        <p class="quotes-eyebrow">Structures réutilisables</p>
+        <h2 id="templates-title">Modèles partagés</h2>
+      </div>
+      <div class="template-list">
+        @for (template of quoteService.templates(); track template.id) {
+          <article class="template-card">
+            <div class="template-icon"><mat-icon>view_column</mat-icon></div>
+            <div class="template-info">
+              <strong>{{ template.name }}</strong>
+              <span>{{ template.columns.length }} colonnes</span>
+            </div>
+            @if (canCreate()) {
+              <button type="button" class="secondary-action" (click)="openCreate(); applyTemplate(template.id)">
+                Utiliser
+              </button>
+            }
+            @if (canDeleteTemplate() && (template.createdBy === currentUserId() || canAssign())) {
+              <button type="button" class="icon-action danger-action" aria-label="Supprimer le modèle" (click)="deleteTemplate(template)">
+                <mat-icon>delete_outline</mat-icon>
+              </button>
+            }
+          </article>
+        }
+      </div>
+    </section>
+  }
+</main>
+
+@if (isEditorOpen()) {
+  <div class="modal-backdrop" (click)="closeEditor()">
+    <section class="quote-editor" role="dialog" aria-modal="true" aria-labelledby="editor-title" (click)="$event.stopPropagation()">
+      <header class="editor-header">
+        <div>
+          <p class="quotes-eyebrow">{{ editingId() ? 'Mise à jour' : 'Nouvelle offre' }}</p>
+          <h2 id="editor-title">{{ editingId() ? 'Modifier la cotation' : 'Créer une cotation' }}</h2>
+        </div>
+        <button type="button" class="icon-action close-action" aria-label="Fermer" (click)="closeEditor()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </header>
+
+      <div class="editor-content">
+        @if (error()) { <p class="feedback feedback-error" role="alert">{{ error() }}</p> }
+
+        @if (!editingId() && quoteService.templates().length > 0) {
+          <label class="field-label">
+            Partir d’un modèle partagé
+            <select [value]="selectedTemplateId()" (change)="applyTemplate($any($event.target).value)">
+              <option value="">Structure vierge</option>
+              @for (template of quoteService.templates(); track template.id) {
+                <option [value]="template.id">{{ template.name }}</option>
+              }
+            </select>
+          </label>
+        }
+
+        <div class="form-grid">
+          <label class="field-label">
+            Objet de la cotation
+            <input type="text" [value]="title()" (input)="title.set($any($event.target).value)" maxlength="160" placeholder="Ex. Fourniture de matériel" />
+          </label>
+          <label class="field-label">
+            Devise
+            <input type="text" [value]="currency()" (input)="currency.set($any($event.target).value)" maxlength="3" placeholder="XAF" />
+          </label>
+
+          <label class="field-label client-field">
+            Client / prospect
+            <div class="client-picker">
+              <input type="search" [value]="clientSearch()" (input)="clientSearch.set($any($event.target).value)" placeholder="Rechercher un client…" />
+              <select [value]="prospectId()" (change)="prospectId.set($any($event.target).value)">
+                <option value="">Sélectionner un client</option>
+                @for (prospect of filteredProspects(); track prospect.id) {
+                  <option [value]="prospect.id">{{ prospect.companyName || prospect.name }}</option>
+                }
+              </select>
+            </div>
+            <button type="button" class="text-action" (click)="toggleNewProspect()">
+              <mat-icon>{{ showNewProspect() ? 'remove' : 'add' }}</mat-icon>
+              {{ showNewProspect() ? 'Annuler' : 'Créer un nouveau client' }}
+            </button>
+          </label>
+
+          @if (canAssign()) {
+            <label class="field-label">
+              Attribuer au commercial
+              <select [value]="assignedTo()" (change)="assignedTo.set($any($event.target).value)">
+                <option value="">Choisir un commercial</option>
+                @for (assignee of quoteService.assignees(); track assignee.id) {
+                  <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }} — {{ assignee.email }}</option>
+                }
+              </select>
+            </label>
+          } @else {
+            <label class="field-label">
+              Statut
+              <select [value]="status()" (change)="status.set($any($event.target).value)">
+                @for (quoteStatus of statuses; track quoteStatus) {
+                  <option [value]="quoteStatus" [disabled]="quoteStatus === 'expired' && status() !== 'expired'">{{ statusLabel(quoteStatus) }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          @if (canAssign()) {
+            <label class="field-label">
+              Statut
+              <select [value]="status()" (change)="status.set($any($event.target).value)">
+                @for (quoteStatus of statuses; track quoteStatus) {
+                  <option [value]="quoteStatus" [disabled]="quoteStatus === 'expired' && status() !== 'expired'">{{ statusLabel(quoteStatus) }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <label class="field-label">
+            Valide jusqu’au <span class="optional-label">(facultatif)</span>
+            <input type="date" [value]="validUntil()" (input)="validUntil.set($any($event.target).value)" />
+          </label>
+        </div>
+
+        @if (showNewProspect()) {
+          <div class="prospect-quick-form">
+            <h3>Nouveau client</h3>
+            <div class="form-grid">
+              <label class="field-label">Entreprise *
+                <input type="text" [value]="newProspectCompany()" (input)="newProspectCompany.set($any($event.target).value)" maxlength="200" />
+              </label>
+              <label class="field-label">Personne à contacter
+                <input type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" maxlength="160" />
+              </label>
+              <label class="field-label">E-mail
+                <input type="email" [value]="newProspectEmail()" (input)="newProspectEmail.set($any($event.target).value)" />
+              </label>
+              <label class="field-label">Téléphone
+                <input type="tel" [value]="newProspectPhone()" (input)="newProspectPhone.set($any($event.target).value)" />
+              </label>
+            </div>
+            <button type="button" class="secondary-action" [disabled]="isCreatingProspect()" (click)="createProspect()">
+              {{ isCreatingProspect() ? 'Création…' : 'Enregistrer le client' }}
+            </button>
+          </div>
+        }
+
+        <section class="structure-section" aria-labelledby="structure-title">
+          <div class="section-heading">
+            <div>
+              <p class="quotes-eyebrow">Éditeur de structure</p>
+              <h3 id="structure-title">Colonnes et lignes</h3>
+            </div>
+            <button type="button" class="secondary-action" (click)="addRow()"><mat-icon>add</mat-icon>Ajouter une ligne</button>
+          </div>
+
+          <div class="add-column-form">
+            <label class="field-label">Nom de colonne
+              <input type="text" [value]="columnLabelDraft()" (input)="columnLabelDraft.set($any($event.target).value)" placeholder="Ex. Quantité" />
+            </label>
+            <label class="field-label">Type
+              <select [value]="columnTypeDraft()" (change)="columnTypeDraft.set($any($event.target).value)">
+                @for (columnType of columnTypes; track columnType) {
+                  <option [value]="columnType">{{ columnTypeLabel(columnType) }}</option>
+                }
+              </select>
+            </label>
+            <button type="button" class="secondary-action add-column-action" (click)="addColumn()">
+              <mat-icon>add</mat-icon>Ajouter colonne
+            </button>
+          </div>
+
+          @if (totalColumnOptions().length > 0) {
+            <label class="field-label total-column-picker">
+              Colonne utilisée pour calculer le total
+              <select [value]="totalColumnId()" (change)="totalColumnId.set($any($event.target).value)">
+                @for (column of totalColumnOptions(); track column.id) {
+                  <option [value]="column.id">{{ column.label }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <div class="table-scroll editor-table-scroll">
+            <table class="editor-table">
+              <thead>
+                <tr>
+                  @for (column of columns(); track column.id) {
+                    <th>
+                      <div class="column-heading">
+                        <span>{{ column.label }}<small>{{ columnTypeLabel(column.type) }}</small></span>
+                        <button type="button" class="icon-action danger-action" [attr.aria-label]="'Supprimer la colonne ' + column.label" (click)="removeColumn(column.id)">
+                          <mat-icon>close</mat-icon>
+                        </button>
+                      </div>
+                    </th>
+                  }
+                  <th class="row-action-heading"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track $index; let rowIndex = $index) {
+                  <tr>
+                    @for (column of columns(); track column.id) {
+                      <td>
+                        @if (column.type === 'checkbox') {
+                          <input type="checkbox" [checked]="cellValue(row, column) === true" [attr.aria-label]="column.label" (change)="updateCell(rowIndex, column, $event)" />
+                        } @else {
+                          <input [type]="column.type === 'number' || column.type === 'amount' ? 'number' : column.type === 'date' ? 'date' : 'text'"
+                            [step]="column.type === 'number' || column.type === 'amount' ? 'any' : null"
+                            [min]="column.type === 'amount' ? 0 : null"
+                            [value]="cellValue(row, column)"
+                            [attr.aria-label]="column.label"
+                            (input)="updateCell(rowIndex, column, $event)" />
+                        }
+                      </td>
+                    }
+                    <td class="row-actions">
+                      <button type="button" class="icon-action danger-action" aria-label="Supprimer la ligne" (click)="removeRow(rowIndex)">
+                        <mat-icon>delete_outline</mat-icon>
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td [attr.colspan]="columns().length + 1" class="empty-row">Ajoutez une ligne pour commencer.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr><th [attr.colspan]="columns().length || 1">Total calculé</th><td class="amount-cell">{{ formatAmount(draftTotal(), currency()) }}</td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          @if (canSaveTemplate() && !editingId()) {
+            <div class="template-save-option">
+              <label class="checkbox-label">
+                <input type="checkbox" [checked]="saveTemplate()" (change)="saveTemplate.set($any($event.target).checked)" />
+                Enregistrer cette structure comme modèle partagé
+              </label>
+              @if (saveTemplate()) {
+                <label class="field-label">Nom du modèle
+                  <input type="text" [value]="templateName()" (input)="templateName.set($any($event.target).value)" maxlength="100" placeholder="Ex. Offre de transport" />
+                </label>
+              }
+            </div>
+          }
+        </section>
+      </div>
+
+      <footer class="editor-footer">
+        <span class="footer-total">Total : <strong>{{ formatAmount(draftTotal(), currency()) }}</strong></span>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">Annuler</button>
+          <button type="button" class="primary-action" [disabled]="isSaving() || isCreatingProspect()" (click)="saveQuote()">
+            <mat-icon>{{ isSaving() ? 'hourglass_top' : 'save' }}</mat-icon>
+            {{ isSaving() ? 'Enregistrement…' : 'Enregistrer la cotation' }}
+          </button>
+        </div>
+      </footer>
+    </section>
+  </div>
+}
