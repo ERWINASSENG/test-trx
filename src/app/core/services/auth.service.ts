@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal, PLATFORM_ID } from '@angular/core';
+import { Injectable, computed, inject, signal, PLATFORM_ID, REQUEST } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { LoginCredentials, UserProfile, UserRole } from '../models/auth.model';
@@ -15,6 +15,7 @@ export class AuthService {
   private readonly router = inject(Router);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
+  private readonly serverRequest = inject(REQUEST, { optional: true });
 
   private sessionRestoredResolver!: () => void;
   public readonly sessionRestoredPromise: Promise<void>;
@@ -197,10 +198,25 @@ export class AuthService {
         this.saveSessionToken(session.access_token);
 
         // 2. Validation / rafraîchissement avec le serveur Supabase Auth
-        const { data: userData, error: userError } = await this.supabaseService.supabase.auth.getUser();
+        const auth = this.supabaseService.supabase.auth;
+        let accessToken = session.access_token;
+        let { data: userData, error: userError } = await auth.getUser(accessToken);
+
+        if (userError?.status === 401) {
+          const refresh = await this.refreshAccessTokenAfterUnauthorized();
+          if (refresh.status === 'unavailable') return;
+          if (refresh.status === 'invalid') {
+            this.clearInvalidLocalSession();
+            return;
+          }
+
+          accessToken = refresh.accessToken;
+          const refreshedUser = await auth.getUser(accessToken);
+          userData = refreshedUser.data;
+          userError = refreshedUser.error;
+        }
 
         if (userData?.user && !userError) {
-          const accessToken = session.access_token;
           const profile = await this.loadUserProfileFromSupabase(
             userData.user.id,
             userData.user.email || '',
@@ -236,9 +252,12 @@ export class AuthService {
     if (!accessToken) return null;
 
     try {
+      const profileEndpoint = this.getProfileEndpoint();
+      if (!profileEndpoint) return null;
+
       // Les profils ne sont plus lus directement depuis PostgREST côté navigateur.
       // Le serveur valide le Bearer token puis lit public.profiles avec service_role.
-      const response = await fetch('/api/profile/me', {
+      const response = await fetch(profileEndpoint, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -513,6 +532,29 @@ export class AuthService {
     this._currentUser.set(null);
     this._token.set(null);
     this._authError.set(null);
+  }
+
+  private getProfileEndpoint(): string | null {
+    if (this.isBrowser) return '/api/profile/me';
+
+    if (typeof process !== 'undefined' && process.env) {
+      const configuredOrigin = process.env['APP_BASE_URL'] || process.env['VERCEL_URL'];
+      if (configuredOrigin) {
+        const baseUrl = configuredOrigin.startsWith('http')
+          ? configuredOrigin
+          : `https://${configuredOrigin}`;
+        return new URL('/api/profile/me', baseUrl).toString();
+      }
+    }
+
+    if (this.serverRequest && typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'production') {
+      const requestUrl = new URL(this.serverRequest.url);
+      if (requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1') {
+        return new URL('/api/profile/me', requestUrl.origin).toString();
+      }
+    }
+
+    return null;
   }
 
   public setLocalSession(user: UserProfile, token: string): void {

@@ -1,0 +1,11 @@
+<div class="module-data-table-scroll">
+  <table
+    class="module-data-table"
+    [class]="tableClass()"
+    [style.min-width]="minWidth()"
+    [attr.id]="tableId() || null"
+    [attr.aria-label]="ariaLabel()">
+    <ng-content select="[moduleTableHead]"></ng-content>
+    <ng-content select="[moduleTableBody]"></ng-content>
+  </table>
+</div>

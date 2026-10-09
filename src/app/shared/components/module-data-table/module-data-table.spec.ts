@@ -6,20 +6,7 @@ import { ModuleDataTable } from './module-data-table';
 @Component({
   selector: 'app-module-data-table-test-host',
   imports: [ModuleDataTable],
-  template: `
-    <app-module-data-table
-      [ariaLabel]="'Journaux comptables'"
-      [minWidth]="'720px'"
-      [tableId]="'cashier-transactions-table'"
-      [tableClass]="'journals-table'">
-      <thead moduleTableHead>
-        <tr><th scope="col">Nom du journal</th></tr>
-      </thead>
-      <tbody moduleTableBody>
-        <tr><td>Journal de test</td></tr>
-      </tbody>
-    </app-module-data-table>
-  `,
+  templateUrl: './module-data-table.spec.html',
 })
 class ModuleDataTableTestHost {}
 

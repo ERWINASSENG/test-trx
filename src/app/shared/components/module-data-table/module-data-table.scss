@@ -1,0 +1,56 @@
+app-module-data-table {
+  display: block;
+  width: 100%;
+}
+
+app-module-data-table .module-data-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+app-module-data-table table.module-data-table:not(.odoo-table) {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--app-surface, #fff);
+  color: var(--app-text, #123c6d);
+  text-align: left;
+  font-size: 12px;
+}
+
+app-module-data-table table.module-data-table:not(.odoo-table) > thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--app-border, #bfd3ee);
+  background: var(--app-surface-muted, #e4efff);
+  color: var(--app-text-muted, #35517a);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: inherit;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr > td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--app-border, #bfd3ee);
+  vertical-align: middle;
+}
+
+app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing) {
+  background: var(--app-surface-hover, #e7f0ff);
+}
+
+:host-context(html.dark) app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing),
+:host-context([data-theme='dark']) app-module-data-table table.module-data-table:not(.odoo-table) > tbody > tr:hover:not(.odoo-row-editing) {
+  background: var(--app-surface-hover, rgba(124, 179, 255, 0.12));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  app-module-data-table *,
+  app-module-data-table *::before,
+  app-module-data-table *::after {
+    scroll-behavior: auto !important;
+  }
+}

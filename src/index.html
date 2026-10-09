@@ -17,23 +17,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
-
-    <script>
-      (function () {
-        try {
-          var saved = localStorage.getItem('transimex_app_theme');
-          var theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
-          var root = document.documentElement;
-          if (theme === 'dark') {
-            root.classList.add('dark');
-            root.setAttribute('data-theme', 'dark');
-          } else {
-            root.classList.remove('dark');
-            root.setAttribute('data-theme', 'light');
-          }
-        } catch (e) {}
-      })();
-    </script>
+    <script src="theme-init.js"></script>
   </head>
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased transition-colors duration-150">
     <app-root></app-root>

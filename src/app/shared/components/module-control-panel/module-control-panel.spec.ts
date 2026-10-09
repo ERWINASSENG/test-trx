@@ -6,13 +6,7 @@ import { ModuleControlPanel } from './module-control-panel';
 @Component({
   selector: 'app-control-panel-test-host',
   imports: [ModuleControlPanel],
-  template: `
-    <app-module-control-panel>
-      <button type="button" controlPanelStart id="projected-start">Nouveau</button>
-      <input controlPanelCenter id="projected-center" aria-label="Recherche" />
-      <button type="button" controlPanelEnd id="projected-end">Page suivante</button>
-    </app-module-control-panel>
-  `,
+  templateUrl: './module-control-panel.spec.html',
 })
 class ControlPanelTestHost {}
 
