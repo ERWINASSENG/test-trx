@@ -6,6 +6,11 @@ import { getSupabaseAdmin } from './auth';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEARCH_PATTERN = /[^a-zA-Z0-9@.+\-\s]/g;
+export const PROSPECT_LIST_COLUMNS = [
+  'id', 'name', 'company_name', 'contact_name', 'email', 'phone', 'source', 'status',
+  'assigned_to', 'estimated_value', 'currency', 'next_follow_up', 'notes', 'created_by',
+  'created_at', 'updated_at',
+].join(', ');
 
 interface ProspectMutation {
   name?: string;
@@ -22,7 +27,15 @@ interface ProspectMutation {
   notes?: string;
 }
 
-export function validateProspectPayload(value: unknown, partial = false): { data?: ProspectMutation; error?: string } {
+interface LegacyProspectDetails {
+  country?: string | null;
+  contactRole?: string | null;
+}
+
+export function validateProspectPayload(
+  value: unknown,
+  partial = false
+): { data?: ProspectMutation; legacyDetails?: LegacyProspectDetails; error?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { error: 'Le corps de la demande est invalide.' };
   const input = value as Record<string, unknown>;
   const data: ProspectMutation = {};
@@ -62,15 +75,28 @@ export function validateProspectPayload(value: unknown, partial = false): { data
   if (name === null || (!partial && name === undefined)) return { error: 'Le nom de la société est obligatoire (2 à 200 caractères).' };
   if (name && name.length < 2) return { error: 'Le nom du prospect doit contenir au moins 2 caractères.' };
 
-  const sector = typeof input['sector'] === 'string' ? input['sector'].trim().slice(0, 100) : '';
-  const country = typeof input['country'] === 'string' ? input['country'].trim().slice(0, 100) : '';
-  const contactRole = typeof input['contactRole'] === 'string' ? input['contactRole'].trim().slice(0, 100) : '';
-
-  if (sector && !input['source']) {
-    data.source = sector;
+  const legacyDetails: LegacyProspectDetails = {};
+  for (const [inputKey, detailKey, maxLength] of [
+    ['contactRole', 'contactRole', 100],
+    ['country', 'country', 100],
+  ] as const) {
+    if (!Object.hasOwn(input, inputKey)) continue;
+    const raw = input[inputKey];
+    if (raw === null) legacyDetails[detailKey] = null;
+    else if (typeof raw === 'string' && raw.trim().length <= maxLength) {
+      legacyDetails[detailKey] = raw.trim() || null;
+    } else return { error: `Le champ ${inputKey} est invalide ou trop long.` };
   }
-  if ((country || contactRole || Object.hasOwn(input, 'country') || Object.hasOwn(input, 'contactRole')) && !input['notes']) {
-    data.notes = JSON.stringify({ country, contactRole });
+  if (Object.hasOwn(input, 'sector')) {
+    const sector = input['sector'];
+    if (sector !== null && typeof sector !== 'string') return { error: 'Le champ sector est invalide ou trop long.' };
+    if (typeof sector === 'string' && sector.trim().length > 100) {
+      return { error: 'Le champ sector est invalide ou trop long.' };
+    }
+    if (!Object.hasOwn(input, 'source')) {
+      if (sector === null) data.source = null;
+      else if (typeof sector === 'string') data.source = sector.trim() || null;
+    }
   }
 
   const boundedFields: [string, keyof ProspectMutation, number][] = [
@@ -126,8 +152,28 @@ export function validateProspectPayload(value: unknown, partial = false): { data
   }
 
   if (Object.keys(data).length === 0) return { error: 'Aucun champ valide à enregistrer.' };
-  return { data };
+  return { data, legacyDetails };
 }
+
+export const mergeLegacyProspectNotes = (
+  notes: string | undefined,
+  details: LegacyProspectDetails
+): string => {
+  let legacyNotes: Record<string, unknown> = {};
+  if (notes) {
+    try {
+      const parsed: unknown = JSON.parse(notes);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        legacyNotes = parsed as Record<string, unknown>;
+      } else {
+        legacyNotes = { country: notes };
+      }
+    } catch {
+      legacyNotes = { country: notes };
+    }
+  }
+  return JSON.stringify({ ...legacyNotes, ...details });
+};
 
 const actor = (req: express.Request): { id: string; email?: string; role?: string } | undefined =>
   (req as unknown as Record<string, unknown>)['user'] as { id: string; email?: string; role?: string } | undefined;
@@ -159,7 +205,7 @@ export const listProspectsHandler = async (req: express.Request, res: express.Re
 
   let query = adminClient
     .from('prospects')
-    .select('id, name, company_name, contact_name, email, phone, source, status, assigned_to, estimated_value, currency, next_follow_up, notes, created_by, created_at, updated_at', { count: 'exact' })
+    .select(PROSPECT_LIST_COLUMNS, { count: 'exact' })
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -217,7 +263,10 @@ export const createProspectHandler = async (req: express.Request, res: express.R
       return;
     }
   }
-  const { data, error } = await adminClient.from('prospects').insert({ ...parsed.data, created_by: currentUser.id }).select('*').single();
+  const insertData = Object.keys(parsed.legacyDetails || {}).length
+    ? { ...parsed.data, notes: mergeLegacyProspectNotes(parsed.data.notes, parsed.legacyDetails || {}) }
+    : parsed.data;
+  const { data, error } = await adminClient.from('prospects').insert({ ...insertData, created_by: currentUser.id }).select('*').single();
   if (error || !data) {
     sendDatabaseError(res, error || { message: 'insert returned no row' });
     return;
@@ -251,7 +300,28 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
       return;
     }
   }
-  const { data, error } = await adminClient.from('prospects').update(parsed.data).eq('id', prospectId).select('*').maybeSingle();
+  let updateData = parsed.data;
+  if (Object.keys(parsed.legacyDetails || {}).length) {
+    let existingNotes: string | undefined;
+    if (updateData.notes === undefined) {
+      const { data: existing, error: existingError } = await adminClient.from('prospects')
+        .select('notes').eq('id', prospectId).maybeSingle();
+      if (existingError) {
+        sendDatabaseError(res, existingError);
+        return;
+      }
+      if (!existing) {
+        res.status(404).json({ error: 'Prospect introuvable.' });
+        return;
+      }
+      existingNotes = typeof existing.notes === 'string' ? existing.notes : undefined;
+    }
+    updateData = {
+      ...updateData,
+      notes: mergeLegacyProspectNotes(updateData.notes ?? existingNotes, parsed.legacyDetails || {}),
+    };
+  }
+  const { data, error } = await adminClient.from('prospects').update(updateData).eq('id', prospectId).select('*').maybeSingle();
   if (error) {
     sendDatabaseError(res, error);
     return;
@@ -260,7 +330,7 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
     res.status(404).json({ error: 'Prospect introuvable.' });
     return;
   }
-  await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'UPDATE_PROSPECT', entityType: 'prospect', entityId: prospectId, details: { fields: Object.keys(parsed.data) }, ipAddress: req.ip || null });
+  await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'UPDATE_PROSPECT', entityType: 'prospect', entityId: prospectId, details: { fields: Object.keys(updateData) }, ipAddress: req.ip || null });
   res.json({ prospect: data });
 };
 

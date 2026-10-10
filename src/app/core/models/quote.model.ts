@@ -17,6 +17,7 @@ export interface SalesQuote {
   id: string;
   quoteNumber: string;
   prospectId: string;
+  opportunityId?: string | null;
   prospectName: string;
   assignedTo: string | null;
   assignedToName: string | null;

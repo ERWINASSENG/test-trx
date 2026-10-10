@@ -211,8 +211,8 @@
 </main>
 
 @if (isEditorOpen()) {
-  <div class="modal-backdrop" (click)="closeEditor()">
-    <section class="quote-editor" role="dialog" aria-modal="true" aria-labelledby="editor-title" (click)="$event.stopPropagation()">
+  <div class="modal-backdrop" role="presentation" tabindex="-1" (click)="closeEditor()" (keydown.escape)="closeEditor()">
+    <section class="quote-editor" role="dialog" aria-modal="true" aria-labelledby="editor-title" tabindex="-1" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
       <header class="editor-header">
         <div>
           <p class="quotes-eyebrow">{{ editingId() ? 'Mise à jour' : 'Nouvelle offre' }}</p>
@@ -250,9 +250,12 @@
 
           <label class="field-label client-field">
             Client / prospect
+            @if (opportunityId()) {
+              <span class="field-help">Cette cotation restera reliée à l’opportunité commerciale.</span>
+            }
             <div class="client-picker">
               <input type="search" [value]="clientSearch()" (input)="clientSearch.set($any($event.target).value)" placeholder="Rechercher un client…" />
-              <select [value]="prospectId()" (change)="prospectId.set($any($event.target).value)">
+              <select [value]="prospectId()" [disabled]="!!opportunityId()" (change)="prospectId.set($any($event.target).value)">
                 <option value="">Sélectionner un client</option>
                 @for (prospect of filteredProspects(); track prospect.id) {
                   <option [value]="prospect.id">{{ prospect.companyName || prospect.name }}</option>

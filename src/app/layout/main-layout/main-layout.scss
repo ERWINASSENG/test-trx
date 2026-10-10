@@ -176,6 +176,14 @@
   border-bottom: 2px solid var(--brand-red) !important;
 }
 
+#topbar-crm-nav {
+  gap: 2px;
+
+  .nav-link {
+    padding-inline: 6px;
+  }
+}
+
 @keyframes dropdownFadeIn {
   from {
     opacity: 0;

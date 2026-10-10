@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 
 export interface QuoteInput {
   prospectId: string;
+  opportunityId?: string | null;
   assignedTo?: string;
   title: string;
   currency: string;
@@ -226,6 +227,8 @@ export class QuoteService {
       id: String(row['id'] ?? ''),
       quoteNumber: String(row['quoteNumber'] ?? row['quote_number'] ?? ''),
       prospectId: String(row['prospectId'] ?? row['prospect_id'] ?? ''),
+      opportunityId: typeof row['opportunityId'] === 'string' ? row['opportunityId']
+        : typeof row['opportunity_id'] === 'string' ? row['opportunity_id'] : null,
       prospectName: String(row['prospectName'] ?? ''),
       assignedTo: typeof row['assignedTo'] === 'string' ? row['assignedTo']
         : typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,

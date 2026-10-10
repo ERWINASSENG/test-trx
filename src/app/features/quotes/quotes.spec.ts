@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { QuoteService } from '../../core/services/quote.service';
@@ -78,6 +79,7 @@ describe('QuotesComponent', () => {
         { provide: QuoteService, useValue: quoteService },
         { provide: AccessControlService, useValue: accessControl },
         { provide: AuthService, useValue: authService },
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
       ],
     }).compileComponents();
 

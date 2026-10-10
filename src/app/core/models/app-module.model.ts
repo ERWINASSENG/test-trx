@@ -40,10 +40,10 @@ export const APP_MODULES: readonly AppModule[] = [
   },
   {
     id: 'prospects',
-    label: 'Prospects',
+    label: 'Contact',
     description: 'Suivi des contacts et opportunités commerciales',
     route: '/prospects',
-    icon: '/assets/module-icons/prospects.svg',
+    icon: '/assets/module-icons/contacts.svg',
     accent: '#0b5ed7',
     permissionKey: 'prospects.read',
   },
@@ -55,6 +55,15 @@ export const APP_MODULES: readonly AppModule[] = [
     icon: '/assets/module-icons/quotes.svg',
     accent: '#2563eb',
     permissionKey: 'quotes.read',
+  },
+  {
+    id: 'crm-commercial',
+    label: 'CRM Commercial',
+    description: 'Suivre les opportunités, clients, relances et campagnes',
+    route: '/crm-commercial',
+    icon: '/assets/module-icons/crm-commercial.svg',
+    accent: '#0b5ed7',
+    permissionKey: 'crm.read',
   },
   {
     id: 'dossiers',

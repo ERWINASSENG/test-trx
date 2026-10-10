@@ -21,6 +21,8 @@ export interface NavOption {
   permissionKey: string;
 }
 
+type CrmView = 'pipeline' | 'clients' | 'activities' | 'campaigns';
+
 @Component({
   selector: 'app-main-layout',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, MatIconModule, CashierImportModal],
@@ -57,6 +59,17 @@ export class MainLayout {
     ),
     { initialValue: this.router.url }
   );
+  public readonly isCrmRoute = computed(() => this.currentUrl().split(/[?#]/)[0] === '/crm-commercial');
+  public readonly crmMenuItems: { id: CrmView; label: string }[] = [
+    { id: 'pipeline', label: 'Pipeline' },
+    { id: 'clients', label: 'Clients' },
+    { id: 'activities', label: 'Tâches & relances' },
+    { id: 'campaigns', label: 'Campagnes' },
+  ];
+  public readonly activeCrmView = computed<CrmView>(() => {
+    const view = this.router.parseUrl(this.currentUrl()).queryParams['view'];
+    return this.crmMenuItems.find((item) => item.id === view)?.id ?? 'pipeline';
+  });
 
   // Indicateur si la route active est sous Configuration
   public readonly isConfigActive = computed(() => {

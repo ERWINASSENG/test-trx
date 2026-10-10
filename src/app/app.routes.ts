@@ -58,7 +58,7 @@ export const routes: Routes = [
           import('./features/prospects/prospects').then((m) => m.ProspectsComponent),
         canActivate: [roleGuard],
         data: { permission: 'prospects.read' },
-        title: 'Transmex - Prospects',
+        title: 'Transmex - Contact',
       },
       {
         path: 'quotes',
@@ -67,6 +67,14 @@ export const routes: Routes = [
         canActivate: [roleGuard],
         data: { permission: 'quotes.read' },
         title: 'Transmex - Cotations',
+      },
+      {
+        path: 'crm-commercial',
+        loadComponent: () =>
+          import('./features/crm/crm').then((m) => m.CrmComponent),
+        canActivate: [roleGuard],
+        data: { permission: 'crm.read' },
+        title: 'Transmex - CRM Commercial',
       },
       {
         path: 'dossiers',

@@ -1,0 +1,15 @@
+<!-- Source: Odoo Icons archive, icon only/svg/contacts.svg -->
+<svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_7758_19993)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M39 46C43.4183 46 47 42.4183 47 38L47 8L13 8C10.7909 8 9 9.79086 9 12L9 46L39 46Z" fill="#FC868B"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M39 42C41.2091 42 43 40.2091 43 38L43 4L13 4C8.58173 4 5 7.58172 5 12L5 42L39 42Z" fill="#1AD3BB"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M43 38C43 40.2091 41.2091 42 39 42L9 42L9 12C9 9.79086 10.7909 8 13 8L43 8L43 38Z" fill="#1A6F66"/>
+<path d="M25 28C23.8181 28 22.6478 28.2328 21.5558 28.6851C20.4639 29.1374 19.4718 29.8003 18.636 30.636C17.8003 31.4718 17.1374 32.4639 16.6851 33.5558C16.2328 34.6478 16 35.8181 16 37H26C27.1819 37 28.3522 36.7672 29.4442 36.3149C30.5361 35.8626 31.5282 35.1997 32.364 34.364C33.1997 33.5282 33.8626 32.5361 34.3149 31.4442C34.7672 30.3522 35 29.1819 35 28H25Z" fill="white"/>
+<circle cx="25" cy="19" r="6" fill="white"/>
+</g>
+<defs>
+<clipPath id="clip0_7758_19993">
+<rect width="50" height="50" fill="white"/>
+</clipPath>
+</defs>
+</svg>

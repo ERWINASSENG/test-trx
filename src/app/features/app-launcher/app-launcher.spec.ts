@@ -17,6 +17,8 @@ describe('AppLauncher', () => {
       'dashboard.view',
       'cashier.read',
       'quotes.read',
+      'crm.read',
+      'prospects.read',
       'configuration.read',
     ].includes(key)),
   };
@@ -67,6 +69,21 @@ describe('AppLauncher', () => {
   it('devrait afficher l’icône SVG Cotations issue des assets du lanceur', () => {
     const tile = fixture.nativeElement.querySelector('a[href="/quotes"]');
     expect(tile?.querySelector('img')?.getAttribute('src')).toBe('/assets/module-icons/quotes.svg');
+    expect(tile?.querySelector('mat-icon')).toBeNull();
+  });
+
+  it('devrait utiliser l’icône CRM du pack officiel dans la tuile du lanceur', () => {
+    const tile = fixture.nativeElement.querySelector('a[href="/crm-commercial"]');
+
+    expect(tile?.querySelector('img')?.getAttribute('src')).toBe('/assets/module-icons/crm-commercial.svg');
+    expect(tile?.querySelector('mat-icon')).toBeNull();
+  });
+
+  it('devrait afficher le module Contact avec l’icône Contacts du pack officiel', () => {
+    const tile = fixture.nativeElement.querySelector('a[href="/prospects"]');
+
+    expect(tile?.textContent).toContain('Contact');
+    expect(tile?.querySelector('img')?.getAttribute('src')).toBe('/assets/module-icons/contacts.svg');
     expect(tile?.querySelector('mat-icon')).toBeNull();
   });
 

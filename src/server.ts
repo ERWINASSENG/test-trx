@@ -46,6 +46,18 @@ import {
   updateQuoteTemplateHandler,
 } from './server/quotes';
 import {
+  createCrmActivityHandler,
+  createCrmCampaignHandler,
+  createCrmClientHandler,
+  createCrmContactHandler,
+  createCrmDossierHandler,
+  createCrmOpportunityHandler,
+  getCrmOverviewHandler,
+  prepareCrmCampaignHandler,
+  updateCrmActivityHandler,
+  updateCrmOpportunityHandler,
+} from './server/crm';
+import {
   createJournalHandler,
   deleteJournalHandler,
   getJournalsHandler,
@@ -1165,6 +1177,18 @@ app.get('/api/quotes', requireAuth, requirePermission('quotes.read', resolveQuot
 app.post('/api/quotes', requireAuth, requirePermission('quotes.create', resolveQuoteCollectionContext), createQuoteHandler);
 app.patch('/api/quotes/:id', requireAuth, requirePermission('quotes.update', resolveQuoteOwnerContext), updateQuoteHandler);
 app.delete('/api/quotes/:id', requireAuth, requirePermission('quotes.delete', resolveQuoteOwnerContext), deleteQuoteHandler);
+
+// Module CRM Commercial : isolation des données par commercial, sauf permission d’équipe explicite.
+app.get('/api/crm/overview', requireAuth, requirePermission('crm.read'), getCrmOverviewHandler);
+app.post('/api/crm/clients', requireAuth, requirePermission('crm.create'), createCrmClientHandler);
+app.post('/api/crm/clients/:prospectId/contacts', requireAuth, requirePermission('crm.create'), createCrmContactHandler);
+app.post('/api/crm/opportunities', requireAuth, requirePermission('crm.create'), createCrmOpportunityHandler);
+app.patch('/api/crm/opportunities/:id', requireAuth, requirePermission('crm.update'), updateCrmOpportunityHandler);
+app.post('/api/crm/opportunities/:id/dossier', requireAuth, requirePermission('crm.create'), createCrmDossierHandler);
+app.post('/api/crm/activities', requireAuth, requirePermission('crm.create'), createCrmActivityHandler);
+app.patch('/api/crm/activities/:id', requireAuth, requirePermission('crm.update'), updateCrmActivityHandler);
+app.post('/api/crm/campaigns', requireAuth, requirePermission('crm.campaigns.manage'), createCrmCampaignHandler);
+app.post('/api/crm/campaigns/:id/prepare', requireAuth, requirePermission('crm.campaigns.manage'), prepareCrmCampaignHandler);
 
 // Module Prospects : contrôles serveur dédiés à chaque capacité.
 app.get('/api/prospects/assignees', requireAuth, requirePermission('prospects.read'), listProspectAssigneesHandler);

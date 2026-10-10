@@ -1,0 +1,318 @@
+<main class="crm-page" aria-labelledby="crm-title">
+  <app-module-control-panel>
+    <div controlPanelStart class="flex items-center gap-2 sm:gap-3">
+      @if (canCreateCurrentItem()) {
+        <button
+          type="button"
+          (click)="openNewDialog()"
+          class="inline-flex items-center gap-1 rounded border border-white/15 bg-[#0b5ed7] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#084db1] active:scale-95 dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb]"
+          id="crm-control-create">
+          Nouveau
+        </button>
+      }
+      <div class="hidden flex-col leading-tight sm:flex" aria-label="Fil d’Ariane">
+        <span class="text-xs font-bold text-[#0b5ed7] dark:text-[#8cc2ff]">CRM Commercial</span>
+        <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ currentTabLabel() }}</span>
+      </div>
+    </div>
+    <div controlPanelCenter class="w-full">
+      <div class="flex w-full items-center rounded border border-slate-300 bg-white px-2.5 py-1 text-xs transition focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]">
+        <mat-icon aria-hidden="true" class="mr-2 !h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
+        <input
+          type="search"
+          [value]="search()"
+          (input)="setSearch($any($event.target).value)"
+          [placeholder]="tab() === 'pipeline' ? 'Rechercher une opportunité…' : tab() === 'clients' ? 'Rechercher une société…' : tab() === 'activities' ? 'Rechercher une tâche…' : 'Rechercher une campagne…'"
+          aria-label="Rechercher dans le CRM"
+          class="min-w-[60px] flex-grow bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
+          id="crm-control-search" />
+      </div>
+    </div>
+    <div controlPanelEnd class="flex items-center gap-3">
+      <span class="select-none text-xs font-medium text-slate-600 dark:text-slate-300" aria-live="polite">{{ paginationLabel() }}</span>
+      <div class="flex items-center overflow-hidden rounded border border-slate-300 bg-white dark:border-[#343a40] dark:bg-white/5" aria-label="Pagination du CRM">
+        <button type="button" (click)="previousPage()" [disabled]="currentPage() <= 1 || resultCount() === 0" class="p-1 text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page précédente" title="Précédent">
+          <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-[15px]">chevron_left</mat-icon>
+        </button>
+        <button type="button" (click)="nextPage()" [disabled]="currentPage() >= pageCount()" class="border-l border-slate-300 p-1 text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#343a40] dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page suivante" title="Suivant">
+          <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-[15px]">chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+  </app-module-control-panel>
+
+  <div class="crm-content">
+    <header class="crm-heading">
+      <div>
+        <p class="crm-eyebrow">Espace commercial</p>
+        <h1 id="crm-title">CRM Commercial</h1>
+        <p class="crm-subtitle">Du premier contact au dossier d’expédition, sans ressaisie client.</p>
+      </div>
+      @if (crmService.canManageTeam()) {
+        <span class="team-access">Vue équipe</span>
+      }
+    </header>
+
+    @if (feedback()) { <p class="crm-feedback" role="status">{{ feedback() }}</p> }
+    @if (crmService.error()) { <p class="crm-error" role="alert">{{ crmService.error() }}</p> }
+    @if (crmService.isLoading()) { <p class="crm-loading" role="status">Chargement des données commerciales…</p> }
+
+    @if (tab() === 'pipeline') {
+    <section class="pipeline-summary" aria-label="Résumé du pipeline">
+      <div><span>Opportunités ouvertes</span><strong>{{ openOpportunityCount() }}</strong></div>
+      <div><span>Valeur du pipeline</span><strong>{{ formatAmount(openPipelineValue(), 'XAF') }}</strong></div>
+      <div><span>Relances à faire</span><strong>{{ pendingActivities().length }}</strong></div>
+      <div><span>Affichage</span><strong>{{ crmService.canManageTeam() ? 'Équipe' : 'Mes dossiers' }}</strong></div>
+    </section>
+
+    @if (crmService.clients().length === 0) {
+      <section class="crm-empty">
+        <h2>Commencez par enregistrer une société</h2>
+        <p>Une société ne possède qu’une fiche partagée entre prospects, cotations, CRM et dossiers.</p>
+        @if (canCreate()) { <button type="button" class="primary-action" (click)="openClientDialog()">Créer une fiche société</button> }
+      </section>
+    } @else {
+      <div class="pipeline-board" aria-label="Opportunités par étape">
+        @for (column of stageColumns(); track column.stage) {
+          <section class="pipeline-column" [class]="stageClass(column.stage)" [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
+            <header class="pipeline-column-heading">
+              <div><span class="stage-dot" aria-hidden="true"></span><h2>{{ column.label }}</h2></div>
+              <span class="column-count">{{ column.opportunities.length }}</span>
+            </header>
+            @for (opportunity of column.opportunities; track opportunity.id) {
+              <article class="opportunity-card">
+                <div class="card-topline">
+                  <span class="transport-chip">{{ modeLabel(opportunity.transportMode) }}</span>
+                  @if (opportunity.direction) { <span class="direction-label">{{ directionLabel(opportunity.direction) }}</span> }
+                  @if (canUpdate()) {
+                    <label class="sr-only" [for]="'stage-' + opportunity.id">Modifier l’étape de {{ opportunity.title }}</label>
+                    <select class="stage-select" [id]="'stage-' + opportunity.id" [value]="opportunity.stage"
+                      (change)="changeStage(opportunity, $any($event.target).value)">
+                      @for (stage of stages; track stage) { <option [value]="stage">{{ stageLabel(stage) }}</option> }
+                    </select>
+                  }
+                </div>
+                <h3>{{ opportunity.client.companyName || opportunity.client.name }}</h3>
+                <p class="opportunity-title">{{ opportunity.title }}</p>
+                @if (opportunity.origin || opportunity.destination) {
+                  <p class="route-line">{{ opportunity.origin || 'Origine à définir' }} <span>→</span> {{ opportunity.destination || 'Destination à définir' }}</p>
+                }
+                <div class="opportunity-value">{{ formatAmount(opportunity.estimatedValue, opportunity.currency) }}</div>
+                <div class="card-meta">
+                  <span>{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
+                  @if (opportunity.expectedCloseDate) {
+                    <span>{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
+                  }
+                  @if (opportunity.assignedToName) { <span>{{ opportunity.assignedToName }}</span> }
+                </div>
+                <div class="card-links">
+                  @if (opportunity.quoteNumber) {
+                    <span class="linked-record">{{ opportunity.quoteNumber }}</span>
+                  } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
+                    <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
+                      Créer une cotation
+                    </a>
+                  }
+                  @if (opportunity.dossierNumber) {
+                    <span class="linked-record">{{ opportunity.dossierNumber }}</span>
+                  } @else if (opportunity.stage === 'won' && canCreate()) {
+                    <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
+                      Créer le dossier
+                    </button>
+                  }
+                </div>
+                <footer class="card-actions">
+                  @if (canCreate()) {
+                    <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">Ajouter un rappel</button>
+                  }
+                  <span class="sr-only">Étape : {{ column.label }}</span>
+                </footer>
+              </article>
+            } @empty {
+              <p class="column-empty">Aucune opportunité</p>
+            }
+          </section>
+        }
+      </div>
+    }
+    }
+
+    @if (tab() === 'clients') {
+    @if (filteredClients().length === 0) {
+      <section class="crm-empty"><h2>Aucune société trouvée</h2><p>Créez ou recherchez une fiche dans ce fichier clients/prospects unique.</p></section>
+    } @else {
+      <div class="client-workspace">
+        <section class="client-list" aria-label="Sociétés et prospects">
+          @for (client of visibleClients(); track client.id) {
+            <button type="button" class="client-row" [class.selected]="selectedClientId() === client.id"
+              (click)="selectedClientId.set(client.id)">
+              <span class="client-monogram">{{ (client.companyName || client.name).slice(0, 1).toUpperCase() }}</span>
+              <span class="client-row-info"><strong>{{ client.companyName || client.name }}</strong><small>{{ client.country || 'Pays à renseigner' }} · {{ client.sector || 'Service à définir' }}</small></span>
+              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
+            </button>
+          }
+        </section>
+        @if (selectedClient(); as client) {
+          <article class="client-profile">
+            <header>
+              <div><p class="crm-eyebrow">Fiche société unique</p><h2>{{ client.companyName || client.name }}</h2></div>
+              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
+            </header>
+            <dl class="client-details">
+              <div><dt>Contact principal</dt><dd>{{ client.contactName || 'À renseigner' }}@if (client.contactRole) { <small>{{ client.contactRole }}</small> }</dd></div>
+              <div><dt>E-mail</dt><dd>{{ client.email || 'Non renseigné' }}</dd></div>
+              <div><dt>Téléphone</dt><dd>{{ client.phone || 'Non renseigné' }}</dd></div>
+              <div><dt>Pays / service</dt><dd>{{ client.country || 'À renseigner' }} · {{ client.sector || 'À définir' }}</dd></div>
+            </dl>
+            <div class="contacts-heading"><div><h3>Autres contacts</h3><span>{{ selectedClientContacts().length }}</span></div>
+              @if (canCreate()) { <button type="button" class="secondary-action" (click)="openContactDialog(client)">Ajouter un contact</button> }
+            </div>
+            @if (selectedClientContacts().length > 0) {
+              <div class="contact-list">
+                @for (contact of selectedClientContacts(); track contact.id) {
+                  <div class="contact-row"><div><strong>{{ contact.fullName }}</strong><span>{{ contact.jobTitle || 'Fonction non précisée' }}</span></div><div class="contact-reach"><span>{{ contact.email || 'E-mail non renseigné' }}</span><span>{{ contact.phone || 'Téléphone non renseigné' }}</span></div></div>
+                }
+              </div>
+            } @else {
+              <p class="inline-empty">Ajoutez les interlocuteurs achats, opérations, finance ou douane de cette société.</p>
+            }
+            <footer class="profile-actions">
+              @if (canCreate()) { <button type="button" class="primary-action" (click)="openOpportunityDialog(client.id)">Nouvelle opportunité</button> }
+              <a class="secondary-action" [routerLink]="['/crm-commercial']" [queryParams]="{ view: 'pipeline' }">Voir dans le pipeline</a>
+            </footer>
+          </article>
+        }
+      </div>
+    }
+    }
+
+    @if (tab() === 'activities') {
+    <section class="activity-section" aria-labelledby="activities-title">
+      <header class="section-heading"><div><p class="crm-eyebrow">Prochaines actions</p><h2 id="activities-title">Tâches et relances</h2></div><span>{{ pendingActivities().length }} à faire</span></header>
+      @if (filteredActivities().length === 0) {
+        <div class="crm-empty compact"><h3>Aucun rappel planifié</h3><p>Planifiez un appel, un e-mail ou un rendez-vous pour garder le fil.</p></div>
+      } @else {
+        <div class="activity-list">
+          @for (activity of visibleActivities(); track activity.id) {
+            <article class="activity-row" [class.is-complete]="activity.status === 'completed'">
+              <div class="activity-main"><div><span class="activity-kind">{{ activityLabel(activity.activityType) }}</span><span class="activity-client">{{ activity.clientName }}</span></div><h3>{{ activity.title }}</h3>@if (activity.notes) { <p>{{ activity.notes }}</p> }</div>
+              <div class="activity-due"><span>{{ activity.dueAt ? (activity.dueAt | date:'dd/MM/yyyy à HH:mm') : 'Sans échéance' }}</span><small>{{ activity.status === 'completed' ? 'Terminée' : 'À faire' }}</small></div>
+              @if (canUpdate() && activity.status === 'pending') {
+                <button type="button" class="complete-action" (click)="completeActivity(activity)">Terminer</button>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+    }
+
+    @if (tab() === 'campaigns') {
+    <section class="campaign-section" aria-labelledby="campaigns-title">
+      <header class="section-heading"><div><p class="crm-eyebrow">Segmentation commerciale</p><h2 id="campaigns-title">Campagnes planifiées</h2></div><span>Préparation manuelle · Aucun envoi automatique</span></header>
+      @if (filteredCampaigns().length === 0) {
+        <div class="crm-empty compact"><h3>Aucune campagne planifiée</h3><p>Définissez une cible par statut, pays ou mode de transport. La préparation n’envoie aucun message.</p></div>
+      } @else {
+        <div class="campaign-list">
+          @for (campaign of visibleCampaigns(); track campaign.id) {
+            <article class="campaign-card">
+              <div class="campaign-main"><span class="campaign-status">{{ campaign.status === 'planned' ? 'Planifiée' : campaign.status }}</span><h3>{{ campaign.name }}</h3><p>@if (campaign.startsAt) { {{ campaign.startsAt | date:'dd/MM/yyyy' }} } @else { Date à définir }@if (campaign.endsAt) { <span> · jusqu’au {{ campaign.endsAt | date:'dd/MM/yyyy' }}</span> }</p>@if (campaign.notes) { <small>{{ campaign.notes }}</small> }</div>
+              <div class="audience-count"><strong>{{ campaign.audienceCount }}</strong><span>sociétés ciblées</span></div>
+              <button type="button" class="secondary-action" (click)="prepareCampaign(campaign.id)">Préparer le ciblage</button>
+            </article>
+          }
+        </div>
+      }
+      <p class="campaign-safety">Le CRM prépare uniquement une liste de destinataires. L’envoi d’e-mails ou de SMS reste manuel.</p>
+    </section>
+    }
+  </div>
+</main>
+
+@if (dialog()) {
+  <div class="crm-backdrop" role="presentation" tabindex="-1" (click)="closeDialog()" (keydown.escape)="closeDialog()">
+    <section class="crm-dialog" role="dialog" aria-modal="true" tabindex="-1" [attr.aria-labelledby]="'dialog-title-' + dialog()" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+      <header class="dialog-header"><div><p class="crm-eyebrow">CRM Commercial</p>
+        <h2 [id]="'dialog-title-' + dialog()">{{ dialog() === 'client' ? 'Nouvelle société' : dialog() === 'opportunity' ? 'Nouvelle opportunité' : dialog() === 'activity' ? 'Planifier un rappel' : dialog() === 'campaign' ? 'Planifier une campagne' : dialog() === 'win' ? 'Confirmer un contrat signé' : dialog() === 'dossier' ? 'Créer un dossier d’expédition' : 'Ajouter un contact' }}</h2>
+      </div><button type="button" class="close-action" (click)="closeDialog()">Fermer</button></header>
+
+      @if (formError()) { <p class="crm-error" role="alert">{{ formError() }}</p> }
+
+      @if (dialog() === 'client') {
+        <form class="dialog-form" (ngSubmit)="saveClient()">
+          <label>Société *<input name="companyName" required maxlength="200" [ngModel]="clientDraft().companyName" (ngModelChange)="setClientField('companyName', $event)" /></label>
+          <div class="form-two"><label>Contact principal<input name="contactName" maxlength="200" [ngModel]="clientDraft().contactName" (ngModelChange)="setClientField('contactName', $event)" /></label><label>Fonction<input name="contactRole" maxlength="100" [ngModel]="clientDraft().contactRole" (ngModelChange)="setClientField('contactRole', $event)" /></label></div>
+          <div class="form-two"><label>E-mail<input name="email" type="email" maxlength="320" [ngModel]="clientDraft().email" (ngModelChange)="setClientField('email', $event)" /></label><label>Téléphone<input name="phone" type="tel" maxlength="40" [ngModel]="clientDraft().phone" (ngModelChange)="setClientField('phone', $event)" /></label></div>
+          <div class="form-two"><label>Pays<input name="country" maxlength="100" [ngModel]="clientDraft().country" (ngModelChange)="setClientField('country', $event)" /></label><label>Service / secteur<input name="sector" maxlength="100" placeholder="Maritime, aérien…" [ngModel]="clientDraft().sector" (ngModelChange)="setClientField('sector', $event)" /></label></div>
+          <p class="form-note">La société sera ajoutée à la fiche unique Prospects / Clients et attribuée à votre compte.</p>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Enregistrer</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'opportunity') {
+        <form class="dialog-form" (ngSubmit)="saveOpportunity()">
+          <label>Société *<select name="prospectId" required [ngModel]="opportunityDraft().prospectId" (ngModelChange)="setOpportunity('prospectId', $event)"><option value="">Choisir une société existante</option>@for (client of crmService.clients(); track client.id) { <option [value]="client.id">{{ client.companyName || client.name }}</option> }</select></label>
+          <label>Nom de l’opportunité *<input name="title" required maxlength="200" placeholder="Ex. Import de pièces industrielles" [ngModel]="opportunityDraft().title" (ngModelChange)="setOpportunity('title', $event)" /></label>
+          <div class="form-two"><label>Transport<select name="transportMode" [ngModel]="opportunityDraft().transportMode" (ngModelChange)="setOpportunity('transportMode', $event)"><option value="">À préciser</option><option value="sea">Maritime</option><option value="air">Aérien</option></select></label><label>Sens<select name="direction" [ngModel]="opportunityDraft().direction" (ngModelChange)="setOpportunity('direction', $event)"><option value="">À préciser</option><option value="import">Import</option><option value="export">Export</option></select></label></div>
+          <div class="form-two"><label>Origine<input name="origin" maxlength="160" [ngModel]="opportunityDraft().origin" (ngModelChange)="setOpportunity('origin', $event)" /></label><label>Destination<input name="destination" maxlength="160" [ngModel]="opportunityDraft().destination" (ngModelChange)="setOpportunity('destination', $event)" /></label></div>
+          <label>Marchandise<textarea name="goodsDescription" rows="2" maxlength="2000" [ngModel]="opportunityDraft().goodsDescription" (ngModelChange)="setOpportunity('goodsDescription', $event)"></textarea></label>
+          <div class="form-three"><label>Poids (kg)<input name="weightKg" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().weightKg" (ngModelChange)="setOpportunity('weightKg', $event)" /></label><label>Volume (m³)<input name="volumeM3" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().volumeM3" (ngModelChange)="setOpportunity('volumeM3', $event)" /></label><label>Incoterm<input name="incoterm" maxlength="20" [ngModel]="opportunityDraft().incoterm" (ngModelChange)="setOpportunity('incoterm', $event)" /></label></div>
+          <div class="form-three"><label>Valeur estimée<input name="estimatedValue" type="number" min="0" step="0.01" [ngModel]="opportunityDraft().estimatedValue" (ngModelChange)="setOpportunity('estimatedValue', $event)" /></label><label>Devise<input name="currency" maxlength="3" [ngModel]="opportunityDraft().currency" (ngModelChange)="setOpportunity('currency', $event)" /></label><label>Clôture prévue<input name="expectedCloseDate" type="date" [ngModel]="opportunityDraft().expectedCloseDate" (ngModelChange)="setOpportunity('expectedCloseDate', $event)" /></label></div>
+          <label>Notes<textarea name="notes" rows="2" maxlength="10000" [ngModel]="opportunityDraft().notes" (ngModelChange)="setOpportunity('notes', $event)"></textarea></label>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Ajouter au pipeline</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'contact') {
+        <form class="dialog-form" (ngSubmit)="saveContact()">
+          <p class="form-note">Société : <strong>{{ selectedClient()?.companyName || selectedClient()?.name }}</strong></p>
+          <label>Nom complet *<input name="fullName" required maxlength="200" [ngModel]="contactDraft().fullName" (ngModelChange)="setContactField('fullName', $event)" /></label>
+          <label>Fonction<input name="jobTitle" maxlength="120" placeholder="Achats, opérations, finance…" [ngModel]="contactDraft().jobTitle" (ngModelChange)="setContactField('jobTitle', $event)" /></label>
+          <div class="form-two"><label>E-mail<input name="contactEmail" type="email" maxlength="320" [ngModel]="contactDraft().email" (ngModelChange)="setContactField('email', $event)" /></label><label>Téléphone<input name="contactPhone" type="tel" maxlength="40" [ngModel]="contactDraft().phone" (ngModelChange)="setContactField('phone', $event)" /></label></div>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Ajouter le contact</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'activity') {
+        <form class="dialog-form" (ngSubmit)="saveActivity()">
+          <label>Société *<select name="activityProspect" required [ngModel]="activityDraft().prospectId" (ngModelChange)="setActivityField('prospectId', $event)"><option value="">Choisir</option>@for (client of crmService.clients(); track client.id) { <option [value]="client.id">{{ client.companyName || client.name }}</option> }</select></label>
+          <label>Opportunité<select name="activityOpportunity" [ngModel]="activityDraft().opportunityId" (ngModelChange)="setActivityField('opportunityId', $event)"><option value="">Aucune opportunité liée</option>@for (opportunity of crmService.opportunities(); track opportunity.id) { @if (opportunity.prospectId === activityDraft().prospectId) { <option [value]="opportunity.id">{{ opportunity.title }}</option> } }</select></label>
+          <div class="form-two"><label>Type<select name="activityType" [ngModel]="activityDraft().activityType" (ngModelChange)="setActivityField('activityType', $event)">@for (item of activityTypes; track item[0]) { <option [value]="item[0]">{{ item[1] }}</option> }</select></label><label>Échéance<input name="dueAt" type="datetime-local" [ngModel]="activityDraft().dueAt" (ngModelChange)="setActivityField('dueAt', $event)" /></label></div>
+          <label>Objet du rappel *<input name="activityTitle" required maxlength="200" placeholder="Ex. Confirmer l’origine de l’expédition" [ngModel]="activityDraft().title" (ngModelChange)="setActivityField('title', $event)" /></label>
+          <label>Notes<textarea name="activityNotes" rows="3" maxlength="5000" [ngModel]="activityDraft().notes" (ngModelChange)="setActivityField('notes', $event)"></textarea></label>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Planifier</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'campaign') {
+        <form class="dialog-form" (ngSubmit)="saveCampaign()">
+          <label>Nom de la campagne *<input name="campaignName" required maxlength="200" [ngModel]="campaignDraft().name" (ngModelChange)="setCampaignField('name', $event)" /></label>
+          <div class="form-two"><label>Date de début<input name="campaignStart" type="date" [ngModel]="campaignDraft().startsAt" (ngModelChange)="setCampaignField('startsAt', $event)" /></label><label>Date de fin<input name="campaignEnd" type="date" [ngModel]="campaignDraft().endsAt" (ngModelChange)="setCampaignField('endsAt', $event)" /></label></div>
+          <label>Pays ciblés <small>séparés par des virgules</small><input name="campaignCountries" placeholder="Cameroun, Gabon" [ngModel]="campaignDraft().countries" (ngModelChange)="setCampaignField('countries', $event)" /></label>
+          <fieldset><legend>Statuts des sociétés</legend><div class="checkbox-row">@for (status of clientStatuses; track status[0]) { <label><input type="checkbox" [checked]="campaignDraft().statuses.includes(status[0])" (change)="toggleCampaignStatus(status[0])" />{{ status[1] }}</label> }</div></fieldset>
+          <fieldset><legend>Modes de transport</legend><div class="checkbox-row"><label><input type="checkbox" [checked]="campaignDraft().transportModes.includes('sea')" (change)="toggleCampaignMode('sea')" />Maritime</label><label><input type="checkbox" [checked]="campaignDraft().transportModes.includes('air')" (change)="toggleCampaignMode('air')" />Aérien</label></div></fieldset>
+          <label>Notes<textarea name="campaignNotes" rows="2" maxlength="5000" [ngModel]="campaignDraft().notes" (ngModelChange)="setCampaignField('notes', $event)"></textarea></label>
+          <p class="form-note">Cette action planifie la campagne. Les destinataires pourront être préparés plus tard; aucun message ne sera envoyé.</p>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Planifier</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'win') {
+        <form class="dialog-form" (ngSubmit)="confirmWon()">
+          <p class="form-note">La cotation doit être acceptée ou le contrat signé. Pour confirmer une signature sans cotation acceptée, indiquez la référence du contrat.</p>
+          <label>Référence du contrat signé *<input name="contractReference" required maxlength="120" [ngModel]="contractReference()" (ngModelChange)="contractReference.set($event)" /></label>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Confirmer gagné</button></footer>
+        </form>
+      }
+
+      @if (dialog() === 'dossier') {
+        <form class="dialog-form" (ngSubmit)="saveDossier()">
+          <p class="form-note">Après votre vérification, ce dossier sera créé et associé à la société et à l’opportunité.</p>
+          <label>Numéro de dossier *<input name="dossierNumber" required maxlength="100" [ngModel]="dossierDraft().noDossier" (ngModelChange)="setDossierField('noDossier', $event)" /></label>
+          <label>Informations utiles<textarea name="dossierDescription" rows="3" maxlength="1000" [ngModel]="dossierDraft().description" (ngModelChange)="setDossierField('description', $event)"></textarea></label>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Créer le dossier</button></footer>
+        </form>
+      }
+    </section>
+  </div>
+}

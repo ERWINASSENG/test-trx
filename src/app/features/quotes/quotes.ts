@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
+import { ActivatedRoute } from '@angular/router';
 import {
   QUOTE_COLUMN_TYPES,
   QUOTE_STATUSES,
@@ -50,6 +51,9 @@ export class QuotesComponent {
   public readonly quoteService = inject(QuoteService);
   private readonly accessControl = inject(AccessControlService);
   private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly linkedProspectId = this.route.snapshot.queryParamMap.get('prospectId');
+  private readonly linkedOpportunityId = this.route.snapshot.queryParamMap.get('opportunityId');
 
   public readonly columnTypes = QUOTE_COLUMN_TYPES;
   public readonly statuses = QUOTE_STATUSES;
@@ -113,6 +117,7 @@ export class QuotesComponent {
   public readonly feedback = signal<string | null>(null);
   public readonly clientSearch = signal('');
   public readonly prospectId = signal('');
+  public readonly opportunityId = signal<string | null>(null);
   public readonly assignedTo = signal('');
   public readonly title = signal('Cotation client');
   public readonly currency = signal('XAF');
@@ -134,7 +139,16 @@ export class QuotesComponent {
   public readonly isCreatingProspect = signal(false);
 
   public constructor() {
-    void this.load();
+    void this.load().then(() => {
+      const prospectId = this.linkedProspectId;
+      if (!prospectId || !this.linkedOpportunityId || !this.canCreate()) return;
+      const prospect = this.quoteService.prospects().find((item) => item.id === prospectId);
+      if (!prospect) return;
+      this.openCreate();
+      this.prospectId.set(prospect.id);
+      this.clientSearch.set(prospect.companyName || prospect.name);
+      this.opportunityId.set(this.linkedOpportunityId);
+    });
   }
 
   public async load(): Promise<void> {
@@ -199,6 +213,7 @@ export class QuotesComponent {
     this.editingId.set(null);
     this.error.set(null);
     this.prospectId.set('');
+    this.opportunityId.set(this.linkedOpportunityId);
     this.clientSearch.set('');
     this.assignedTo.set(this.canAssign() ? '' : this.currentUserId());
     this.title.set('Cotation client');
@@ -222,6 +237,7 @@ export class QuotesComponent {
     this.editingId.set(quote.id);
     this.error.set(null);
     this.prospectId.set(quote.prospectId);
+    this.opportunityId.set(quote.opportunityId || null);
     this.assignedTo.set(quote.assignedTo || '');
     this.title.set(quote.title);
     this.currency.set(quote.currency);
@@ -387,6 +403,7 @@ export class QuotesComponent {
     }
     const input: QuoteInput = {
       prospectId: this.prospectId(),
+      ...(this.opportunityId() ? { opportunityId: this.opportunityId() } : {}),
       ...(this.assignedTo() ? { assignedTo: this.assignedTo() } : {}),
       title: this.title().trim(),
       currency: this.currency().trim().toUpperCase(),

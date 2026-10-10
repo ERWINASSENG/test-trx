@@ -21,6 +21,7 @@ const MAX_ROWS = 200;
 
 interface QuoteMutation {
   prospectId?: string;
+  opportunityId?: string | null;
   assignedTo?: string | null;
   title?: string;
   currency?: string;
@@ -136,7 +137,7 @@ export function validateQuotePayload(
 ): { data?: QuoteMutation; error?: string } {
   if (!isRecord(value)) return { error: 'Le corps de la demande est invalide.' };
   const allowed = new Set([
-    'prospectId', 'assignedTo', 'title', 'currency', 'columns', 'rows',
+    'prospectId', 'opportunityId', 'assignedTo', 'title', 'currency', 'columns', 'rows',
     'totalColumnId', 'status', 'validUntil',
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
@@ -150,6 +151,13 @@ export function validateQuotePayload(
     }
     data.prospectId = value['prospectId'];
   } else if (!partial) return { error: 'Le client est obligatoire.' };
+
+  if (Object.hasOwn(value, 'opportunityId')) {
+    if (value['opportunityId'] === null || value['opportunityId'] === '') data.opportunityId = null;
+    else if (typeof value['opportunityId'] === 'string' && UUID_PATTERN.test(value['opportunityId'])) {
+      data.opportunityId = value['opportunityId'];
+    } else return { error: 'L’opportunité sélectionnée est invalide.' };
+  }
 
   if (Object.hasOwn(value, 'assignedTo')) {
     if (value['assignedTo'] === null || value['assignedTo'] === '') data.assignedTo = null;
@@ -221,6 +229,7 @@ export function validateQuotePayload(
 const mapQuoteToDatabase = (data: QuoteMutation): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   if (data.prospectId !== undefined) result['prospect_id'] = data.prospectId;
+  if (data.opportunityId !== undefined) result['opportunity_id'] = data.opportunityId;
   if (data.assignedTo !== undefined) result['assigned_to'] = data.assignedTo;
   if (data.title !== undefined) result['title'] = data.title;
   if (data.currency !== undefined) result['currency'] = data.currency;
@@ -295,6 +304,7 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   id: row['id'],
   quoteNumber: row['quote_number'],
   prospectId: row['prospect_id'],
+  opportunityId: row['opportunity_id'] ?? null,
   prospectName,
   assignedTo: row['assigned_to'],
   createdBy: row['created_by'],
@@ -548,6 +558,22 @@ export const createQuoteHandler = async (req: express.Request, res: express.Resp
     res.status(403).json({ error: 'Vous ne pouvez créer une cotation que pour un client qui vous est attribué.' });
     return;
   }
+  if (validated.data.opportunityId) {
+    const { data: opportunity, error: opportunityError } = await adminClient.from('sales_opportunities')
+      .select('id, prospect_id, assigned_to').eq('id', validated.data.opportunityId).maybeSingle();
+    if (opportunityError) {
+      sendQuoteDatabaseError(res, opportunityError);
+      return;
+    }
+    if (!opportunity || opportunity.prospect_id !== validated.data.prospectId) {
+      res.status(400).json({ error: 'L’opportunité ne correspond pas au client sélectionné.' });
+      return;
+    }
+    if (opportunity.assigned_to !== actor.id && !await hasPermission(actor.id, 'crm.team.manage', undefined)) {
+      res.status(403).json({ error: 'Vous ne pouvez créer une cotation que pour une opportunité qui vous est attribuée.' });
+      return;
+    }
+  }
   const { data, error } = await adminClient.from('sales_quotes').insert({
     ...mapQuoteToDatabase(validated.data),
     assigned_to: assignedTo,
@@ -611,6 +637,30 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
     }
   } else if (!canManageAll) {
     delete nextData.prospectId;
+  }
+  if (nextData.opportunityId !== undefined) {
+    const canManageCrmTeam = await hasPermission(actor.id, 'crm.team.manage', undefined);
+    if (nextData.opportunityId === null) {
+      if (current.opportunity_id && !canManageCrmTeam) {
+        res.status(403).json({ error: 'Vous ne pouvez pas retirer le lien CRM de cette cotation.' });
+        return;
+      }
+    } else {
+      const { data: opportunity, error: opportunityError } = await adminClient.from('sales_opportunities')
+        .select('id, prospect_id, assigned_to').eq('id', nextData.opportunityId).maybeSingle();
+      if (opportunityError) {
+        sendQuoteDatabaseError(res, opportunityError);
+        return;
+      }
+      if (!opportunity || opportunity.prospect_id !== (nextData.prospectId || current.prospect_id)) {
+        res.status(400).json({ error: 'L’opportunité ne correspond pas au client sélectionné.' });
+        return;
+      }
+      if (opportunity.assigned_to !== actor.id && !canManageCrmTeam) {
+        res.status(403).json({ error: 'Vous ne pouvez lier que vos propres opportunités à cette cotation.' });
+        return;
+      }
+    }
   }
   if (canManageAll && nextData.assignedTo !== undefined && nextData.assignedTo !== current.assigned_to) {
     if (!nextData.assignedTo) {

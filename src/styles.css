@@ -32,6 +32,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  color-scheme: light;
+
   /* ========================================================================= */
   /* PALETTE THÈME CLAIR (Confort visuel reposant, tons feutrés et doux)       */
   /* ========================================================================= */
@@ -62,6 +64,8 @@
 }
 
 html.dark, :root[data-theme="dark"], .dark {
+  color-scheme: dark;
+
   /* ========================================================================= */
   /* PALETTE THÈME SOMBRE (Odoo Enterprise ERP Sombre - Haute lisibilité)      */
   /* ========================================================================= */

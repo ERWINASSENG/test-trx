@@ -115,6 +115,21 @@ describe('MainLayout Component', () => {
     expect(items.some((i) => i.route === '/configuration')).toBe(true);
   });
 
+  it('remplace la navigation globale par les vues CRM sur la route commerciale', async () => {
+    await component.router.navigateByUrl('/crm-commercial?view=activities');
+    fixture.detectChanges();
+
+    expect(component.isCrmRoute()).toBe(true);
+    expect(component.activeCrmView()).toBe('activities');
+    expect(fixture.nativeElement.querySelector('#topbar-crm-nav')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#topbar-main-nav')).toBeNull();
+
+    component.toggleMenu();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#crm-nav-clients-mobile')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#dashboard-mobile')).toBeNull();
+  });
+
   it('devrait ouvrir, basculer et fermer le menu déroulant utilisateur', () => {
     expect(component.isUserDropdownOpen()).toBe(false);
 
