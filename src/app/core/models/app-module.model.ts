@@ -68,8 +68,8 @@ export const APP_MODULES: readonly AppModule[] = [
   {
     id: 'administration',
     label: 'Paramètres',
-    description: 'Utilisateurs, rôles et configuration',
-    route: '/admin/view',
+    description: 'Configuration générale de l’application',
+    route: '/configuration/parametres',
     icon: '/assets/module-icons/settings.svg',
     accent: '#475569',
     permissionKey: 'configuration.read',

@@ -13,9 +13,12 @@ describe('AppLauncher', () => {
     effectivePermissions: signal([]),
     isLoading: signal(false),
     loadMyPermissions: vi.fn().mockResolvedValue(undefined),
-    hasPermission: vi.fn((key: string) =>
-      key === 'dashboard.view' || key === 'cashier.read' || key === 'quotes.read'
-    ),
+    hasPermission: vi.fn((key: string) => [
+      'dashboard.view',
+      'cashier.read',
+      'quotes.read',
+      'configuration.read',
+    ].includes(key)),
   };
 
   const mockAuthService = {
@@ -52,6 +55,13 @@ describe('AppLauncher', () => {
     expect(visibleIds).toContain('dashboard');
     expect(visibleIds).toContain('comptabilite');
     expect(visibleIds).toContain('quotes');
+  });
+
+  it('devrait diriger Paramètres vers sa page de configuration, distincte de la gestion des accès', () => {
+    const settingsTile = fixture.nativeElement.querySelector('a[href="/configuration/parametres"]');
+
+    expect(settingsTile?.textContent).toContain('Paramètres');
+    expect(fixture.nativeElement.querySelector('a[href="/admin/view"]')).toBeNull();
   });
 
   it('devrait afficher l’icône SVG Cotations issue des assets du lanceur', () => {

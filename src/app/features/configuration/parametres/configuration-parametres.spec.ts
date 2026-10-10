@@ -13,4 +13,11 @@ describe('ConfigurationParametresComponent', () => {
     const component = fixture.componentInstance;
     expect(component).toBeTruthy();
   });
+
+  it('devrait afficher le titre de la page Paramètres', () => {
+    const fixture = TestBed.createComponent(ConfigurationParametresComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('h1')?.textContent?.trim()).toBe('Paramètres');
+  });
 });
