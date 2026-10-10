@@ -9,6 +9,8 @@ import { ModuleControlPanel } from '../../shared/components/module-control-panel
 import { getCountryFlagUrl } from '../../core/utils/country-flag.util';
 
 type ProspectsView = 'list' | 'kanban';
+export type ProspectSortField = 'client' | 'country' | 'sector' | 'contact' | 'phone' | 'email' | 'assignee' | 'status';
+export type SortDirection = 'asc' | 'desc';
 
 @Component({
   selector: 'app-prospects',
@@ -41,15 +43,95 @@ export class ProspectsComponent {
   public readonly canCreate = computed(() => this.accessControl.hasPermission('prospects.create'));
   public readonly canUpdate = computed(() => this.accessControl.hasPermission('prospects.update'));
   public readonly canDelete = computed(() => this.accessControl.hasPermission('prospects.delete'));
+
+  // État du tri sur le tableau des prospects
+  public readonly sortField = signal<ProspectSortField | null>(null);
+  public readonly sortDirection = signal<SortDirection>('asc');
+
+  public toggleSort(field: ProspectSortField): void {
+    if (this.sortField() === field) {
+      if (this.sortDirection() === 'asc') {
+        this.sortDirection.set('desc');
+      } else {
+        this.sortField.set(null);
+        this.sortDirection.set('asc');
+      }
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+    }
+  }
+
+  public getSortIcon(field: ProspectSortField): string {
+    if (this.sortField() !== field) return 'unfold_more';
+    return this.sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward';
+  }
+
+  public getAriaSort(field: ProspectSortField): 'ascending' | 'descending' | 'none' {
+    if (this.sortField() !== field) return 'none';
+    return this.sortDirection() === 'asc' ? 'ascending' : 'descending';
+  }
+
+  public readonly sortedProspects = computed(() => {
+    const list = this.prospectService.prospects();
+    const field = this.sortField();
+    if (!field) return list;
+
+    const direction = this.sortDirection();
+    const multiplier = direction === 'asc' ? 1 : -1;
+
+    return [...list].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      switch (field) {
+        case 'client':
+          valA = a.companyName || a.name || '';
+          valB = b.companyName || b.name || '';
+          break;
+        case 'country':
+          valA = a.country || a.notes || '';
+          valB = b.country || b.notes || '';
+          break;
+        case 'sector':
+          valA = a.sector || a.source || '';
+          valB = b.sector || b.source || '';
+          break;
+        case 'contact':
+          valA = a.contactName || '';
+          valB = b.contactName || '';
+          break;
+        case 'phone':
+          valA = a.phone || '';
+          valB = b.phone || '';
+          break;
+        case 'email':
+          valA = a.email || '';
+          valB = b.email || '';
+          break;
+        case 'assignee':
+          valA = this.assigneeName(a.assignedTo);
+          valB = this.assigneeName(b.assignedTo);
+          break;
+        case 'status':
+          valA = this.statusLabel(a.status);
+          valB = this.statusLabel(b.status);
+          break;
+      }
+
+      return valA.localeCompare(valB, 'fr', { sensitivity: 'base', numeric: true }) * multiplier;
+    });
+  });
+
   public readonly statusColumns = computed(() => this.statuses.map((status) => ({
     ...status,
-    prospects: this.prospectService.prospects().filter((prospect) => prospect.status === status.value),
+    prospects: this.sortedProspects().filter((prospect) => prospect.status === status.value),
   })));
 
   // Gestion de la sélection par case à cocher
   public readonly selectedIds = signal<Set<string>>(new Set());
   public readonly isAllSelected = computed(() => {
-    const list = this.prospectService.prospects();
+    const list = this.sortedProspects();
     if (list.length === 0) return false;
     const selected = this.selectedIds();
     return list.every((prospect) => selected.has(prospect.id));
@@ -125,7 +207,7 @@ export class ProspectsComponent {
 
   public toggleSelectAll(): void {
     const current = this.selectedIds();
-    const list = this.prospectService.prospects();
+    const list = this.sortedProspects();
     if (this.isAllSelected()) {
       this.selectedIds.set(new Set());
     } else {
