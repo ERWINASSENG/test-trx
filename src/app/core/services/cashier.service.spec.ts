@@ -203,6 +203,19 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         status: 'posted' as const,
       },
       {
+        id: 'row-1b',
+        date: new Date('2026-09-06T09:00:00Z').toISOString(),
+        libelle: 'Carburant mission',
+        type_transaction: 'Carburant',
+        type_description: '',
+        category: 'sortie' as const,
+        first_name: 'Chauffeur',
+        employee: 'Jean',
+        quantity: 1,
+        montant: -150000,
+        status: 'posted' as const,
+      },
+      {
         id: 'row-2',
         date: '2026-09-07',
         libelle: 'Brouillon non comptabilisé',
@@ -229,11 +242,11 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     await service.loadTransactions();
 
-    expect(service.allTransactions().length).toBe(3);
+    expect(service.allTransactions().length).toBe(4);
     expect(service.allTransactions().find((tx) => tx.id === 'row-1')?.libelle).toBe('Versement Caisse');
-    expect(service.currentBalance()).toBe(500000);
+    expect(service.currentBalance()).toBe(350000);
     expect(service.caisseTotalEntrees()).toBe(500000);
-    expect(service.caisseTotalSorties()).toBe(0);
+    expect(service.caisseTotalSorties()).toBe(150000);
   });
 
   it('devrait donner la priorité absolue à serverSummary pour caisseBalance, caisseTotalEntrees et caisseTotalSorties', async () => {
