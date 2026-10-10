@@ -40,7 +40,7 @@ export const APP_MODULES: readonly AppModule[] = [
   },
   {
     id: 'prospects',
-    label: 'Contact',
+    label: 'Contacts',
     description: 'Suivi des contacts et opportunités commerciales',
     route: '/prospects',
     icon: '/assets/module-icons/contacts.svg',

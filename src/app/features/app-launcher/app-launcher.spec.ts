@@ -79,10 +79,10 @@ describe('AppLauncher', () => {
     expect(tile?.querySelector('mat-icon')).toBeNull();
   });
 
-  it('devrait afficher le module Contact avec l’icône Contacts du pack officiel', () => {
+  it('devrait afficher le module Contacts avec l’icône Contacts du pack officiel', () => {
     const tile = fixture.nativeElement.querySelector('a[href="/prospects"]');
 
-    expect(tile?.textContent).toContain('Contact');
+    expect(tile?.textContent).toContain('Contacts');
     expect(tile?.querySelector('img')?.getAttribute('src')).toBe('/assets/module-icons/contacts.svg');
     expect(tile?.querySelector('mat-icon')).toBeNull();
   });

@@ -58,7 +58,7 @@ export const routes: Routes = [
           import('./features/prospects/prospects').then((m) => m.ProspectsComponent),
         canActivate: [roleGuard],
         data: { permission: 'prospects.read' },
-        title: 'Transmex - Contact',
+        title: 'Transmex - Contacts',
       },
       {
         path: 'quotes',
