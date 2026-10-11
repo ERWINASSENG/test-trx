@@ -4,11 +4,11 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express from 'express';
+import express, { type Request } from 'express';
 import {join} from 'node:path';
 import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import { UpstashRateLimitStore } from './server/upstash-rate-limit.store';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
@@ -109,7 +109,7 @@ const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
 };
 
 const createRateLimitStore = (prefix: string): UpstashRateLimitStore | undefined =>
-  process.env['VERCEL'] === '1' || process.env['NODE_ENV'] === 'production'
+  process.env['UPSTASH_REDIS_REST_URL'] && process.env['UPSTASH_REDIS_REST_TOKEN']
     ? new UpstashRateLimitStore(prefix)
     : undefined;
 const slowApiRequestThresholdMs = readPositiveIntegerEnv('API_SLOW_REQUEST_LOG_MS', 1000);
@@ -176,26 +176,76 @@ app.use('/api', (req, res, next): void => {
  * ==============================================================================
  */
 
-// 1. Limiteur global sur toutes les routes de l'API /api/* (configurable par IP)
+/**
+ * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
+ * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
+ * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
+ */
+const extractAuthenticatedUserId = (req: express.Request): string | null => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || typeof authHeader !== 'string') return null;
+
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.substring(7).trim()
+    : authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) return null;
+
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const payload = JSON.parse(payloadJson);
+
+    if (
+      typeof payload.sub === 'string' &&
+      payload.sub.length > 0 &&
+      typeof payload.exp === 'number' &&
+      payload.exp * 1000 > Date.now() &&
+      payload.role === 'authenticated'
+    ) {
+      return payload.sub;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const apiRateLimitWindowMs = readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
+const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 200);
+const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 1200);
+const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 120);
+
+// 1. Limiteur global sur toutes les routes de l'API /api/* (discriminé par utilisateur connecté ou IP)
 const apiGlobalLimiter = rateLimit({
-  windowMs: readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
-  limit: readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 200),
+  windowMs: apiRateLimitWindowMs,
+  limit: (req: Request) => (extractAuthenticatedUserId(req) ? apiRateLimitAuthMax : apiRateLimitMax),
+  keyGenerator: (req: Request) => {
+    const userId = extractAuthenticatedUserId(req);
+    return userId ? `usr:${userId}` : ipKeyGenerator(req.ip || '');
+  },
   store: createRateLimitStore('transmex:api:global:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
-  message: {
-    error: 'Trop de requêtes envoyées depuis cette adresse IP. Veuillez patienter avant de réessayer.',
-    retryAfterMinutes: 15,
-  },
+  message: (req: Request) => ({
+    error: extractAuthenticatedUserId(req)
+      ? 'Quota de requêtes dépassé pour votre compte utilisateur. Veuillez patienter avant de réessayer.'
+      : 'Trop de requêtes envoyées depuis cette adresse IP. Veuillez patienter avant de réessayer.',
+    retryAfterMinutes: Math.ceil(apiRateLimitWindowMs / 60000),
+  }),
 });
 app.use('/api', apiGlobalLimiter);
 
-// 2. Limiteur strict sur les endpoints de configuration et d'authentification (40 requêtes / 15 minutes)
+// 2. Limiteur sur les endpoints de configuration et de synchronisation d'authentification
 const authSyncLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 40,
+  limit: authSyncRateLimitMax,
+  keyGenerator: (req: Request) => ipKeyGenerator(req.ip || ''),
   store: createRateLimitStore('transmex:api:auth:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',
@@ -209,10 +259,14 @@ const authSyncLimiter = rateLimit({
 app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSyncLimiter);
 
 // 3. Limiteur renforcé sur les opérations d'écriture et de mutation (POST, PUT, PATCH, DELETE)
-// Prévient l'inondation de la base de données, la création massive de comptes ou de transactions (100 mutations / 15 minutes)
+// Prévient l'inondation de la base de données, la création massive de comptes ou de transactions
 const mutationsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 150),
+  keyGenerator: (req: Request) => {
+    const userId = extractAuthenticatedUserId(req);
+    return userId ? `usr_mut:${userId}` : ipKeyGenerator(req.ip || '');
+  },
   store: createRateLimitStore('transmex:api:mutations:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',

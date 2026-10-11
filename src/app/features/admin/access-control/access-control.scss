@@ -374,6 +374,126 @@ button:disabled {
   opacity: 0.55;
 }
 
+.module-accordions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.module-accordion {
+  border: 1px solid var(--access-line);
+  border-radius: 6px;
+  background: var(--access-surface);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: #cbd5e1;
+  }
+
+  &[open] {
+    border-color: #93c5fd;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+    .module-accordion-header {
+      background: var(--access-surface-hover);
+      border-bottom: 1px solid var(--access-line);
+    }
+
+    .module-chevron {
+      transform: rotate(180deg);
+    }
+  }
+}
+
+.module-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--access-blue);
+    outline-offset: -2px;
+  }
+}
+
+.module-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.module-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 20px;
+  color: var(--access-blue);
+}
+
+.module-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.module-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--access-navy);
+}
+
+.module-desc {
+  font-size: 11px;
+  color: var(--access-muted);
+}
+
+.module-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.module-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--access-surface-muted);
+  border: 1px solid var(--access-line);
+  color: var(--access-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.module-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--access-muted);
+  font-size: 20px;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.module-accordion-content {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .permission-table-wrap,
 .table-wrap {
   width: 100%;
@@ -402,14 +522,6 @@ button:disabled {
   background: var(--access-surface-muted);
   color: var(--access-muted);
   font-size: 10px;
-  text-transform: uppercase;
-}
-
-.resource-row th {
-  padding-top: 14px;
-  background: var(--access-surface-hover);
-  color: var(--access-navy);
-  font-size: 11px;
   text-transform: uppercase;
 }
 

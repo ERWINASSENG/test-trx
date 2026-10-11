@@ -6,10 +6,92 @@ import { AccessControlService, AccessControlUser } from '../../../core/services/
 
 type AccessView = 'roles' | 'users' | 'audit';
 
-interface PermissionGroup {
+export interface ModulePermissionGroup {
+  moduleId: string;
+  moduleLabel: string;
+  moduleDescription: string;
+  moduleIcon: string;
+  permissions: AccessPermission[];
+}
+
+export interface PermissionGroup {
   resourceKey: string;
   permissions: AccessPermission[];
 }
+
+interface ModuleDefinition {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  matches: (perm: AccessPermission) => boolean;
+}
+
+const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
+  {
+    id: 'dashboard',
+    label: 'Tableau de bord',
+    description: 'Indicateurs, tableaux de bord et suivi d’activité',
+    icon: 'dashboard',
+    matches: (p) => p.resourceKey === 'dashboard' || p.resourceKey === 'module.dashboard' || p.permissionKey.startsWith('dashboard.') || p.permissionKey === 'module.dashboard.view',
+  },
+  {
+    id: 'comptabilite',
+    label: 'Comptabilité',
+    description: 'Opérations de caisse, journaux et écritures comptables',
+    icon: 'account_balance_wallet',
+    matches: (p) => ['cashier', 'journals', 'journal_entries', 'module.accounting'].includes(p.resourceKey) || p.permissionKey.startsWith('cashier.') || p.permissionKey.startsWith('journals.') || p.permissionKey.startsWith('journal_entries.') || p.permissionKey === 'module.accounting.view',
+  },
+  {
+    id: 'personnel',
+    label: 'Personnel & RH',
+    description: 'Gestion des collaborateurs, profils et ressources humaines',
+    icon: 'badge',
+    matches: (p) => ['hr', 'users', 'profile', 'module.hr'].includes(p.resourceKey) || p.permissionKey.startsWith('hr.') || p.permissionKey.startsWith('users.') || p.permissionKey.startsWith('profile.') || p.permissionKey === 'module.hr.view',
+  },
+  {
+    id: 'prospects',
+    label: 'Contacts',
+    description: 'Gestion des prospects et relations commerciales',
+    icon: 'contacts',
+    matches: (p) => ['prospects', 'module.prospects'].includes(p.resourceKey) || p.permissionKey.startsWith('prospects.') || p.permissionKey === 'module.prospects.view',
+  },
+  {
+    id: 'quotes',
+    label: 'Cotations',
+    description: 'Création et suivi des offres et devis commerciaux',
+    icon: 'request_quote',
+    matches: (p) => ['quotes', 'module.quotes'].includes(p.resourceKey) || p.permissionKey.startsWith('quotes.') || p.permissionKey === 'module.quotes.view',
+  },
+  {
+    id: 'crm',
+    label: 'CRM Commercial',
+    description: 'Opportunités, suivi d’équipe commerciale et campagnes',
+    icon: 'trending_up',
+    matches: (p) => ['crm', 'crm.team', 'crm.campaigns', 'module.crm'].includes(p.resourceKey) || p.permissionKey.startsWith('crm.') || p.permissionKey === 'module.crm.view',
+  },
+  {
+    id: 'dossiers',
+    label: 'Dossiers',
+    description: 'Suivi des dossiers d’exploitation et dépenses associées',
+    icon: 'folder',
+    matches: (p) => ['dossiers', 'module.dossiers'].includes(p.resourceKey) || p.permissionKey.startsWith('dossiers.') || p.permissionKey === 'module.dossiers.view',
+  },
+  {
+    id: 'configuration',
+    label: 'Paramètres',
+    description: 'Paramètres généraux et configuration applicative',
+    icon: 'settings',
+    matches: (p) => ['configuration', 'module.configuration'].includes(p.resourceKey) || p.permissionKey.startsWith('configuration.') || p.permissionKey === 'module.configuration.view',
+  },
+  {
+    id: 'access_control',
+    label: 'Gestion des accès',
+    description: 'Gestion des rôles, permissions, exceptions et journal d’audit',
+    icon: 'admin_panel_settings',
+    matches: (p) => ['access.roles', 'access.permissions', 'access.users', 'access.audit', 'module.access_control'].includes(p.resourceKey) || p.permissionKey.startsWith('access.') || p.permissionKey === 'module.access_control.view',
+  },
+];
 
 @Component({
   selector: 'app-access-control',
@@ -62,6 +144,42 @@ export class AccessControlCenter implements OnInit {
   public readonly currentUserRole = computed<AccessUserRole | null>(() => {
     const assignments = this.accessControl.selectedUserAccess()?.roleAssignments || [];
     return assignments.length > 0 ? assignments[0] : null;
+  });
+
+  public readonly modulePermissionGroups = computed<ModulePermissionGroup[]>(() => {
+    const permissions = this.accessControl.permissions();
+    const allocated = new Set<string>();
+
+    const groups: ModulePermissionGroup[] = MODULE_DEFINITIONS.map((def) => {
+      const matching = permissions.filter((perm) => {
+        if (def.matches(perm)) {
+          allocated.add(perm.permissionKey);
+          return true;
+        }
+        return false;
+      });
+
+      return {
+        moduleId: def.id,
+        moduleLabel: def.label,
+        moduleDescription: def.description,
+        moduleIcon: def.icon,
+        permissions: [...matching].sort((left, right) => left.label.localeCompare(right.label, 'fr')),
+      };
+    }).filter((group) => group.permissions.length > 0);
+
+    const remaining = permissions.filter((perm) => !allocated.has(perm.permissionKey));
+    if (remaining.length > 0) {
+      groups.push({
+        moduleId: 'general',
+        moduleLabel: 'Général & Applications',
+        moduleDescription: 'Autres autorisations transversales de la plateforme',
+        moduleIcon: 'apps',
+        permissions: [...remaining].sort((left, right) => left.label.localeCompare(right.label, 'fr')),
+      });
+    }
+
+    return groups;
   });
 
   public readonly permissionGroups = computed<PermissionGroup[]>(() => {
