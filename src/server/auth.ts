@@ -45,6 +45,45 @@ export async function updateExistingUserProfileRole(
   return adminClient.from('profiles').update(profileUpdates).eq('id', userId);
 }
 
+export interface ServerUserProfile {
+  role: string;
+  is_active: boolean;
+}
+
+export async function loadServerUserProfile(
+  supabaseAdmin: SupabaseClient,
+  userId: string
+): Promise<ServerUserProfile | null> {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', userId)
+    .maybeSingle();
+  return error || !data ? null : data;
+}
+
+export const createInFlightTokenLookup = <T>(
+  lookup: (token: string) => Promise<T>
+): ((token: string) => Promise<T>) => {
+  const requests = new Map<string, Promise<T>>();
+  return (token) => {
+    const pending = requests.get(token);
+    if (pending) return pending;
+
+    const request = lookup(token).finally(() => {
+      if (requests.get(token) === request) requests.delete(token);
+    });
+    requests.set(token, request);
+    return request;
+  };
+};
+
+const lookupVerifiedUser = createInFlightTokenLookup((token: string) => {
+  const supabaseAdmin = getSupabaseAdmin();
+  if (!supabaseAdmin) throw new Error('Service d’authentification indisponible.');
+  return supabaseAdmin.auth.getUser(token);
+});
+
 const getAdminEmailsFromEnv = (): string[] => {
   return (process.env['ADMIN_EMAILS'] || '')
     .split(',')
@@ -59,15 +98,14 @@ const getBearerToken = (req: express.Request): string => {
 
 export async function resolveServerRole(
   supabaseAdmin: SupabaseClient,
-  user: { id: string; email?: string | null; app_metadata?: Record<string, unknown> }
+  user: { id: string; email?: string | null; app_metadata?: Record<string, unknown> },
+  preloadedProfile?: ServerUserProfile | null
 ): Promise<UserRole | null> {
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('role, is_active')
-    .eq('id', user.id)
-    .maybeSingle();
+  const profile = preloadedProfile === undefined
+    ? await loadServerUserProfile(supabaseAdmin, user.id)
+    : preloadedProfile;
 
-  if (profileError || !profile || profile.is_active !== true) {
+  if (!profile || profile.is_active !== true) {
     return null;
   }
 
@@ -94,14 +132,15 @@ export async function requireAuth(req: express.Request, res: express.Response, n
   }
 
   try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    const { data, error } = await lookupVerifiedUser(token);
     if (error || !data.user) {
       res.status(401).json({ error: 'Jeton d’authentification invalide ou expiré' });
       return;
     }
 
     const user = data.user;
-    const resolvedRole = await resolveServerRole(supabaseAdmin, user);
+    const profile = await loadServerUserProfile(supabaseAdmin, user.id);
+    const resolvedRole = await resolveServerRole(supabaseAdmin, user, profile);
     if (!resolvedRole) {
       res.status(403).json({ error: 'Compte inactif ou profil utilisateur indisponible.' });
       return;
@@ -114,6 +153,7 @@ export async function requireAuth(req: express.Request, res: express.Response, n
       app_metadata: user.app_metadata,
       user_metadata: user.user_metadata,
     };
+    (req as unknown as Record<string, unknown>)['authProfile'] = profile;
     next();
   } catch (err: unknown) {
     console.error('Échec de la validation de session:', err);

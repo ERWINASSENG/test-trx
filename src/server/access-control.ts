@@ -1,6 +1,7 @@
 import express from 'express';
 import { AccessScope, EffectivePermission, PermissionEffect } from '../app/core/models/access-control.model';
-import { getSupabaseAdmin } from './auth';
+import { getSupabaseAdmin, loadServerUserProfile } from './auth';
+import type { ServerUserProfile } from './auth';
 
 export interface AccessResourceContext {
   subjectUserId?: string;
@@ -21,7 +22,7 @@ interface AccessRule {
   sourceRoleKey?: string;
 }
 
-interface LoadedAccessRules {
+export interface LoadedAccessRules {
   roleKeys: string[];
   rules: AccessRule[];
   hasActiveRoleAssignments?: boolean;
@@ -122,17 +123,37 @@ export const resolveEffectiveRoleKeys = (
     : [];
 };
 
-const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null> => {
+export const createAccessRulesLoader = (
+  loadFromDatabase: (
+    userId: string,
+    profile?: ServerUserProfile | null
+  ) => Promise<LoadedAccessRules | null>
+): ((userId: string, profile?: ServerUserProfile | null) => Promise<LoadedAccessRules | null>) => {
+  const requests = new Map<string, Promise<LoadedAccessRules | null>>();
+  return (userId, profile) => {
+    const pending = requests.get(userId);
+    if (pending) return pending;
+
+    const request = loadFromDatabase(userId, profile).finally(() => {
+      if (requests.get(userId) === request) requests.delete(userId);
+    });
+    requests.set(userId, request);
+    return request;
+  };
+};
+
+const loadAccessRulesFromDatabase = async (
+  userId: string,
+  preloadedProfile?: ServerUserProfile | null
+): Promise<LoadedAccessRules | null> => {
   const adminClient = getSupabaseAdmin();
   if (!adminClient) return null;
 
-  const { data: profile, error: profileError } = await adminClient
-    .from('profiles')
-    .select('is_active, role')
-    .eq('id', userId)
-    .maybeSingle();
+  const profile = preloadedProfile === undefined
+    ? await loadServerUserProfile(adminClient, userId)
+    : preloadedProfile;
 
-  if (profileError || !profile || profile.is_active !== true) return null;
+  if (!profile || profile.is_active !== true) return null;
 
   const currentTime = Date.now();
   const [assignmentsResult, overridesResult] = await Promise.all([
@@ -202,8 +223,13 @@ const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null
   };
 };
 
-export const resolveEffectivePermissions = async (userId: string): Promise<EffectivePermission[] | null> => {
-  const accessRules = await loadAccessRules(userId);
+const loadAccessRules = createAccessRulesLoader(loadAccessRulesFromDatabase);
+
+export const resolveEffectivePermissions = async (
+  userId: string,
+  profile?: ServerUserProfile | null
+): Promise<EffectivePermission[] | null> => {
+  const accessRules = await loadAccessRules(userId, profile);
   if (!accessRules) return null;
 
   const effective = accessRules.rules.map((rule) => ({
@@ -396,7 +422,8 @@ export const requirePermission = (
   }
 
   try {
-    const accessRules = await loadAccessRules(user.id);
+    const authProfile = (req as unknown as Record<string, unknown>)['authProfile'] as ServerUserProfile | null | undefined;
+    const accessRules = await loadAccessRules(user.id, authProfile);
     if (!accessRules) {
       res.status(503).json({ error: 'Les autorisations ne sont pas disponibles.' });
       return;

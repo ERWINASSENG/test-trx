@@ -4,15 +4,26 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CashierService } from './cashier.service';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { AccessControlService } from './access-control.service';
 import { ExportService } from './export.service';
 import { NotificationService } from './notification.service';
 
 describe('CashierService - Architecture Hybride & Signals', () => {
   let service: CashierService;
   let originalFetch: typeof globalThis.fetch;
+  let cashierReadAllowed: boolean;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    cashierReadAllowed = false;
+    fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ operations: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
     TestBed.configureTestingModule({
       providers: [
@@ -50,6 +61,14 @@ describe('CashierService - Architecture Hybride & Signals', () => {
             currentUser: () => ({ id: 'usr-1', email: 'test@transmex.cm' }),
           },
         },
+        {
+          provide: AccessControlService,
+          useValue: {
+            hasPermission: (permissionKey: string) =>
+              permissionKey === 'cashier.read' && cashierReadAllowed,
+            effectivePermissions: () => [],
+          },
+        },
       ],
     });
     service = TestBed.inject(CashierService);
@@ -64,6 +83,16 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.allTransactions().length).toBe(0);
     expect(service.currentBalance()).toBe(0);
     expect(service.paginationLabel()).toBe('0 / 0');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ne devrait pas appeler les endpoints Caisse sans la permission cashier.read', async () => {
+    await service.loadTransactions();
+    await service.loadCashierSummary();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(service.allTransactions()).toEqual([]);
+    expect(service.serverSummary()).toBeNull();
   });
 
   it('devrait sauvegarder via l’API serveur-relais et mettre à jour le Signal instantanément (cas nominal)', async () => {
@@ -188,6 +217,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
   });
 
   it('devrait ne compter que les opérations posted dans le solde après chargement', async () => {
+    cashierReadAllowed = true;
     const mockRows = [
       {
         id: 'row-1',
@@ -250,6 +280,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
   });
 
   it('devrait donner la priorité absolue à serverSummary pour caisseBalance, caisseTotalEntrees et caisseTotalSorties', async () => {
+    cashierReadAllowed = true;
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.includes('/summary')) {
@@ -361,6 +392,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
   });
 
   it('devrait bloquer immédiatement la création si le numéro de pièce comptable existe déjà (Cas d’erreur)', async () => {
+    cashierReadAllowed = true;
     const currentYear = new Date().getFullYear() || 2026;
     const existingPiece = `CSH1/${currentYear}/00010`;
 

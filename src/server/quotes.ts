@@ -485,9 +485,18 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
   }
   const rows = data || [];
   const prospectIds = [...new Set(rows.map((row) => String(row.prospect_id)))];
-  const { data: prospects, error: prospectsError } = prospectIds.length
-    ? await adminClient.from('prospects').select('id, name, company_name').in('id', prospectIds)
-    : { data: [], error: null };
+  const assigneeIds = [...new Set(rows
+    .map((row) => row.assigned_to)
+    .filter((id): id is string => typeof id === 'string'))];
+  const [prospectsResult, assigneesResult] = await Promise.all([
+    prospectIds.length
+      ? adminClient.from('prospects').select('id, name, company_name').in('id', prospectIds)
+      : Promise.resolve({ data: [], error: null }),
+    assigneeIds.length
+      ? adminClient.from('profiles').select('id, first_name, last_name').in('id', assigneeIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const { data: prospects, error: prospectsError } = prospectsResult;
   if (prospectsError) {
     sendQuoteDatabaseError(res, prospectsError);
     return;
@@ -496,12 +505,7 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     String(prospect.id),
     String(prospect.company_name || prospect.name),
   ]));
-  const assigneeIds = [...new Set(rows
-    .map((row) => row.assigned_to)
-    .filter((id): id is string => typeof id === 'string'))];
-  const { data: assignees, error: assigneesError } = assigneeIds.length
-    ? await adminClient.from('profiles').select('id, first_name, last_name').in('id', assigneeIds)
-    : { data: [], error: null };
+  const { data: assignees, error: assigneesError } = assigneesResult;
   if (assigneesError) {
     sendQuoteDatabaseError(res, assigneesError);
     return;

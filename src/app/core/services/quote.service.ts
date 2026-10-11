@@ -31,8 +31,10 @@ export interface QuoteApiResult<T> {
 
 @Injectable({ providedIn: 'root' })
 export class QuoteService {
+  private static readonly GET_CACHE_TTL_MS = 30_000;
   private readonly authService = inject(AuthService);
   private dataUserId: string | null | undefined;
+  private readonly getCache = new Map<string, { cachedAt: number; data: unknown }>();
   private readonly _quotes = signal<SalesQuote[]>([]);
   private readonly _prospects = signal<Prospect[]>([]);
   private readonly _assignees = signal<QuoteAssignee[]>([]);
@@ -222,6 +224,7 @@ export class QuoteService {
     this._assignees.set([]);
     this._templates.set([]);
     this._error.set(null);
+    this.getCache.clear();
   }
 
   private isCurrentDataUser(): boolean {
@@ -239,6 +242,14 @@ export class QuoteService {
     const token = this.authService.token();
     if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
 
+    const cacheKey = `${requestedUserId}:${path}`;
+    if (method === 'GET') {
+      const cached = this.getCache.get(cacheKey);
+      if (cached && Date.now() - cached.cachedAt < QuoteService.GET_CACHE_TTL_MS) {
+        return { success: true, data: cached.data as T };
+      }
+    }
+
     if (showLoading) this._isLoading.set(true);
     try {
       const response = await fetch(path, {
@@ -255,6 +266,8 @@ export class QuoteService {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
       if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
+      if (method === 'GET') this.getCache.set(cacheKey, { cachedAt: Date.now(), data: payload });
+      else this.getCache.clear();
       return { success: true, data: payload };
     } catch {
       return { success: false, error: 'Le serveur Cotations est injoignable.' };

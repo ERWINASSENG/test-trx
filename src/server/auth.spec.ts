@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseAdmin, resolveServerRole, updateExistingUserProfileRole } from './auth';
+import {
+  createInFlightTokenLookup,
+  getSupabaseAdmin,
+  resolveServerRole,
+  updateExistingUserProfileRole,
+} from './auth';
 
 const createSupabaseMock = (profile: unknown, queryError: unknown = null) => {
   const maybeSingle = vi.fn().mockResolvedValue({ data: profile, error: queryError });
@@ -96,6 +101,29 @@ describe('updateExistingUserProfileRole', () => {
 describe('getSupabaseAdmin', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  describe('in-flight auth token lookups', () => {
+    it('shares verification for identical concurrent tokens and releases the token afterward', async () => {
+      let finishLookup!: (value: { valid: boolean }) => void;
+      const pendingLookup = new Promise<{ valid: boolean }>((resolve) => {
+        finishLookup = resolve;
+      });
+      const lookup = vi.fn()
+        .mockReturnValueOnce(pendingLookup)
+        .mockResolvedValue({ valid: true });
+      const loadUser = createInFlightTokenLookup(lookup);
+
+      const first = loadUser('same-bearer-token');
+      const concurrent = loadUser('same-bearer-token');
+      expect(concurrent).toBe(first);
+      expect(lookup).toHaveBeenCalledTimes(1);
+
+      finishLookup({ valid: true });
+      await expect(first).resolves.toEqual({ valid: true });
+      await expect(loadUser('same-bearer-token')).resolves.toEqual({ valid: true });
+      expect(lookup).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('reuses the admin client for the same server configuration', () => {

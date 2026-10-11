@@ -1,6 +1,7 @@
 import express from 'express';
 import { isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
 import { getSupabaseAdmin } from './auth';
+import type { ServerUserProfile } from './auth';
 import { isCanonicalAccessRoleKey } from './access-role-sync';
 
 const actorIdFromRequest = (req: express.Request): string | null => {
@@ -173,7 +174,8 @@ export const getMyAccessPermissionsHandler = async (req: express.Request, res: e
   }
 
   try {
-    const permissions = await resolveEffectivePermissions(userId);
+    const authProfile = (req as unknown as Record<string, unknown>)['authProfile'] as ServerUserProfile | null | undefined;
+    const permissions = await resolveEffectivePermissions(userId, authProfile);
     if (!permissions) {
       res.status(503).json({ error: 'Les autorisations sont temporairement indisponibles.' });
       return;

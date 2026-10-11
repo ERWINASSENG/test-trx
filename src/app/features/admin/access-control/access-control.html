@@ -5,7 +5,7 @@
       <h1 id="access-control-title">Gestion des accès</h1>
       <p class="access-subtitle">Rôles, permissions et affectations utilisateurs</p>
     </div>
-    <button type="button" class="icon-button refresh-button" (click)="loadInitialData()" title="Actualiser" aria-label="Actualiser les données">
+    <button type="button" class="icon-button refresh-button" (click)="loadInitialData(true)" title="Actualiser" aria-label="Actualiser les données">
       <mat-icon>refresh</mat-icon>
     </button>
   </header>
@@ -27,12 +27,12 @@
       </button>
     }
     @if (can('access.users.read')) {
-      <button type="button" role="tab" [attr.aria-selected]="activeView() === 'users'" [class.active]="activeView() === 'users'" (click)="activeView.set('users')">
+      <button type="button" role="tab" [attr.aria-selected]="activeView() === 'users'" [class.active]="activeView() === 'users'" (click)="openUsersView()">
         <mat-icon>group</mat-icon><span>Utilisateurs</span>
       </button>
     }
     @if (can('access.audit.read')) {
-      <button type="button" role="tab" [attr.aria-selected]="activeView() === 'audit'" [class.active]="activeView() === 'audit'" (click)="activeView.set('audit'); refreshAudit()">
+      <button type="button" role="tab" [attr.aria-selected]="activeView() === 'audit'" [class.active]="activeView() === 'audit'" (click)="openAuditView()">
         <mat-icon>history</mat-icon><span>Historique</span>
       </button>
     }

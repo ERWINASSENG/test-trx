@@ -20,6 +20,7 @@ interface PermissionGroup {
 })
 export class AccessControlCenter implements OnInit {
   public readonly accessControl = inject(AccessControlService);
+  private hasLoadedUsers = false;
 
   public readonly activeView = signal<AccessView>('roles');
   public readonly roleSearch = signal('');
@@ -86,30 +87,47 @@ export class AccessControlCenter implements OnInit {
     return this.accessControl.hasPermission(permissionKey);
   }
 
-  public async loadInitialData(): Promise<void> {
+  public async loadInitialData(forceRefresh = false): Promise<void> {
     this.initialLoadError.set(null);
-    if (!await this.accessControl.loadMyPermissions()) return;
+    if (forceRefresh && this.activeView() === 'users') this.hasLoadedUsers = false;
+    const permissionsLoaded = forceRefresh
+      ? await this.accessControl.loadMyPermissions(true)
+      : await this.accessControl.loadMyPermissions();
+    if (!permissionsLoaded) return;
 
     const loadTasks: { section: string; load: () => Promise<boolean> }[] = [];
     if (this.can('access.roles.read')) {
-      loadTasks.push({ section: 'rôles', load: () => this.accessControl.loadRoles() });
+      loadTasks.push({
+        section: 'rôles et permissions du rôle sélectionné',
+        load: async () => {
+          const loaded = forceRefresh
+            ? await this.accessControl.loadRoles(true)
+            : await this.accessControl.loadRoles();
+          if (!loaded) return false;
+
+          const selectedRole = this.accessControl.roles().find((role) => role.id === this.selectedRoleId())
+            || this.accessControl.roles()[0];
+          if (selectedRole) await this.selectRole(selectedRole, forceRefresh);
+          return true;
+        },
+      });
     }
     if (this.can('access.permissions.read')) {
-      loadTasks.push({ section: 'catalogue des permissions', load: () => this.accessControl.loadPermissions() });
+      loadTasks.push({
+        section: 'catalogue des permissions',
+        load: () => forceRefresh
+          ? this.accessControl.loadPermissions(true)
+          : this.accessControl.loadPermissions(),
+      });
     }
-    if (this.can('access.users.read')) {
-      loadTasks.push({ section: 'utilisateurs', load: () => this.accessControl.loadUsers() });
-    }
-    if (this.can('access.audit.read')) {
-      loadTasks.push({ section: 'historique', load: () => this.accessControl.loadAudit() });
-    }
-
-    const loadErrors: string[] = [];
-    for (const task of loadTasks) {
-      if (!await task.load()) {
-        loadErrors.push(`${task.section} : ${this.accessControl.error() || 'erreur inconnue'}`);
-      }
-    }
+    const loadResults = await Promise.all(loadTasks.map(async (task) => ({
+      section: task.section,
+      success: await task.load(),
+      error: this.accessControl.error(),
+    })));
+    const loadErrors = loadResults
+      .filter((result) => !result.success)
+      .map((result) => `${result.section} : ${result.error || 'impossible de charger les données.'}`);
     this.initialLoadError.set(loadErrors.length > 0 ? loadErrors.join(' · ') : null);
 
     const firstAvailableView = this.can('access.roles.read')
@@ -119,20 +137,56 @@ export class AccessControlCenter implements OnInit {
         : this.can('access.audit.read')
           ? 'audit'
           : null;
-    if (firstAvailableView) this.activeView.set(firstAvailableView);
+    const currentViewAvailable = this.activeView() === 'roles'
+      ? this.can('access.roles.read')
+      : this.activeView() === 'users'
+        ? this.can('access.users.read')
+        : this.can('access.audit.read');
+    if (!currentViewAvailable && firstAvailableView) this.activeView.set(firstAvailableView);
 
-    if (this.can('access.roles.read') && !this.selectedRoleId() && this.accessControl.roles().length > 0) {
-      await this.selectRole(this.accessControl.roles()[0]);
+    if (this.activeView() === 'users') await this.openUsersView(forceRefresh);
+    if (this.activeView() === 'audit') await this.openAuditView(forceRefresh);
+  }
+
+  public async openUsersView(forceRefresh = false): Promise<void> {
+    this.activeView.set('users');
+    if (!this.can('access.users.read') || (this.hasLoadedUsers && !forceRefresh)) return;
+
+    const loaded = forceRefresh
+      ? await this.accessControl.loadUsers(200, true)
+      : await this.accessControl.loadUsers();
+    this.hasLoadedUsers = loaded;
+    if (!loaded) {
+      this.initialLoadError.set(this.accessControl.error() || 'Impossible de charger la liste des utilisateurs.');
+    }
+
+  }
+
+  public async openAuditView(forceRefresh = false): Promise<void> {
+    this.activeView.set('audit');
+    if (!this.can('access.audit.read')) return;
+
+    const loaded = forceRefresh
+      ? await this.accessControl.loadAudit(50, undefined, true)
+      : await this.accessControl.loadAudit();
+    if (!loaded) {
+      this.initialLoadError.set(this.accessControl.error() || 'Impossible de charger l’historique des accès.');
+    } else {
+      this.initialLoadError.set(null);
     }
   }
 
-  public async selectRole(role: AccessRole): Promise<void> {
+  public async selectRole(role: AccessRole, forceRefresh = false): Promise<void> {
     this.selectedRoleId.set(role.id);
     this.roleLabelDraft.set(role.label);
     this.roleDescriptionDraft.set(role.description);
     this.scopeError.set(null);
     this.feedback.set(null);
-    await this.accessControl.loadRolePermissions(role.id);
+    if (forceRefresh) {
+      await this.accessControl.loadRolePermissions(role.id, true);
+    } else {
+      await this.accessControl.loadRolePermissions(role.id);
+    }
     this.draftGrants.set(this.accessControl.roleGrants());
     this.permissionScopeDrafts.set(Object.fromEntries(
       this.accessControl.roleGrants().map((grant) => [grant.permissionKey, JSON.stringify(grant.scope)])
@@ -343,9 +397,6 @@ export class AccessControlCenter implements OnInit {
   }
 
   public async refreshAudit(): Promise<void> {
-    const loaded = await this.accessControl.loadAudit();
-    if (!loaded) {
-      this.initialLoadError.set(this.accessControl.error() || 'Impossible d’actualiser l’historique des accès.');
-    }
+    await this.openAuditView(true);
   }
 }

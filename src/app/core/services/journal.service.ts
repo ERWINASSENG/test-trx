@@ -1,5 +1,4 @@
-import { Injectable, computed, inject, signal, effect, PLATFORM_ID } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
@@ -16,8 +15,6 @@ export class JournalService {
   private readonly notificationService = inject(NotificationService);
   private readonly cashierService = inject(CashierService);
   private readonly accessControl = inject(AccessControlService);
-  private readonly platformId = inject(PLATFORM_ID);
-  private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   // Journal natif représentant la caisse active de l'entreprise
   private readonly defaultNativeCashJournal: Journal = {
@@ -158,24 +155,8 @@ export class JournalService {
   }
 
   constructor() {
-    let activeDataUserId: string | null | undefined;
     // Initialise avec le journal natif de caisse pour garantir qu'aucune rupture n'arrive
     this._journals.set([this.defaultNativeCashJournal]);
-
-    if (this.isBrowser) {
-      effect(() => {
-        const user = this.authService.currentUser();
-        this.accessControl.effectivePermissions();
-        const userId = user?.id ?? null;
-        if (activeDataUserId !== userId) {
-          activeDataUserId = userId;
-          this._journals.set([this.defaultNativeCashJournal]);
-        }
-        if (user) {
-          this.loadJournals();
-        }
-      });
-    }
   }
 
   public setSearchQuery(query: string): void {

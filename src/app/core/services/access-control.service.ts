@@ -50,8 +50,23 @@ export interface AccessControlUser {
 
 @Injectable({ providedIn: 'root' })
 export class AccessControlService {
+  private static readonly PERMISSIONS_CACHE_TTL_MS = 30_000;
+  private static readonly GET_CACHE_TTL_MS = 30_000;
   private readonly authService = inject(AuthService);
   private permissionsUserId: string | null | undefined;
+  private permissionsLoadedUserId: string | null = null;
+  private permissionsLoadedAt = 0;
+  private permissionsRequestVersion = 0;
+  private permissionsRequest: {
+    userId: string;
+    promise: Promise<boolean>;
+  } | null = null;
+  private readonly activeRequests = new Set<number>();
+  private nextRequestId = 0;
+  private readonly getResponseCache = new Map<string, {
+    cachedAt: number;
+    result: AccessApiResult<unknown>;
+  }>();
 
   private readonly _roles = signal<AccessRole[]>([]);
   private readonly _users = signal<AccessControlUser[]>([]);
@@ -198,14 +213,46 @@ export class AccessControlService {
     return matchingPermissions.some((permission) => permission.effect === 'allow' && scopeMatches(permission.scope));
   }
 
-  public async loadMyPermissions(): Promise<boolean> {
+  public loadMyPermissions(forceRefresh = false): Promise<boolean> {
     this.resetForAccountChange();
     const requestedUserId = this.authService.currentUser()?.id ?? null;
-    const result = await this.request<{ permissions: EffectivePermission[] }>('/me');
-    if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return false;
-    this._effectivePermissions.set(result.success ? result.data?.permissions || [] : []);
-    this._error.set(result.success ? null : result.error || 'Impossible de charger les permissions.');
-    return result.success;
+    if (!requestedUserId) return Promise.resolve(false);
+
+    if (
+      !forceRefresh &&
+      this.permissionsLoadedUserId === requestedUserId &&
+      Date.now() - this.permissionsLoadedAt < AccessControlService.PERMISSIONS_CACHE_TTL_MS
+    ) {
+      return Promise.resolve(true);
+    }
+
+    if (!forceRefresh && this.permissionsRequest?.userId === requestedUserId) {
+      return this.permissionsRequest.promise;
+    }
+
+    const requestVersion = ++this.permissionsRequestVersion;
+    const request = (async () => {
+      const result = await this.request<{ permissions: EffectivePermission[] }>('/me', 'GET', undefined, false);
+      if (
+        (this.authService.currentUser()?.id ?? null) !== requestedUserId ||
+        requestVersion !== this.permissionsRequestVersion
+      ) return false;
+
+      this._effectivePermissions.set(result.success ? result.data?.permissions || [] : []);
+      this._error.set(result.success ? null : result.error || 'Impossible de charger les permissions.');
+      if (result.success) {
+        this.permissionsLoadedUserId = requestedUserId;
+        this.permissionsLoadedAt = Date.now();
+      }
+      return result.success;
+    })();
+    const trackedRequest = request.finally(() => {
+      if (this.permissionsRequest?.promise === trackedRequest) {
+        this.permissionsRequest = null;
+      }
+    });
+    this.permissionsRequest = { userId: requestedUserId, promise: trackedRequest };
+    return trackedRequest;
   }
 
   private resetForAccountChange(): void {
@@ -213,6 +260,11 @@ export class AccessControlService {
     if (this.permissionsUserId === userId) return;
 
     this.permissionsUserId = userId;
+    this.permissionsLoadedUserId = null;
+    this.permissionsLoadedAt = 0;
+    this.permissionsRequestVersion += 1;
+    this.permissionsRequest = null;
+    this.getResponseCache.clear();
     this._roles.set([]);
     this._users.set([]);
     this._permissions.set([]);
@@ -221,11 +273,13 @@ export class AccessControlService {
     this._selectedRole.set(null);
     this._selectedUserAccess.set(null);
     this._auditEntries.set([]);
+    this.activeRequests.clear();
+    this._isLoading.set(false);
     this._error.set(null);
   }
 
-  public async loadRoles(): Promise<boolean> {
-    const result = await this.request<{ roles: Record<string, unknown>[] }>('/roles');
+  public async loadRoles(forceRefresh = false): Promise<boolean> {
+    const result = await this.request<{ roles: Record<string, unknown>[] }>('/roles', 'GET', undefined, !forceRefresh);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les rôles.');
       return false;
@@ -235,8 +289,8 @@ export class AccessControlService {
     return true;
   }
 
-  public async loadPermissions(): Promise<boolean> {
-    const result = await this.request<{ permissions: Record<string, unknown>[] }>('/permissions');
+  public async loadPermissions(forceRefresh = false): Promise<boolean> {
+    const result = await this.request<{ permissions: Record<string, unknown>[] }>('/permissions', 'GET', undefined, !forceRefresh);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions.');
       return false;
@@ -246,8 +300,13 @@ export class AccessControlService {
     return true;
   }
 
-  public async loadUsers(limit = 200): Promise<boolean> {
-    const result = await this.request<{ users: Record<string, unknown>[] }>(`/users?limit=${encodeURIComponent(String(limit))}`);
+  public async loadUsers(limit = 200, forceRefresh = false): Promise<boolean> {
+    const result = await this.request<{ users: Record<string, unknown>[] }>(
+      `/users?limit=${encodeURIComponent(String(limit))}`,
+      'GET',
+      undefined,
+      !forceRefresh
+    );
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les utilisateurs.');
       return false;
@@ -271,11 +330,11 @@ export class AccessControlService {
     return true;
   }
 
-  public async loadRolePermissions(roleId: string): Promise<boolean> {
+  public async loadRolePermissions(roleId: string, forceRefresh = false): Promise<boolean> {
     const result = await this.request<{
       role: Record<string, unknown>;
       grants: Record<string, unknown>[];
-    }>(`/roles/${encodeURIComponent(roleId)}/permissions`);
+    }>(`/roles/${encodeURIComponent(roleId)}/permissions`, 'GET', undefined, !forceRefresh);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions du rôle.');
       return false;
@@ -297,10 +356,15 @@ export class AccessControlService {
     return true;
   }
 
-  public async loadAudit(limit = 50, userId?: string): Promise<boolean> {
+  public async loadAudit(limit = 50, userId?: string, forceRefresh = false): Promise<boolean> {
     const query = new URLSearchParams({ limit: String(limit) });
     if (userId) query.set('userId', userId);
-    const result = await this.request<{ entries: Record<string, unknown>[] }>(`/audit?${query.toString()}`);
+    const result = await this.request<{ entries: Record<string, unknown>[] }>(
+      `/audit?${query.toString()}`,
+      'GET',
+      undefined,
+      !forceRefresh
+    );
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger le journal d’audit.');
       return false;
@@ -368,7 +432,8 @@ export class AccessControlService {
   private async mutate<T>(path: string, method: string, body?: unknown): Promise<AccessApiResult<T>> {
     const result = await this.request<ApiSuccess<T>>(path, method, body);
     if (!result.success) return { success: false, error: result.error };
-    await this.loadMyPermissions();
+    this.getResponseCache.clear();
+    await this.loadMyPermissions(true);
     return { success: true, data: result.data?.data };
   }
 
@@ -465,7 +530,12 @@ export class AccessControlService {
     };
   }
 
-  private async request<T>(path: string, method = 'GET', body?: unknown): Promise<AccessApiResult<T>> {
+  private async request<T>(
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    useGetCache = true
+  ): Promise<AccessApiResult<T>> {
     // 1. Attendre la résolution initiale de la session d'authentification
     await this.authService.waitForSession();
     this.resetForAccountChange();
@@ -477,6 +547,19 @@ export class AccessControlService {
     }
     if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
 
+    const cacheKey = method === 'GET' && useGetCache && requestedUserId
+      ? `${requestedUserId}:${path}`
+      : null;
+    if (cacheKey) {
+      const cached = this.getResponseCache.get(cacheKey);
+      if (cached && Date.now() - cached.cachedAt < AccessControlService.GET_CACHE_TTL_MS) {
+        return cached.result as AccessApiResult<T>;
+      }
+      if (cached) this.getResponseCache.delete(cacheKey);
+    }
+
+    const requestId = ++this.nextRequestId;
+    this.activeRequests.add(requestId);
     this._isLoading.set(true);
     try {
       const response = await fetch(`/api/access-control${path}`, {
@@ -495,11 +578,14 @@ export class AccessControlService {
       if (!response.ok) {
         return { success: false, error: payload.error || `Échec de la requête (${response.status}).` };
       }
-      return { success: true, data: payload };
+      const result: AccessApiResult<T> = { success: true, data: payload };
+      if (cacheKey) this.getResponseCache.set(cacheKey, { cachedAt: Date.now(), result });
+      return result;
     } catch {
       return { success: false, error: 'Le serveur d’autorisations est injoignable.' };
     } finally {
-      this._isLoading.set(false);
+      this.activeRequests.delete(requestId);
+      this._isLoading.set(this.activeRequests.size > 0);
     }
   }
 }

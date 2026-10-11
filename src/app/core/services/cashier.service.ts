@@ -71,6 +71,8 @@ export class CashierService implements OnDestroy {
   private journalRealtimeChannel: ReturnType<NonNullable<SupabaseService['supabase']>['channel']> | null = null;
   private realtimeRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
   private journalRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly _realtimeRequested = signal(false);
+  private realtimeSetupPromise: Promise<void> | null = null;
   private readonly _journalBalanceRefreshVersion = signal(0);
   public readonly journalBalanceRefreshVersion = this._journalBalanceRefreshVersion.asReadonly();
 
@@ -107,19 +109,28 @@ export class CashierService implements OnDestroy {
     effect(() => {
       const user = this.authService.currentUser();
       const userId = user?.id ?? null;
-      this.accessControl.effectivePermissions();
-      if (this.activeDataUserId !== userId) {
+      const canReadCashier = !!user && this.accessControl.hasPermission('cashier.read');
+      const canReadJournalBalances = !!user && this.accessControl.hasPermission('journal_entries.chart_read');
+      const accountChanged = this.activeDataUserId !== userId;
+      const realtimeRequested = this._realtimeRequested();
+      if (accountChanged) {
         this.activeDataUserId = userId;
+        this._realtimeRequested.set(false);
         this._transactions.set([]);
         this._serverSummary.set(null);
         this._error.set(null);
         this.cleanupRealtimeSubscription();
       }
       if (user && this.isBrowser) {
-        this.loadTransactions();
-        this.loadCashierSummary();
-        this.setupRealtimeSubscription();
+        if (!canReadCashier) this.clearCashierReadState();
+        if (!canReadCashier && !canReadJournalBalances) {
+          this._realtimeRequested.set(false);
+          this.cleanupRealtimeSubscription();
+        } else if (!accountChanged && realtimeRequested) {
+          this.setupRealtimeSubscription();
+        }
       } else if (!user && this.isBrowser) {
+        this.clearCashierReadState();
         this.cleanupRealtimeSubscription();
       }
     });
@@ -213,6 +224,10 @@ export class CashierService implements OnDestroy {
     if (!journalId || journalId === 'native-caisse-principal' || journalId === 'CSH1') {
       return;
     }
+    if (!this.authService.currentUser() || !this.accessControl.hasPermission('journal_entries.chart_read')) {
+      return;
+    }
+    this._realtimeRequested.set(true);
 
     let token = this.authService.token();
     if (!token && this.supabaseService.supabase) {
@@ -299,6 +314,11 @@ export class CashierService implements OnDestroy {
    */
   public async loadCashierSummary(): Promise<void> {
     if (!this.isBrowser) return;
+    if (!this.hasCashierReadAccess()) {
+      this._serverSummary.set(null);
+      return;
+    }
+
     const requestedUserId = this.authService.currentUser()?.id ?? null;
     try {
       const token = this.authService.token();
@@ -306,10 +326,16 @@ export class CashierService implements OnDestroy {
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
       const res = await fetch('/api/cahier/operations/summary', { headers });
-      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
+      if (
+        (this.authService.currentUser()?.id ?? null) !== requestedUserId ||
+        !this.hasCashierReadAccess()
+      ) return;
       if (res.ok) {
         const json = await res.json();
-        if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
+        if (
+          (this.authService.currentUser()?.id ?? null) !== requestedUserId ||
+          !this.hasCashierReadAccess()
+        ) return;
         if (json?.summary) {
           this._serverSummary.set(json.summary);
         }
@@ -497,6 +523,12 @@ export class CashierService implements OnDestroy {
    * afin de protéger l'onglet contre toute surcharge mémoire en situation dégradée.
    */
   public async loadTransactions(limit: number = CashierService.DEFAULT_OPERATIONS_LIMIT): Promise<void> {
+    if (!this.hasCashierReadAccess()) {
+      this.clearCashierReadState();
+      return;
+    }
+    this._realtimeRequested.set(true);
+
     if (this.activeLoadPromise) {
       return this.activeLoadPromise;
     }
@@ -553,7 +585,13 @@ export class CashierService implements OnDestroy {
         // chargement automatique : les erreurs seront visibles lors d'une action.
 
         // Traitement et injection dans le Signal Angular 19
-        if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
+        if (
+          (this.authService.currentUser()?.id ?? null) !== requestedUserId ||
+          !this.hasCashierReadAccess()
+        ) {
+          this.clearCashierReadState();
+          return;
+        }
 
         if (rawRows && Array.isArray(rawRows)) {
           const mappedTransactions = this.mapDatabaseOperations(rawRows);
@@ -1760,8 +1798,26 @@ export class CashierService implements OnDestroy {
    * ───────────────────────────────────────────────────────────────────────────
   * Écoute un signal privé d'invalidation puis recharge les données par l'API autorisée.
    */
-  private async setupRealtimeSubscription(): Promise<void> {
-    if (!this.isBrowser) return;
+  private setupRealtimeSubscription(): Promise<void> {
+    if (!this.isBrowser) return Promise.resolve();
+    if (this.realtimeSetupPromise) return this.realtimeSetupPromise;
+    const trackedPromise = this.initializeRealtimeSubscription().finally(() => {
+      if (this.realtimeSetupPromise === trackedPromise) {
+        this.realtimeSetupPromise = null;
+      }
+    });
+    this.realtimeSetupPromise = trackedPromise;
+    return trackedPromise;
+  }
+
+  private async initializeRealtimeSubscription(): Promise<void> {
+    const user = this.authService.currentUser();
+    let canReadCashier = !!user && this.accessControl.hasPermission('cashier.read');
+    let canReadJournalBalances = !!user && this.accessControl.hasPermission('journal_entries.chart_read');
+    if (!canReadCashier && !canReadJournalBalances) {
+      this.cleanupRealtimeSubscription();
+      return;
+    }
 
     try {
       await this.supabaseService.ensureInitialized();
@@ -1776,19 +1832,29 @@ export class CashierService implements OnDestroy {
       if (!token) return;
 
       await client.realtime.setAuth(token);
-      const canReadCashier = this.accessControl.hasPermission('cashier.read');
-      const canReadJournalBalances = this.accessControl.hasPermission('journal_entries.chart_read');
+      const currentUser = this.authService.currentUser();
+      canReadCashier = !!currentUser && this.accessControl.hasPermission('cashier.read');
+      canReadJournalBalances =
+        !!currentUser && this.accessControl.hasPermission('journal_entries.chart_read');
+      if (!canReadCashier && !canReadJournalBalances) {
+        this.cleanupRealtimeSubscription();
+        return;
+      }
+
+      if (!canReadCashier && this.cashierRealtimeChannel) {
+        await client.removeChannel(this.cashierRealtimeChannel);
+        this.cashierRealtimeChannel = null;
+      }
+      if (!canReadJournalBalances && this.journalRealtimeChannel) {
+        await client.removeChannel(this.journalRealtimeChannel);
+        this.journalRealtimeChannel = null;
+      }
 
       if (canReadCashier && !this.cashierRealtimeChannel) {
         this.cashierRealtimeChannel = client
           .channel('cashier-balances:invalidate', { config: { private: true } })
           .on('broadcast', { event: 'cashier_balances_invalidated' }, () => this.scheduleRealtimeRefresh())
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              if (this._transactions().length === 0) this.loadTransactions();
-              this.loadCashierSummary();
-            }
-          });
+          .subscribe();
       }
 
       if (canReadJournalBalances && !this.journalRealtimeChannel) {
@@ -1800,6 +1866,17 @@ export class CashierService implements OnDestroy {
     } catch (err) {
       console.warn('Impossible d’initialiser le canal Realtime Supabase:', err);
     }
+  }
+
+  private hasCashierReadAccess(): boolean {
+    return !!this.authService.currentUser() && this.accessControl.hasPermission('cashier.read');
+  }
+
+  private clearCashierReadState(): void {
+    this._transactions.set([]);
+    this._serverSummary.set(null);
+    this._isLoading.set(false);
+    this._error.set(null);
   }
 
   private scheduleRealtimeRefresh(): void {

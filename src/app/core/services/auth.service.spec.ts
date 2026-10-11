@@ -178,6 +178,35 @@ describe('AuthService', () => {
     expect(service.currentUser()?.roleLabel).toBe('DAF');
   });
 
+  it('mutualise les lectures de profil simultanées pour le même compte et le même jeton', async () => {
+    const user = createCachedUser();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        profile: {
+          id: user.id,
+          role: user.role,
+          is_active: true,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          email: user.email,
+        },
+        role: user.role,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const profileLoader = service['loadUserProfileFromSupabase'].bind(service);
+    const [first, concurrent] = await Promise.all([
+      profileLoader(user.id, user.email, 'same-token'),
+      profileLoader(user.id, user.email, 'same-token'),
+    ]);
+
+    expect(first?.id).toBe(user.id);
+    expect(concurrent?.id).toBe(user.id);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('conserve la session en mémoire sur une panne réseau transitoire', async () => {
     const user = createCachedUser();
     service.setLocalSession(user, 'possibly-valid-token');

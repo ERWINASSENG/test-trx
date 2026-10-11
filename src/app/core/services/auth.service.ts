@@ -26,6 +26,10 @@ export class AuthService {
   private readonly _isLoading = signal<boolean>(false);
   private readonly _authError = signal<string | null>(null);
   private readonly _isAuthReady = signal<boolean>(false);
+  private readonly profileLoadRequests = new Map<
+    string,
+    { token: string; promise: Promise<UserProfile | null> }
+  >();
 
   // Exposition en lecture seule des Signaux réactifs
   public readonly currentUser = this._currentUser.asReadonly();
@@ -243,14 +247,33 @@ export class AuthService {
    * Sécurité : le rôle provient exclusivement de app_metadata (serveur scellé) ou de public.profiles (protégé RLS).
    * user_metadata n'est jamais utilisé pour accorder un rôle car il est modifiable par le client.
    */
-  private async loadUserProfileFromSupabase(
+  private loadUserProfileFromSupabase(
     userId: string,
     email: string,
     accessToken: string,
     authUser?: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } | null
   ): Promise<UserProfile | null> {
-    if (!accessToken) return null;
+    if (!accessToken) return Promise.resolve(null);
 
+    const pending = this.profileLoadRequests.get(userId);
+    if (pending?.token === accessToken) return pending.promise;
+
+    const request = this.fetchUserProfileFromSupabase(userId, email, accessToken, authUser);
+    const trackedRequest = request.finally(() => {
+      if (this.profileLoadRequests.get(userId)?.promise === trackedRequest) {
+        this.profileLoadRequests.delete(userId);
+      }
+    });
+    this.profileLoadRequests.set(userId, { token: accessToken, promise: trackedRequest });
+    return trackedRequest;
+  }
+
+  private async fetchUserProfileFromSupabase(
+    userId: string,
+    email: string,
+    accessToken: string,
+    authUser?: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } | null
+  ): Promise<UserProfile | null> {
     try {
       const profileEndpoint = this.getProfileEndpoint();
       if (!profileEndpoint) return null;

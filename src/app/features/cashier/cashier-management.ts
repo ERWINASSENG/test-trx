@@ -495,6 +495,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly todayIsoDate = signal<string>('');
 
   public ngOnInit(): void {
+    void this.journalService.loadJournals();
     this.cashierService.loadTransactions();
     void this.dossierService.loadAllDossiers();
 
