@@ -3,7 +3,6 @@ import { A11yModule } from '@angular/cdk/a11y';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
-import { AuthService } from '../../core/services/auth.service';
 import { DossierService } from '../../core/services/dossier.service';
 import { Dossier } from '../../core/models/dossier.model';
 import { ProspectService } from '../../core/services/prospect.service';
@@ -27,7 +26,6 @@ export class DossierManagementComponent {
   public readonly dossierService = inject(DossierService);
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
-  private readonly authService = inject(AuthService);
 
   public readonly searchDraft = signal('');
   public readonly searchTerm = signal('');
@@ -50,10 +48,8 @@ export class DossierManagementComponent {
   public readonly totalPages = computed(() => Math.max(1, Math.ceil(this.dossierService.total() / this.pageSize)));
   public readonly currentPage = computed(() => Math.floor(this.offset() / this.pageSize) + 1);
   public readonly canLinkProspect = computed(() => this.accessControl.hasPermission('prospects.read'));
-  public readonly canCreate = computed(() => this.canLinkProspect() && (
-    this.accessControl.hasPermission('cashier.create') ||
-    (this.authService.currentRole() === 'manager' && this.accessControl.hasPermission('cashier.read'))
-  )
+  public readonly canCreate = computed(() =>
+    this.accessControl.hasPermission('dossiers.create') && this.canLinkProspect()
   );
 
   public readonly isModalOpen = signal(false);

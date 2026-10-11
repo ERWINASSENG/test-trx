@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
-import { AuthService } from '../../core/services/auth.service';
 import { DossierService } from '../../core/services/dossier.service';
 import { ProspectService } from '../../core/services/prospect.service';
 import { DossierManagementComponent } from './dossier-management';
@@ -12,21 +11,26 @@ describe('DossierManagementComponent', () => {
   let originalFetch: typeof globalThis.fetch;
   let dossierRows: Record<string, unknown>[] = [];
   let canCreate = signal(true);
+  let canReadProspects = signal(true);
+  let canCreateCashier = signal(false);
 
   beforeEach(async () => {
     originalFetch = globalThis.fetch;
     dossierRows = [];
     canCreate = signal(true);
+    canReadProspects = signal(true);
+    canCreateCashier = signal(false);
 
     await TestBed.configureTestingModule({
       imports: [DossierManagementComponent],
       providers: [
-        { provide: AuthService, useValue: { token: () => 'test-token', currentRole: () => 'admin' } },
         {
           provide: AccessControlService,
           useValue: {
             hasPermission: (permission: string) =>
-              permission === 'prospects.read' || (permission === 'cashier.create' && canCreate()),
+              (permission === 'prospects.read' && canReadProspects())
+              || (permission === 'dossiers.create' && canCreate())
+              || (permission === 'cashier.create' && canCreateCashier()),
           },
         },
         {
@@ -150,5 +154,32 @@ describe('DossierManagementComponent', () => {
     expect(dossierService.createModalRequested()).toBe(false);
     expect(fixture.componentInstance.isModalOpen()).toBe(false);
     expect(fixture.nativeElement.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('n’autorise pas la création d’un dossier avec la seule permission cashier.create', async () => {
+    canCreate.set(false);
+    canCreateCashier.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#dossiers-control-create')).toBeNull();
+
+    fixture.componentInstance.openCreate();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.isModalOpen()).toBe(false);
+  });
+
+  it('exige prospects.read pour créer un dossier lié à un prospect', async () => {
+    canReadProspects.set(false);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#dossiers-control-create')).toBeNull();
+
+    fixture.componentInstance.openCreate();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.isModalOpen()).toBe(false);
   });
 });
