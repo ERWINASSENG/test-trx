@@ -80,4 +80,24 @@ describe('AccessControlCenter', () => {
     expect(service.loadPermissions).toHaveBeenLastCalledWith(true);
     expect(service.loadAudit).toHaveBeenLastCalledWith(50, undefined, true);
   });
+
+  it('devrait faire disparaître le message de feedback après 15 secondes', () => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: AccessControlService, useValue: {} }],
+    });
+    const component = TestBed.runInInjectionContext(() => new AccessControlCenter());
+    vi.useFakeTimers();
+    try {
+      component.setFeedback('Opération réussie');
+      expect(component.feedback()).toBe('Opération réussie');
+
+      vi.advanceTimersByTime(14000);
+      expect(component.feedback()).toBe('Opération réussie');
+
+      vi.advanceTimersByTime(1000);
+      expect(component.feedback()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
