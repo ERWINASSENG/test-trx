@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { SlicePipe } from '@angular/common';
-import { ROLE_DEFINITIONS } from '../../core/models/auth.model';
+import { ROLE_DEFINITIONS, UserProfile } from '../../core/models/auth.model';
 import { AuthService } from '../../core/services/auth.service';
 import { UserService } from '../../core/services/user.service';
 
@@ -81,6 +81,16 @@ export class Profile {
       validators: [Validators.required, Validators.minLength(8)],
     }),
   });
+
+  /**
+   * Retourne le libellé du rôle à afficher dans le badge :
+   * Priorise le libellé attribué par les rôles d'accès RBAC (ex: "DAF"),
+   * puis l'identifiant personnalisé de rôle, puis enfin le rôle canonique (ex: "Employé").
+   */
+  public getRoleDisplay(user: UserProfile | undefined): string {
+    if (!user) return '';
+    return user.roleLabel || user.customRole || this.getRoleLabel(user.role);
+  }
 
   public getRoleLabel(role: string | undefined): string {
     if (!role) return '';

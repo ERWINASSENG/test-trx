@@ -65,57 +65,130 @@
                 aria-label="Sélectionner tous les prospects"
               />
             </th>
-            <th scope="col" class="th-client">
+            <th
+              scope="col"
+              class="th-client th-sortable"
+              [attr.aria-sort]="getAriaSort('client')"
+              (click)="toggleSort('client')"
+              (keydown.enter)="toggleSort('client')"
+              (keydown.space)="toggleSort('client'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par client">
               <div class="th-header-label">
                 <span>Client</span>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'client'">{{ getSortIcon('client') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-country">
+            <th
+              scope="col"
+              class="th-country th-sortable"
+              [attr.aria-sort]="getAriaSort('country')"
+              (click)="toggleSort('country')"
+              (keydown.enter)="toggleSort('country')"
+              (keydown.space)="toggleSort('country'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par pays">
               <div class="th-header-label">
                 <span>Pays</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'country'">{{ getSortIcon('country') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-sector">
+            <th
+              scope="col"
+              class="th-sector th-sortable"
+              [attr.aria-sort]="getAriaSort('sector')"
+              (click)="toggleSort('sector')"
+              (keydown.enter)="toggleSort('sector')"
+              (keydown.space)="toggleSort('sector'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par secteur d'activité">
               <div class="th-header-label">
                 <span>Secteur d'activité</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'sector'">{{ getSortIcon('sector') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-contact">
+            <th
+              scope="col"
+              class="th-contact th-sortable"
+              [attr.aria-sort]="getAriaSort('contact')"
+              (click)="toggleSort('contact')"
+              (keydown.enter)="toggleSort('contact')"
+              (keydown.space)="toggleSort('contact'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par contact principal">
               <div class="th-header-label">
                 <span>Contact principal</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'contact'">{{ getSortIcon('contact') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-phone">
+            <th
+              scope="col"
+              class="th-phone th-sortable"
+              [attr.aria-sort]="getAriaSort('phone')"
+              (click)="toggleSort('phone')"
+              (keydown.enter)="toggleSort('phone')"
+              (keydown.space)="toggleSort('phone'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par téléphone">
               <div class="th-header-label">
                 <span>Téléphone</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'phone'">{{ getSortIcon('phone') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-email">
+            <th
+              scope="col"
+              class="th-email th-sortable"
+              [attr.aria-sort]="getAriaSort('email')"
+              (click)="toggleSort('email')"
+              (keydown.enter)="toggleSort('email')"
+              (keydown.space)="toggleSort('email'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par email">
               <div class="th-header-label">
                 <span>Email</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'email'">{{ getSortIcon('email') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-assignee">
+            <th
+              scope="col"
+              class="th-assignee th-sortable"
+              [attr.aria-sort]="getAriaSort('assignee')"
+              (click)="toggleSort('assignee')"
+              (keydown.enter)="toggleSort('assignee')"
+              (keydown.space)="toggleSort('assignee'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par commercial">
               <div class="th-header-label">
                 <span>Commercial</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'assignee'">{{ getSortIcon('assignee') }}</mat-icon>
               </div>
             </th>
-            <th scope="col" class="th-status">
+            <th
+              scope="col"
+              class="th-status th-sortable"
+              [attr.aria-sort]="getAriaSort('status')"
+              (click)="toggleSort('status')"
+              (keydown.enter)="toggleSort('status')"
+              (keydown.space)="toggleSort('status'); $event.preventDefault()"
+              tabindex="0"
+              role="columnheader"
+              title="Trier par statut">
               <div class="th-header-label">
                 <span>Statut</span>
-                <mat-icon class="sort-icon">unfold_more</mat-icon>
+                <mat-icon class="sort-icon" [class.sort-active]="sortField() === 'status'">{{ getSortIcon('status') }}</mat-icon>
               </div>
             </th>
           </tr>
         </thead>
         <tbody>
-          @for (prospect of prospectService.prospects(); track prospect.id) {
+          @for (prospect of sortedProspects(); track prospect.id) {
             <tr
               class="odoo-data-row select-none cursor-pointer"
               [class.odoo-row-selected]="isSelected(prospect.id)"

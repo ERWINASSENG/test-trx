@@ -171,4 +171,118 @@ describe('ProspectsComponent', () => {
     fixture.destroy();
     TestBed.resetTestingModule();
   });
+
+  describe('Tri interactif des colonnes', () => {
+    const prospectA = {
+      ...prospect,
+      id: 'p-1',
+      companyName: 'Alpha SARL',
+      contactName: 'Zack Contact',
+      country: 'Cameroun',
+      sector: 'BTP',
+      phone: '+237 611111111',
+      email: 'alpha@example.com',
+      status: 'won' as const,
+      assignedTo: mockAssignee.id,
+      createdAt: '2026-10-01T00:00:00.000Z',
+    };
+    const prospectB = {
+      ...prospect,
+      id: 'p-2',
+      companyName: 'Beta SARL',
+      contactName: 'Alice Contact',
+      country: 'Gabon',
+      sector: 'Agriculture',
+      phone: '+241 711111111',
+      email: 'beta@example.com',
+      status: 'new' as const,
+      assignedTo: null,
+      createdAt: '2026-10-05T00:00:00.000Z',
+    };
+
+    it('alterne l’état de tri dans l’ordre asc -> desc -> null', () => {
+      const fixture = createComponent();
+      const component = fixture.componentInstance;
+
+      expect(component.sortField()).toBeNull();
+      expect(component.sortDirection()).toBeNull();
+      expect(component.getSortIcon('client')).toBe('unfold_more');
+
+      // 1er clic : asc
+      component.toggleSort('client');
+      expect(component.sortField()).toBe('client');
+      expect(component.sortDirection()).toBe('asc');
+      expect(component.getSortIcon('client')).toBe('expand_less');
+
+      // 2e clic : desc
+      component.toggleSort('client');
+      expect(component.sortField()).toBe('client');
+      expect(component.sortDirection()).toBe('desc');
+      expect(component.getSortIcon('client')).toBe('expand_more');
+
+      // 3e clic : annulation du tri
+      component.toggleSort('client');
+      expect(component.sortField()).toBeNull();
+      expect(component.sortDirection()).toBeNull();
+      expect(component.getSortIcon('client')).toBe('unfold_more');
+
+      fixture.destroy();
+      TestBed.resetTestingModule();
+    });
+
+    it('trie la liste par raison sociale (client) en ascendant et descendant', () => {
+      const fixture = createComponent();
+      const component = fixture.componentInstance;
+      mockProspectService.prospects.set([prospectB, prospectA]);
+
+      // Ascendant : Alpha puis Beta
+      component.toggleSort('client');
+      const sortedAsc = component.sortedProspects();
+      expect(sortedAsc[0].companyName).toBe('Alpha SARL');
+      expect(sortedAsc[1].companyName).toBe('Beta SARL');
+
+      // Descendant : Beta puis Alpha
+      component.toggleSort('client');
+      const sortedDesc = component.sortedProspects();
+      expect(sortedDesc[0].companyName).toBe('Beta SARL');
+      expect(sortedDesc[1].companyName).toBe('Alpha SARL');
+
+      fixture.destroy();
+      TestBed.resetTestingModule();
+    });
+
+    it('trie la liste par pays et par commercial assigné', () => {
+      const fixture = createComponent();
+      const component = fixture.componentInstance;
+      mockProspectService.prospects.set([prospectB, prospectA]);
+
+      // Tri pays asc : Cameroun (A) puis Gabon (B)
+      component.toggleSort('country');
+      expect(component.sortedProspects()[0].country).toBe('Cameroun');
+
+      // Bascule vers tri commercial asc : attribué (Jean Commercial) vs 'Non attribué'
+      component.toggleSort('assignee');
+      expect(component.sortField()).toBe('assignee');
+      expect(component.sortDirection()).toBe('asc');
+      const byAssignee = component.sortedProspects();
+      expect(byAssignee.length).toBe(2);
+
+      fixture.destroy();
+      TestBed.resetTestingModule();
+    });
+
+    it('retourne la liste intacte si aucun tri n’est actif ou si la liste est vide', () => {
+      const fixture = createComponent();
+      const component = fixture.componentInstance;
+
+      mockProspectService.prospects.set([]);
+      expect(component.sortedProspects()).toEqual([]);
+
+      mockProspectService.prospects.set([prospectA, prospectB]);
+      expect(component.sortedProspects()).toEqual([prospectA, prospectB]);
+
+      fixture.destroy();
+      TestBed.resetTestingModule();
+    });
+  });
 });
