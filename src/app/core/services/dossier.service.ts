@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
 import { Dossier, DossierExpenseSummary } from '../models/dossier.model';
 
@@ -20,6 +20,7 @@ export interface DossierApiResult<T> {
 @Injectable({ providedIn: 'root' })
 export class DossierService {
   private readonly authService = inject(AuthService);
+  private dataUserId: string | null | undefined;
 
   private readonly _dossiers = signal<Dossier[]>([]);
   private readonly _total = signal(0);
@@ -39,7 +40,15 @@ export class DossierService {
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
+  constructor() {
+    effect(() => {
+      this.authService.currentUser();
+      this.resetForAccountChange();
+    });
+  }
+
   public async loadDossiers(params: DossierPageRequest = {}): Promise<boolean> {
+    this.resetForAccountChange();
     const query = new URLSearchParams({
       limit: String(params.limit ?? 50),
       offset: String(params.offset ?? 0),
@@ -47,7 +56,10 @@ export class DossierService {
     if (params.search?.trim()) query.set('search', params.search.trim());
 
     const result = await this.request<{ dossiers: Record<string, unknown>[]; total: number }>(`?${query}`);
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._dossiers.set([]);
+      this._total.set(0);
       this._error.set(result.error || 'Impossible de charger les dossiers.');
       return false;
     }
@@ -59,6 +71,7 @@ export class DossierService {
   }
 
   public async loadAllDossiers(): Promise<boolean> {
+    this.resetForAccountChange();
     const dossiers: Dossier[] = [];
     let offset = 0;
     let total = 0;
@@ -67,7 +80,10 @@ export class DossierService {
       const result = await this.request<{ dossiers: Record<string, unknown>[]; total: number }>(
         `?limit=100&offset=${offset}`
       );
+      if (!this.isCurrentDataUser()) return false;
       if (!result.success || !result.data) {
+        this._dossiers.set([]);
+        this._total.set(0);
         this._error.set(result.error || 'Impossible de charger les dossiers.');
         return false;
       }
@@ -92,11 +108,14 @@ export class DossierService {
   }
 
   public async loadExpenseSummary(): Promise<boolean> {
+    this.resetForAccountChange();
     this._isExpenseSummaryLoading.set(true);
     this._expenseSummaryError.set(null);
     try {
       const result = await this.request<{ summaries: DossierExpenseSummary[] }>('/expenses');
+      if (!this.isCurrentDataUser()) return false;
       if (!result.success || !result.data) {
+        this._expenseSummary.set([]);
         this._expenseSummaryError.set(result.error || 'Impossible de charger le rapport des dépenses.');
         return false;
       }
@@ -135,11 +154,30 @@ export class DossierService {
     return { success: true, data: dossier };
   }
 
+  private resetForAccountChange(): void {
+    const userId = this.authService.currentUser()?.id ?? null;
+    if (this.dataUserId === userId) return;
+
+    this.dataUserId = userId;
+    this._dossiers.set([]);
+    this._total.set(0);
+    this._expenseSummary.set([]);
+    this._error.set(null);
+    this._expenseSummaryError.set(null);
+    this._createModalRequested.set(false);
+  }
+
+  private isCurrentDataUser(): boolean {
+    return this.dataUserId === (this.authService.currentUser()?.id ?? null);
+  }
+
   private async request<T>(
     path: string,
     method = 'GET',
     body?: unknown
   ): Promise<DossierApiResult<T>> {
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     const token = this.authService.token();
     if (!token) {
       this.authService.handleUnauthorizedSession();
@@ -160,6 +198,9 @@ export class DossierService {
       });
 
       let response = await sendRequest(token);
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (response.status === 401) {
         const refresh = await this.authService.refreshAccessTokenAfterUnauthorized();
         if (refresh.status === 'refreshed') {
@@ -170,6 +211,9 @@ export class DossierService {
       }
 
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (!response.ok) {
         if (response.status === 401) {
           this._dossiers.set([]);

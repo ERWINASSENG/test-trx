@@ -14,12 +14,12 @@ describe('AppLauncher', () => {
     isLoading: signal(false),
     loadMyPermissions: vi.fn().mockResolvedValue(undefined),
     hasPermission: vi.fn((key: string) => [
-      'dashboard.view',
-      'cashier.read',
-      'quotes.read',
-      'crm.read',
-      'prospects.read',
-      'configuration.read',
+      'module.dashboard.view',
+      'module.accounting.view',
+      'module.quotes.view',
+      'module.crm.view',
+      'module.prospects.view',
+      'module.configuration.view',
     ].includes(key)),
   };
 

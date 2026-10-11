@@ -60,7 +60,7 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
     expect(result).toBe(true);
   });
 
-  it('devrait autoriser l’accès si la permission serveur est accordée', async () => {
+  it('autorise l’ouverture d’un module selon sa permission de visibilité', async () => {
     authServiceMock.currentUser.mockReturnValue({
       id: 'admin-1',
       email: 'admin@transmex.cm',
@@ -69,7 +69,7 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
 
     accessControlMock.hasPermission.mockReturnValue(true);
     const routeSnapshot = {
-      data: { permission: 'access.roles.read' },
+      data: { permission: 'module.hr.view' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;
@@ -91,7 +91,7 @@ describe('roleGuard (Niveau 2 de Sécurité RBAC)', () => {
 
     accessControlMock.hasPermission.mockReturnValue(true);
     const routeSnapshot = {
-      data: { permission: 'journals.read' },
+      data: { permission: 'module.configuration.view' },
     } as unknown as ActivatedRouteSnapshot;
 
     const stateSnapshot = {} as RouterStateSnapshot;

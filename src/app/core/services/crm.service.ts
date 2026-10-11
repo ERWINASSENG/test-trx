@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   CrmActivity,
   CrmCampaign,
@@ -22,6 +22,7 @@ export interface CrmResult<T> {
 @Injectable({ providedIn: 'root' })
 export class CrmService {
   private readonly authService = inject(AuthService);
+  private dataUserId: string | null | undefined;
   private readonly _clients = signal<CrmClient[]>([]);
   private readonly _contacts = signal<CrmContact[]>([]);
   private readonly _opportunities = signal<CrmOpportunity[]>([]);
@@ -40,9 +41,24 @@ export class CrmService {
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
+  constructor() {
+    effect(() => {
+      this.authService.currentUser();
+      this.resetForAccountChange();
+    });
+  }
+
   public async load(): Promise<boolean> {
+    this.resetForAccountChange();
     const result = await this.request<CrmOverview>('/overview', 'GET', undefined, true);
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._clients.set([]);
+      this._contacts.set([]);
+      this._opportunities.set([]);
+      this._activities.set([]);
+      this._campaigns.set([]);
+      this._canManageTeam.set(false);
       this._error.set(result.error || 'Impossible de charger le CRM.');
       return false;
     }
@@ -192,12 +208,32 @@ export class CrmService {
     return this.request<T>(path, method, body);
   }
 
+  private resetForAccountChange(): void {
+    const userId = this.authService.currentUser()?.id ?? null;
+    if (this.dataUserId === userId) return;
+
+    this.dataUserId = userId;
+    this._clients.set([]);
+    this._contacts.set([]);
+    this._opportunities.set([]);
+    this._activities.set([]);
+    this._campaigns.set([]);
+    this._canManageTeam.set(false);
+    this._error.set(null);
+  }
+
+  private isCurrentDataUser(): boolean {
+    return this.dataUserId === (this.authService.currentUser()?.id ?? null);
+  }
+
   private async request<T>(
     path: string,
     method: string,
     body?: unknown,
     showLoading = false
   ): Promise<CrmResult<T>> {
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     const token = this.authService.token();
     if (!token) {
       this.authService.handleUnauthorizedSession();
@@ -215,6 +251,9 @@ export class CrmService {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
       return { success: true, data: payload };
     } catch {

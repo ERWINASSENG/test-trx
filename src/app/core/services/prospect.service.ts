@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
 import { CreateProspectInput, Prospect, ProspectAssignee, ProspectStatus, UpdateProspectInput } from '../models/prospect.model';
 
@@ -18,6 +18,7 @@ export interface ProspectApiResult<T> {
 @Injectable({ providedIn: 'root' })
 export class ProspectService {
   private readonly authService = inject(AuthService);
+  private dataUserId: string | null | undefined;
 
   private readonly _prospects = signal<Prospect[]>([]);
   private readonly _assignees = signal<ProspectAssignee[]>([]);
@@ -31,7 +32,15 @@ export class ProspectService {
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
+  constructor() {
+    effect(() => {
+      this.authService.currentUser();
+      this.resetForAccountChange();
+    });
+  }
+
   public async loadProspects(params: ProspectPageRequest = {}): Promise<boolean> {
+    this.resetForAccountChange();
     const query = new URLSearchParams({
       limit: String(params.limit ?? 25),
       offset: String(params.offset ?? 0),
@@ -40,7 +49,10 @@ export class ProspectService {
     if (params.status) query.set('status', params.status);
 
     const result = await this.request<{ prospects: Record<string, unknown>[]; total: number }>(`?${query}`);
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._prospects.set([]);
+      this._total.set(0);
       this._error.set(result.error || 'Impossible de charger les prospects.');
       return false;
     }
@@ -52,8 +64,11 @@ export class ProspectService {
   }
 
   public async loadAssignees(): Promise<boolean> {
+    this.resetForAccountChange();
     const result = await this.request<{ assignees: Record<string, unknown>[] }>('/assignees');
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._assignees.set([]);
       this._error.set(result.error || 'Impossible de charger les responsables.');
       return false;
     }
@@ -84,6 +99,8 @@ export class ProspectService {
   }
 
   private async request<T>(path: string, method = 'GET', body?: unknown): Promise<ProspectApiResult<T>> {
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     const token = this.authService.token();
     if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
 
@@ -99,6 +116,9 @@ export class ProspectService {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
       return { success: true, data: payload };
     } catch {
@@ -106,6 +126,21 @@ export class ProspectService {
     } finally {
       this._isLoading.set(false);
     }
+  }
+
+  private resetForAccountChange(): void {
+    const userId = this.authService.currentUser()?.id ?? null;
+    if (this.dataUserId === userId) return;
+
+    this.dataUserId = userId;
+    this._prospects.set([]);
+    this._assignees.set([]);
+    this._total.set(0);
+    this._error.set(null);
+  }
+
+  private isCurrentDataUser(): boolean {
+    return this.dataUserId === (this.authService.currentUser()?.id ?? null);
   }
 
   private mapProspect(row: Record<string, unknown>): Prospect {

@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   QuoteAssignee,
   QuoteColumn,
@@ -32,6 +32,7 @@ export interface QuoteApiResult<T> {
 @Injectable({ providedIn: 'root' })
 export class QuoteService {
   private readonly authService = inject(AuthService);
+  private dataUserId: string | null | undefined;
   private readonly _quotes = signal<SalesQuote[]>([]);
   private readonly _prospects = signal<Prospect[]>([]);
   private readonly _assignees = signal<QuoteAssignee[]>([]);
@@ -46,7 +47,15 @@ export class QuoteService {
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
+  constructor() {
+    effect(() => {
+      this.authService.currentUser();
+      this.resetForAccountChange();
+    });
+  }
+
   public async loadQuotes(status = ''): Promise<boolean> {
+    this.resetForAccountChange();
     const query = new URLSearchParams();
     if (status) query.set('status', status);
     const result = await this.request<{ quotes: Record<string, unknown>[] }>(
@@ -55,7 +64,9 @@ export class QuoteService {
       undefined,
       true
     );
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._quotes.set([]);
       this._error.set(result.error || 'Impossible de charger les cotations.');
       return false;
     }
@@ -65,8 +76,11 @@ export class QuoteService {
   }
 
   public async loadProspects(): Promise<boolean> {
+    this.resetForAccountChange();
     const result = await this.request<{ prospects: Record<string, unknown>[] }>('/api/quotes/prospects');
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._prospects.set([]);
       this._error.set(result.error || 'Impossible de charger les clients.');
       return false;
     }
@@ -94,8 +108,11 @@ export class QuoteService {
   }
 
   public async loadAssignees(): Promise<boolean> {
+    this.resetForAccountChange();
     const result = await this.request<{ assignees: Record<string, unknown>[] }>('/api/quotes/assignees');
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._assignees.set([]);
       this._error.set(result.error || 'Impossible de charger les commerciaux.');
       return false;
     }
@@ -110,8 +127,11 @@ export class QuoteService {
   }
 
   public async loadTemplates(): Promise<boolean> {
+    this.resetForAccountChange();
     const result = await this.request<{ templates: Record<string, unknown>[] }>('/api/quotes/templates');
+    if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
+      this._templates.set([]);
       this._error.set(result.error || 'Impossible de charger les modèles.');
       return false;
     }
@@ -192,12 +212,30 @@ export class QuoteService {
     return this.request<T>(path, method, body);
   }
 
+  private resetForAccountChange(): void {
+    const userId = this.authService.currentUser()?.id ?? null;
+    if (this.dataUserId === userId) return;
+
+    this.dataUserId = userId;
+    this._quotes.set([]);
+    this._prospects.set([]);
+    this._assignees.set([]);
+    this._templates.set([]);
+    this._error.set(null);
+  }
+
+  private isCurrentDataUser(): boolean {
+    return this.dataUserId === (this.authService.currentUser()?.id ?? null);
+  }
+
   private async request<T>(
     path: string,
     method = 'GET',
     body?: unknown,
     showLoading = false
   ): Promise<QuoteApiResult<T>> {
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     const token = this.authService.token();
     if (!token) return { success: false, error: 'Session authentifiée introuvable.' };
 
@@ -213,6 +251,9 @@ export class QuoteService {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
       return { success: true, data: payload };
     } catch {

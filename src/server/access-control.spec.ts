@@ -1,8 +1,79 @@
 import { describe, expect, it } from 'vitest';
 import { AccessScope } from '../app/core/models/access-control.model';
-import { hasPermission, registerAccessScopeEvaluator } from './access-control';
+import {
+  hasPermission,
+  legacyModuleVisibilityPermissions,
+  registerAccessScopeEvaluator,
+  requestHasPermission,
+  resolveEffectiveRoleKeys,
+} from './access-control';
 
 describe('hasPermission', () => {
+  it('uses assigned dynamic roles instead of inheriting the legacy profile role', async () => {
+    const roleKeys = resolveEffectiveRoleKeys(['daf'], 'employe');
+
+    expect(roleKeys).toEqual(['daf']);
+    await expect(hasPermission('user-daf', 'hr.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
+    await expect(hasPermission('user-daf', 'users.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
+  });
+
+  it('uses the legacy profile role only when there is no active role assignment', async () => {
+    const roleKeys = resolveEffectiveRoleKeys([], 'employe');
+
+    expect(roleKeys).toEqual(['employe']);
+    await expect(hasPermission('legacy-user', 'hr.read', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
+    await expect(hasPermission('legacy-user', 'users.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
+  });
+
+  it('keeps legacy module visibility separate from the underlying data permissions', async () => {
+    const visibilityPermissions = legacyModuleVisibilityPermissions(['employe']);
+    expect(visibilityPermissions).toContain('module.hr.view');
+    expect(visibilityPermissions).not.toContain('users.read');
+
+    const rules = {
+      roleKeys: ['daf'],
+      rules: [{
+        permissionKey: 'module.hr.view',
+        effect: 'allow' as const,
+        scope: { type: 'all', version: 1 } as const,
+        isUserOverride: false,
+        sourceRoleKey: 'daf',
+      }],
+      hasActiveRoleAssignments: true,
+    };
+    await expect(hasPermission('user-daf', 'module.hr.view', undefined, rules)).resolves.toBe(true);
+    await expect(hasPermission('user-daf', 'hr.read', undefined, rules)).resolves.toBe(false);
+    await expect(hasPermission('user-daf', 'users.read', undefined, rules)).resolves.toBe(false);
+  });
+
+  it('preserves read-only collaborator listing for the canonical manager role', async () => {
+    await expect(hasPermission('manager-user', 'users.read', undefined, { roleKeys: ['manager'], rules: [] }))
+      .resolves.toBe(true);
+  });
+
+  it('does not treat HR page access as collaborator-list access for a custom role', async () => {
+    const rules = {
+      roleKeys: ['daf'],
+      rules: [{
+        permissionKey: 'hr.read',
+        effect: 'allow' as const,
+        scope: { type: 'all', version: 1 } as const,
+        isUserOverride: false,
+        sourceRoleKey: 'daf',
+      }],
+    };
+
+    await expect(hasPermission('user-daf', 'hr.read', undefined, rules)).resolves.toBe(true);
+    await expect(hasPermission('user-daf', 'users.read', undefined, rules)).resolves.toBe(false);
+  });
+
+  it('préserve la lecture et la création des dossiers pour le rôle historique manager', async () => {
+    const rules = { roleKeys: ['manager'], rules: [] };
+
+    await expect(hasPermission('manager-user', 'dossiers.read', undefined, rules)).resolves.toBe(true);
+    await expect(hasPermission('manager-user', 'dossiers.create', undefined, rules)).resolves.toBe(true);
+  });
+
   it('autorise un grant de rôle dont le scope all correspond', async () => {
     const allowed = await hasPermission(
       'user-1',
@@ -120,6 +191,65 @@ describe('hasPermission', () => {
     );
 
     expect(allowed).toBe(false);
+  });
+
+  it('applique à une requête les mêmes refus prioritaires que hasPermission', () => {
+    const accessRules = {
+      roleKeys: ['manager'],
+      rules: [
+        {
+          permissionKey: 'cashier.read',
+          effect: 'allow' as const,
+          scope: { type: 'all', version: 1 } as const,
+          isUserOverride: false,
+          sourceRoleKey: 'manager',
+        },
+        {
+          permissionKey: 'cashier.read',
+          effect: 'deny' as const,
+          scope: { type: 'all', version: 1 } as const,
+          isUserOverride: true,
+        },
+      ],
+    };
+    const request = {
+      user: { id: 'user-1' },
+      accessControl: accessRules,
+    } as unknown as Parameters<typeof requestHasPermission>[0];
+
+    expect(requestHasPermission(request, 'cashier.read')).toBe(false);
+  });
+
+  it('applique les portées de rôle de la même manière dans les deux vérificateurs', async () => {
+    const accessRules = {
+      roleKeys: ['custom'],
+      rules: [{
+        permissionKey: 'journal_entries.create',
+        effect: 'allow' as const,
+        scope: { type: 'owner', version: 1 } as const,
+        isUserOverride: false,
+        sourceRoleKey: 'custom',
+      }],
+    };
+    const request = {
+      user: { id: 'user-1' },
+      accessControl: accessRules,
+    } as unknown as Parameters<typeof requestHasPermission>[0];
+
+    expect(requestHasPermission(request, 'journal_entries.create', { ownerUserId: 'user-1' })).toBe(true);
+    expect(requestHasPermission(request, 'journal_entries.create', { ownerUserId: 'user-2' })).toBe(false);
+    await expect(hasPermission(
+      'user-1',
+      'journal_entries.create',
+      { ownerUserId: 'user-1' },
+      accessRules
+    )).resolves.toBe(true);
+    await expect(hasPermission(
+      'user-1',
+      'journal_entries.create',
+      { ownerUserId: 'user-2' },
+      accessRules
+    )).resolves.toBe(false);
   });
 
   it('refuse un type de scope non enregistré', async () => {

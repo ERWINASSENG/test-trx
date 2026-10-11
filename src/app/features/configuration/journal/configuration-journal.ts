@@ -39,8 +39,9 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   public readonly hasNextPage = this.journalService.hasNextPage;
   public readonly totalJournalsCount = computed(() => this.journalService.journals().length);
   public readonly canCreateJournal = this.journalService.canCreateJournal;
-  public readonly canManageJournals = this.journalService.canManageJournals;
-  public readonly isManagerReadOnly = this.journalService.isManagerReadOnly;
+  public readonly canUpdateJournal = this.journalService.canUpdateJournal;
+  public readonly canDeleteJournal = this.journalService.canDeleteJournal;
+  public readonly isReadOnly = this.journalService.isReadOnly;
 
   // États locaux de l'interface
   public readonly isActionsMenuOpen = signal<boolean>(false);
@@ -151,7 +152,7 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
   }
 
   public async onRowClick(journal: Journal): Promise<void> {
-    if (this.canManageJournals()) {
+    if (this.canUpdateJournal()) {
       if (this.editingJournalId() !== journal.id) {
         // Sauvegarder la ligne précédente si déjà en édition
         const prevId = this.editingJournalId();
@@ -173,7 +174,7 @@ export class ConfigurationJournalComponent implements OnInit, OnDestroy {
     if (event) {
       event.stopPropagation();
     }
-    if (!this.canManageJournals()) return;
+    if (!this.canUpdateJournal()) return;
 
     this.editingJournalId.set(journal.id);
     this.editForm.reset({

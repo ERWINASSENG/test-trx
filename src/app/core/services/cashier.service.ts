@@ -14,6 +14,7 @@ import {
 } from '../utils/cashier-duplicate.util';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { AccessControlService } from './access-control.service';
 import { ExportService } from './export.service';
 import { NotificationService } from './notification.service';
 import { ParsedImportRow } from './import.service';
@@ -54,10 +55,12 @@ export type CashierSortDirection = 'asc' | 'desc';
 export class CashierService implements OnDestroy {
   private readonly supabaseService = inject(SupabaseService);
   private readonly authService = inject(AuthService);
+  private readonly accessControl = inject(AccessControlService);
   private readonly exportService = inject(ExportService);
   private readonly notificationService = inject(NotificationService);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
+  private activeDataUserId: string | null | undefined;
 
   // Liste des transactions en Signal réactif
   private readonly _transactions = signal<CashierTransaction[]>([]);
@@ -103,6 +106,15 @@ export class CashierService implements OnDestroy {
     // Réactivité unique coordonnée (P0 #7 : élimine la triple invocation concurrente au démarrage)
     effect(() => {
       const user = this.authService.currentUser();
+      const userId = user?.id ?? null;
+      this.accessControl.effectivePermissions();
+      if (this.activeDataUserId !== userId) {
+        this.activeDataUserId = userId;
+        this._transactions.set([]);
+        this._serverSummary.set(null);
+        this._error.set(null);
+        this.cleanupRealtimeSubscription();
+      }
       if (user && this.isBrowser) {
         this.loadTransactions();
         this.loadCashierSummary();
@@ -287,20 +299,26 @@ export class CashierService implements OnDestroy {
    */
   public async loadCashierSummary(): Promise<void> {
     if (!this.isBrowser) return;
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     try {
       const token = this.authService.token();
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
       const res = await fetch('/api/cahier/operations/summary', { headers });
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
       if (res.ok) {
         const json = await res.json();
+        if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
         if (json?.summary) {
           this._serverSummary.set(json.summary);
         }
+      } else {
+        this._serverSummary.set(null);
       }
-    } catch {
-      // Ignorer silencieusement
+    } catch (error) {
+      this._serverSummary.set(null);
+      console.error('Erreur lors du chargement du résumé de caisse:', error);
     }
   }
 
@@ -484,6 +502,7 @@ export class CashierService implements OnDestroy {
     }
 
     this.activeLoadPromise = (async () => {
+      const requestedUserId = this.authService.currentUser()?.id ?? null;
       this._isLoading.set(true);
       this._error.set(null);
 
@@ -534,6 +553,8 @@ export class CashierService implements OnDestroy {
         // chargement automatique : les erreurs seront visibles lors d'une action.
 
         // Traitement et injection dans le Signal Angular 19
+        if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
+
         if (rawRows && Array.isArray(rawRows)) {
           const mappedTransactions = this.mapDatabaseOperations(rawRows);
           this._transactions.update((curr) => {
@@ -546,6 +567,9 @@ export class CashierService implements OnDestroy {
             );
             return [...mappedTransactions, ...bankOps];
           });
+        } else {
+          this._transactions.set([]);
+          this._serverSummary.set(null);
         }
       } catch (err: unknown) {
         console.error('Erreur globale lors du chargement des opérations de caisse:', err);
@@ -553,6 +577,10 @@ export class CashierService implements OnDestroy {
         this._isLoading.set(false);
         this.activeLoadPromise = null;
         this.loadCashierSummary();
+        const currentUserId = this.authService.currentUser()?.id ?? null;
+        if (currentUserId && currentUserId !== requestedUserId) {
+          queueMicrotask(() => void this.loadTransactions(limit));
+        }
       }
     })();
 
@@ -1748,9 +1776,8 @@ export class CashierService implements OnDestroy {
       if (!token) return;
 
       await client.realtime.setAuth(token);
-      const role = this.authService.currentRole();
-      const canReadCashier = ['admin', 'caissier', 'caissiere', 'manager', 'comptable', 'tresorier'].includes(role || '');
-      const canReadJournalBalances = ['admin', 'manager', 'tresorier'].includes(role || '');
+      const canReadCashier = this.accessControl.hasPermission('cashier.read');
+      const canReadJournalBalances = this.accessControl.hasPermission('journal_entries.chart_read');
 
       if (canReadCashier && !this.cashierRealtimeChannel) {
         this.cashierRealtimeChannel = client

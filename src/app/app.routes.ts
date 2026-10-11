@@ -49,7 +49,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/dashboard/dashboard').then((m) => m.Dashboard),
         canActivate: [roleGuard],
-        data: { permission: 'dashboard.view' },
+        data: { permission: 'module.dashboard.view' },
         title: 'Transmex - Tableau de Bord',
       },
       {
@@ -57,7 +57,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/prospects/prospects').then((m) => m.ProspectsComponent),
         canActivate: [roleGuard],
-        data: { permission: 'prospects.read' },
+        data: { permission: 'module.prospects.view' },
         title: 'Transmex - Contacts',
       },
       {
@@ -65,7 +65,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/quotes/quotes').then((m) => m.QuotesComponent),
         canActivate: [roleGuard],
-        data: { permission: 'quotes.read' },
+        data: { permission: 'module.quotes.view' },
         title: 'Transmex - Cotations',
       },
       {
@@ -73,7 +73,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/crm/crm').then((m) => m.CrmComponent),
         canActivate: [roleGuard],
-        data: { permission: 'crm.read' },
+        data: { permission: 'module.crm.view' },
         title: 'Transmex - CRM Commercial',
       },
       {
@@ -81,7 +81,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/dossiers/dossier-management').then((m) => m.DossierManagementComponent),
         canActivate: [roleGuard],
-        data: { permission: 'cashier.read' },
+        data: { permission: 'module.dossiers.view' },
         title: 'Transmex - Dossiers',
       },
       {
@@ -91,7 +91,7 @@ export const routes: Routes = [
             (m) => m.AccessControlCenter
           ),
         canActivate: [roleGuard],
-        data: { permission: 'access.users.read' },
+        data: { permission: 'module.access_control.view' },
         title: 'Transmex - Gestion des accès',
       },
       {
@@ -101,7 +101,7 @@ export const routes: Routes = [
             (m) => m.AccessControlCenter
           ),
         canActivate: [roleGuard],
-        data: { permission: 'access.roles.read' },
+        data: { permission: 'module.access_control.view' },
         title: 'Transmex - Gestion des accès',
       },
       {
@@ -111,7 +111,7 @@ export const routes: Routes = [
             (m) => m.AccessControlCenter
           ),
         canActivate: [roleGuard],
-        data: { permission: 'access.roles.read' },
+        data: { permission: 'module.access_control.view' },
         title: 'Transmex - Gestion des accès',
       },
       {
@@ -129,7 +129,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/hr/hr-management').then((m) => m.HrManagement),
         canActivate: [roleGuard],
-        data: { permission: 'hr.read' },
+        data: { permission: 'module.hr.view' },
         title: 'Transmex - Ressources Humaines',
       },
       {
@@ -144,7 +144,7 @@ export const routes: Routes = [
             (m) => m.CashierManagement
           ),
         canActivate: [roleGuard],
-        data: { permission: 'cashier.read' },
+        data: { permission: 'module.accounting.view' },
         title: 'Transmex - Caisse',
       },
       {
@@ -159,7 +159,7 @@ export const routes: Routes = [
             (m) => m.ConfigurationParametresComponent
           ),
         canActivate: [roleGuard],
-        data: { permission: 'configuration.read' },
+        data: { permission: 'module.configuration.view' },
         title: 'Transmex - Paramètres',
       },
       {
@@ -169,7 +169,7 @@ export const routes: Routes = [
             (m) => m.ConfigurationJournalComponent
           ),
         canActivate: [roleGuard],
-        data: { permission: 'journals.read' },
+        data: { permission: 'module.configuration.view' },
         title: 'Transmex - Journaux',
       },
       {

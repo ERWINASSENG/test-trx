@@ -35,6 +35,7 @@ export class AccessControlCenter implements OnInit {
   public readonly userAssignmentError = signal<string | null>(null);
   public readonly scopeError = signal<string | null>(null);
   public readonly feedback = signal<string | null>(null);
+  public readonly initialLoadError = signal<string | null>(null);
   public readonly permissionScopeDrafts = signal<Record<string, string>>({});
   public readonly userRoleDraft = signal('');
   public readonly overridePermissionDraft = signal('');
@@ -86,13 +87,41 @@ export class AccessControlCenter implements OnInit {
   }
 
   public async loadInitialData(): Promise<void> {
-    await Promise.all([
-      this.accessControl.loadRoles(),
-      this.accessControl.loadPermissions(),
-      this.accessControl.loadUsers(),
-      this.accessControl.loadAudit(),
-    ]);
-    if (!this.selectedRoleId() && this.accessControl.roles().length > 0) {
+    this.initialLoadError.set(null);
+    if (!await this.accessControl.loadMyPermissions()) return;
+
+    const loadTasks: { section: string; load: () => Promise<boolean> }[] = [];
+    if (this.can('access.roles.read')) {
+      loadTasks.push({ section: 'rôles', load: () => this.accessControl.loadRoles() });
+    }
+    if (this.can('access.permissions.read')) {
+      loadTasks.push({ section: 'catalogue des permissions', load: () => this.accessControl.loadPermissions() });
+    }
+    if (this.can('access.users.read')) {
+      loadTasks.push({ section: 'utilisateurs', load: () => this.accessControl.loadUsers() });
+    }
+    if (this.can('access.audit.read')) {
+      loadTasks.push({ section: 'historique', load: () => this.accessControl.loadAudit() });
+    }
+
+    const loadErrors: string[] = [];
+    for (const task of loadTasks) {
+      if (!await task.load()) {
+        loadErrors.push(`${task.section} : ${this.accessControl.error() || 'erreur inconnue'}`);
+      }
+    }
+    this.initialLoadError.set(loadErrors.length > 0 ? loadErrors.join(' · ') : null);
+
+    const firstAvailableView = this.can('access.roles.read')
+      ? 'roles'
+      : this.can('access.users.read')
+        ? 'users'
+        : this.can('access.audit.read')
+          ? 'audit'
+          : null;
+    if (firstAvailableView) this.activeView.set(firstAvailableView);
+
+    if (this.can('access.roles.read') && !this.selectedRoleId() && this.accessControl.roles().length > 0) {
       await this.selectRole(this.accessControl.roles()[0]);
     }
   }
@@ -314,6 +343,9 @@ export class AccessControlCenter implements OnInit {
   }
 
   public async refreshAudit(): Promise<void> {
-    await this.accessControl.loadAudit();
+    const loaded = await this.accessControl.loadAudit();
+    if (!loaded) {
+      this.initialLoadError.set(this.accessControl.error() || 'Impossible d’actualiser l’historique des accès.');
+    }
   }
 }

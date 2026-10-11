@@ -7,7 +7,7 @@ export interface AppModule {
   route: string;
   icon: string;
   accent: string;
-  permissionKey: string;
+  visibilityPermissionKey: string;
 }
 
 export const APP_MODULES: readonly AppModule[] = [
@@ -18,7 +18,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/dashboard',
     icon: '/assets/module-icons/board.svg',
     accent: '#714b67',
-    permissionKey: 'dashboard.view',
+    visibilityPermissionKey: 'module.dashboard.view',
   },
   {
     id: 'comptabilite',
@@ -27,7 +27,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/caisse',
     icon: '/assets/module-icons/accountant.svg',
     accent: '#008f8c',
-    permissionKey: 'cashier.read',
+    visibilityPermissionKey: 'module.accounting.view',
   },
   {
     id: 'personnel',
@@ -36,7 +36,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/personnel',
     icon: '/assets/module-icons/hr.svg',
     accent: '#b45309',
-    permissionKey: 'hr.read',
+    visibilityPermissionKey: 'module.hr.view',
   },
   {
     id: 'prospects',
@@ -45,7 +45,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/prospects',
     icon: '/assets/module-icons/contacts.svg',
     accent: '#0b5ed7',
-    permissionKey: 'prospects.read',
+    visibilityPermissionKey: 'module.prospects.view',
   },
   {
     id: 'quotes',
@@ -54,7 +54,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/quotes',
     icon: '/assets/module-icons/quotes.svg',
     accent: '#2563eb',
-    permissionKey: 'quotes.read',
+    visibilityPermissionKey: 'module.quotes.view',
   },
   {
     id: 'crm-commercial',
@@ -63,7 +63,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/crm-commercial',
     icon: '/assets/module-icons/crm-commercial.svg',
     accent: '#0b5ed7',
-    permissionKey: 'crm.read',
+    visibilityPermissionKey: 'module.crm.view',
   },
   {
     id: 'dossiers',
@@ -72,7 +72,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/dossiers',
     icon: '/assets/module-icons/dossier.svg',
     accent: '#008f8c',
-    permissionKey: 'cashier.read',
+    visibilityPermissionKey: 'module.dossiers.view',
   },
   {
     id: 'administration',
@@ -81,7 +81,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/configuration/parametres',
     icon: '/assets/module-icons/settings.svg',
     accent: '#475569',
-    permissionKey: 'configuration.read',
+    visibilityPermissionKey: 'module.configuration.view',
   },
   {
     id: 'access-control',
@@ -90,7 +90,7 @@ export const APP_MODULES: readonly AppModule[] = [
     route: '/admin/access-control',
     icon: '/assets/module-icons/access-control.svg',
     accent: '#b42336',
-    permissionKey: 'access.roles.read',
+    visibilityPermissionKey: 'module.access_control.view',
   },
 ];
 
@@ -98,7 +98,9 @@ export function isAppModuleVisibleToPermissions(
   module: AppModule,
   permissions: readonly EffectivePermission[]
 ): boolean {
-  const matchingPermissions = permissions.filter((permission) => permission.permissionKey === module.permissionKey);
+  const matchingPermissions = permissions.filter(
+    (permission) => permission.permissionKey === module.visibilityPermissionKey
+  );
   if (matchingPermissions.some((permission) => permission.effect === 'deny')) return false;
   return matchingPermissions.some((permission) => permission.effect === 'allow');
 }

@@ -105,6 +105,22 @@ describe('UserService', () => {
     expect(service).toBeTruthy();
     expect(service.users().length).toBe(2);
     expect(service.totalUsersCount()).toBe(2);
+    expect(localStorage.getItem('transmex_users_store')).toBeNull();
+  });
+
+  it('efface les données de collaborateurs quand le serveur refuse leur lecture', async () => {
+    localStorage.setItem('transmex_users_store', JSON.stringify(service.users()));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'Permission insuffisante pour cette action.' }),
+    }));
+
+    await service.loadInitialUsers();
+
+    expect(service.users()).toEqual([]);
+    expect(service.error()).toContain('Permission insuffisante');
+    expect(localStorage.getItem('transmex_users_store')).toBeNull();
   });
 
   it('devrait créer un nouvel utilisateur avec succès et lui assigner un mot de passe temporaire', async () => {

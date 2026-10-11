@@ -34,6 +34,7 @@ export class HrManagement implements OnInit {
   public readonly userServiceError = this.userService.error;
   public readonly isAdmin = this.authService.isAdmin;
   public readonly dynamicRoles = this.accessControlService.roles;
+  public readonly canReadUsers = computed(() => this.accessControlService.hasPermission('users.read'));
 
   public readonly availableRoles = computed<DisplayRoleOption[]>(() => {
     const rolesMap = new Map<string, DisplayRoleOption>();
@@ -64,13 +65,21 @@ export class HrManagement implements OnInit {
   });
 
   public ngOnInit(): void {
-    void this.userService.loadInitialUsers();
-    void this.accessControlService.loadRoles();
+    if (this.canReadUsers()) {
+      void this.userService.loadInitialUsers();
+    } else {
+      this.userService.clearAllUsers();
+    }
+    if (this.isAdmin()) void this.accessControlService.loadRoles();
   }
 
   public retryLoadUsers(): void {
-    void this.userService.loadInitialUsers();
-    void this.accessControlService.loadRoles();
+    if (this.canReadUsers()) {
+      void this.userService.loadInitialUsers();
+    } else {
+      this.userService.clearAllUsers();
+    }
+    if (this.isAdmin()) void this.accessControlService.loadRoles();
   }
 
   public readonly selectedDepartment = signal<string>('all');

@@ -9,7 +9,7 @@
 
         <!-- GAUCHE : Bouton Nouveau violet Odoo + Titre "Journaux ⚙" -->
         <div class="cp-left flex items-center gap-3 shrink-0" id="journal-cp-actions-left">
-          @if (canCreateJournal()) {
+          @if (canDeleteJournal()) {
             <!-- Action principale de création -->
             <button
               type="button"
@@ -19,8 +19,8 @@
               title="Créer un nouveau journal comptable">
               <span>Nouveau</span>
             </button>
-          } @else if (isManagerReadOnly()) {
-            <!-- Indicateur de consultation seule pour les Managers -->
+          } @else if (isReadOnly()) {
+            <!-- Indicateur de consultation seule -->
             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-200/80 dark:bg-white/10 text-slate-700 dark:text-slate-300 select-none" id="journal-manager-readonly-badge">
               <mat-icon class="!text-[14px] !w-3.5 !h-3.5 text-slate-500">visibility</mat-icon>
               <span>Consultation seule</span>
@@ -88,7 +88,7 @@
                       <span>Exporter (CSV)</span>
                     </button>
 
-                    @if (canCreateJournal()) {
+                    @if (canUpdateJournal()) {
                       <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
 
                       <!-- 2. Supprimer les éléments sélectionnés -->

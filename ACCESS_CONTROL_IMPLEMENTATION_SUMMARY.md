@@ -54,6 +54,20 @@ Il :
 
 Le middleware Express utilisé par les routes est `requirePermission(...)`.
 
+Les affectations actives de `access_user_roles` sont la source d’autorité des
+rôles : le rôle historique de `profiles` n’est utilisé en repli que lorsqu’il
+n’existe aucune affectation active. Cela empêche un rôle personnalisé, tel que
+DAF, d’hériter involontairement des privilèges d’un rôle canonique normalisé
+comme `employe`.
+
+Dans le module RH, `hr.read` autorise l’accès à l’espace RH, tandis que la liste
+des profils collaborateurs exige `users.read`. Le serveur protège cette liste
+par cette permission même s’il utilise la clé Supabase `service_role`; l’interface
+masque également l’annuaire aux utilisateurs sans ce droit. Les profils
+collaborateurs ne sont plus mis en cache dans `localStorage`, afin qu’un refus
+d’accès ou un changement de compte ne réaffiche pas des données précédemment
+chargées.
+
 ### API d’administration
 
 Fichier : `src/server/access-control.handlers.ts`.
@@ -87,8 +101,24 @@ Les routes Express principales utilisent désormais des permissions plutôt que 
 - écritures : `journal_entries.read`, `journal_entries.chart_read`, `journal_entries.create`, `journal_entries.update`, `journal_entries.delete`;
 - utilisateurs : `users.read`, `users.create`, `users.update`, `users.delete`;
 - profil : `profile.update`.
+- dossiers : `dossiers.read` et `dossiers.create`. La migration
+  `20261011113000_add_dossier_access_permissions.sql` initialise le catalogue et
+  reprend les portées des droits Caisse/CRM existants. Le rôle historique
+  `manager` conserve explicitement la lecture et la création des dossiers.
+- CRM : la création d’un dossier depuis une opportunité exige à la fois
+  `crm.create` et `dossiers.create`.
 
 Les scopes `owner` des journaux sont résolus par le serveur à partir de `journals.created_by`.
+L’écran de configuration des journaux suit lui aussi ces permissions effectives
+pour la lecture, la création, la modification et la suppression. Les changements
+de statut passent par l’API protégée `journals.update`, sans écriture Supabase
+directe depuis le navigateur.
+
+Le centre de gestion charge d’abord les permissions effectives de l’utilisateur,
+puis ne demande que les sections permises (`access.roles.read`,
+`access.permissions.read`, `access.users.read`, `access.audit.read`). Les erreurs
+de chargement de section restent visibles au lieu de provoquer des requêtes
+interdites à l’initialisation.
 
 ### Migration Angular
 
@@ -97,6 +127,27 @@ Le service [access-control.service.ts](src/app/core/services/access-control.serv
 Le guard Angular lit `data.permission`; il ne décide plus à partir de `data.roles`.
 
 Le lanceur et le layout filtrent l’affichage avec les permissions effectives, mais ces filtres restent uniquement ergonomiques. Les routes Express restent la protection réelle.
+
+### Visibilité des modules et accès aux données
+
+La visibilité d’une tuile et l’ouverture de son module utilisent désormais des
+permissions `module.<nom>.view` indépendantes des autorisations métier. Par
+exemple, `module.hr.view` permet d’ouvrir l’espace RH, tandis que `users.read`
+reste nécessaire pour consulter l’annuaire. Voir un module n’accorde ni lecture,
+ni création, ni modification de ses données.
+
+Les API métier conservent leurs contrôles `requirePermission(...)`. Une route
+autorisée par `module.*.view` n’élargit pas les droits de l’API. L’ancienne
+lecture directe Supabase des journaux a été supprimée afin qu’un refus ou une
+indisponibilité de l’API ne contourne pas son contrôle serveur.
+
+La migration locale
+`20261012120000_add_module_visibility_permissions.sql` ajoute les permissions
+de visibilité au catalogue et reprend les accès modules existants à partir des
+anciennes permissions d’entrée de route. Elle ne transforme pas une permission
+de lecture des données en permission de visibilité à l’exécution; après la
+migration, l’administrateur peut gérer ces deux familles séparément. Cette
+migration n’a pas été appliquée à la base de production.
 
 Le nouveau centre est disponible à :
 
@@ -142,34 +193,42 @@ L’icône source utilisée est `approvals.svg`, choisie pour représenter les a
 
 ## Fichiers SQL
 
-Le projet conserve actuellement un seul fichier SQL :
+Le dépôt conserve un bundle documentaire et des migrations SQL individuelles :
 
 - `supabase/tous-les-sql.sql`
+- `supabase/migrations/`
 
-Il contient le schéma, les anciennes migrations regroupées, les nouvelles migrations du contrôle d’accès et les tests SQL, séparés par des marqueurs `SOURCE`.
-
-Les fichiers SQL individuels ont été supprimés à la demande. Le bundle est une archive documentaire et ne doit pas être exécuté tel quel.
+Le bundle contient des migrations historiques séparées par des marqueurs
+`SOURCE`; il ne doit pas être exécuté tel quel. La migration Dossiers ci-dessus
+est un fichier individuel et n’a pas été appliquée à une base distante dans le
+cadre de cette mise à jour.
 
 ## À faire dans la base TEST
 
 ### 1. Réconcilier l’historique Supabase
 
-Le dossier standard `supabase/migrations` ne contient plus les migrations individuelles. Avant tout déploiement :
+Le répertoire `supabase/migrations` contient certaines migrations individuelles,
+mais pas l’intégralité de l’historique fondateur (référencé dans le bundle).
+Avant tout déploiement :
 
 1. inspecter l’état réel avec `supabase migration list`;
 2. comparer `supabase_migrations.schema_migrations` avec les migrations déjà appliquées;
-3. restaurer des migrations horodatées ou utiliser une stratégie de réparation validée;
+3. vérifier l’historique avant toute réparation ou application de migration;
 4. ne jamais pousser le bundle complet comme une migration unique sans vérifier l’historique.
 
 ### 2. Appliquer les migrations du contrôle d’accès dans l’ordre
 
-À extraire depuis `supabase/tous-les-sql.sql`, dans cet ordre :
+Les migrations fondatrices historiques sont référencées dans
+`supabase/tous-les-sql.sql`, dans cet ordre :
 
 1. `20260929100000_access_control_foundation.sql`
 2. `20260929110000_access_control_initial_permissions.sql`
 3. `20260929120000_access_control_mutations.sql`
 
 La première crée les tables et reprend les rôles existants. La deuxième crée le catalogue initial des permissions. La troisième ajoute la RPC atomique d’administration et son audit.
+Après réconciliation de l’historique, appliquer aussi les migrations
+individuelles restantes dans l’ordre de leur horodatage, dont la migration
+Dossiers. Ne pas appliquer de migration distante sans validation explicite.
 
 ### 3. Vérifier les prérequis de schéma
 
@@ -208,6 +267,9 @@ Validé localement :
 - build Angular/SSR réussi;
 - diagnostics VS Code sans erreur;
 - `git diff --check` propre;
+- pour la présente mise à jour : build complet réussi, 25 tests ciblés réussis
+  sur 4 fichiers, et vérification des 47 clés de permissions API contre les
+  fichiers SQL sans clé manquante;
 - suite complète : 35 fichiers, 226 tests réussis;
 - tests du moteur de permissions : 5 réussis;
 - tests ciblés guard/layout/Caisse/moteur : 35 réussis.

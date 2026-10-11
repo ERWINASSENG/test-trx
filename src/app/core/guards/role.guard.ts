@@ -6,7 +6,7 @@ import { AccessControlService } from '../services/access-control.service';
 /**
  * Guard de route piloté par une permission calculée côté serveur et rôles canoniques.
  * 1. Attend que la session soit initialisée (await authService.waitForSession()).
- * 2. Accorde immédiatement l'accès aux modules fondamentaux (apps.view, dashboard.view, profile.read) à tout utilisateur connecté.
+ * 2. Accorde l'accès aux espaces communs (lanceur, permission historique du tableau de bord, profil) à tout utilisateur connecté.
  * 3. Charge et évalue les permissions effectives avec dérogation administrateur et repli par rôle métier.
  * 4. Redirige vers /forbidden en cas de refus avéré.
  */

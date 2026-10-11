@@ -1,12 +1,5 @@
--- ==============================================================================
--- DIGITAL-TRX — Script de RECRÉATION FIDÈLE DE LA STRUCTURE RÉELLE DE PRODUCTION
--- Vérifié par introspection directe du projet Supabase "digitaltrx"
--- (nkeornagjbbejmkqqzfq) le 04/10/2026.
--- ==============================================================================
--- Ce fichier remplace la version du 01/10/2026, qui documentait une étape
--- antérieure du projet. Depuis, la production a évolué sur plusieurs points
--- que ce fichier corrige :
---
+
+
 --   1. Un schéma `private` existe désormais et porte 3 fonctions internes
 --      (private.is_active_user, private.assign_journal_entry_piece_comptable,
 --      private.audit_row_change) — en plus de leurs équivalents publics là où
@@ -36,6 +29,47 @@
 --      cashier_transactions) ont été durcies (contrôle de propriété
 --      created_by/employee_id, vérification is_active_user()) — elles sont
 --      actives en production depuis le 04/10/2026.
+--   8. dossiers.prospect_id (FK vers prospects, ON DELETE SET NULL) relie un
+--      dossier au prospect dont il est issu.
+--   9. access_control_mutate() a été durcie (migration du 09/10/2026) :
+--      validation de portée stricte (all/self/owner/department, version
+--      obligatoire), protection du dernier administrateur aussi sur
+--      user.role.assign, et exclusivité "1 utilisateur = 1 rôle" appliquée
+--      à l'assignation.
+--  10. Module Cotations commerciales : sales_quotes, sales_quote_templates et la
+--      séquence sales_quote_number_seq (accès service_role uniquement, comme prospects).
+--  11. CRM commercial : prospect_contacts, sales_opportunities, sales_activities,
+--      sales_campaigns, sales_campaign_prospects, colonnes prospects.country/
+--      contact_role/sector, opportunity_id sur sales_quotes et dossiers, fonction
+--      prepare_sales_campaign_audience(), trigger sync_accepted_quote_to_sales_crm
+--      (une cotation acceptée passe l'opportunité en "won" et le prospect en
+--      "converted") et 7 permissions crm.*.
+--  12. Le rôle admin possède TOUTES les permissions (portée "all") ; le trigger
+--      trg_grant_new_permission_to_admin lui accorde automatiquement toute
+--      nouvelle permission ajoutée au catalogue.
+--  13. Empreinte anti-doublon de caisse corrigée : elle porte sur le montant SIGNÉ
+--      et la catégorie (et non abs(montant)), pour ne pas rejeter une entrée et son
+--      remboursement exact. Le trigger d'audit attribue l'acteur via created_by
+--      sur INSERT quand auth.uid() est NULL (client service_role) ; les UPDATE/DELETE
+--      faits en service_role restent non attribuables (details.actor_source =
+--      'unattributed') : l'application doit alors tracer elle-même l'acteur.
+--  14. Audit complet du 10/10/2026 : (a) assign_piece_comptable() déduit l'année de
+--      la pièce de la date de l'opération (ISO AAAA-MM-JJ ou JJ/MM/AAAA) et non
+--      de la date du jour ; (b) triggers updated_at ajoutés sur journals,
+--      journal_entries, access_roles et access_permissions ; (c) handle_new_user()
+--      et sync_accepted_quote_to_sales_crm() ne sont plus exécutables via l'API ;
+--      (d) 8 index sur clés étrangères du module CRM.
+--  15. Garde-fous d'intégrité (10/10/2026, après purge des données métier) :
+--      cashier_transactions.date doit être au format ISO AAAA-MM-JJ
+--      (chk_cashier_date_iso) ; le montant doit être signé comme la catégorie
+--      (chk_cashier_sign_matches_category : entrée > 0, sortie < 0, jamais 0) ;
+--      journal_entries.employee_id référence profiles ; un utilisateur connecté
+--      non admin ne peut plus modifier id/email/user_code de son profil
+--      (trg_protect_profile_identity) ; un compte désactivé perd l'accès à
+--      dossiers et à la lecture de la caisse.
+--  16. Permissions dossiers.read / dossiers.create (catalogue de 50 permissions) :
+--      dossiers.read suit cashier.read ; dossiers.create suit cashier.create et
+--      crm.create, plus le rôle manager.
 --
 -- À exécuter sur un projet Supabase neuf, juste après sa création.
 -- ==============================================================================
@@ -143,6 +177,7 @@ CREATE TABLE public.dossiers (
   client text,
   statut text NOT NULL DEFAULT 'ouvert',
   description text,
+  prospect_id uuid,
   created_by uuid REFERENCES public.profiles(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -190,7 +225,7 @@ CREATE TABLE public.journal_entries (
     montant NUMERIC(15,2) NOT NULL,
     solde_apres NUMERIC(15,2),
     created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    employee_id UUID,
+    employee_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_journal_entries_piece UNIQUE (journal_id, piece_comptable)
@@ -199,6 +234,7 @@ CREATE INDEX idx_journal_entries_journal_id ON public.journal_entries(journal_id
 CREATE INDEX idx_journal_entries_date ON public.journal_entries(journal_id, date ASC, sequence_number ASC);
 CREATE INDEX idx_journal_entries_seq ON public.journal_entries(journal_id, sequence_number ASC);
 CREATE INDEX idx_journal_entries_created_by ON public.journal_entries(created_by);
+CREATE INDEX idx_journal_entries_employee_id ON public.journal_entries(employee_id);
 CREATE UNIQUE INDEX uq_journal_entries_seq_per_year
   ON public.journal_entries (journal_id, ((EXTRACT(year FROM date))::integer), sequence_number);
 
@@ -236,7 +272,8 @@ CREATE INDEX idx_audit_logs_user_id ON public.audit_logs (user_id);
 
 -- cashier_transactions
 -- NOTE : uq_cashier_transactions_business_fingerprint empêche la double-saisie
--- d'une même opération (même date, montant, libellé, dossier et service normalisés).
+-- d'une même opération (même date, catégorie, montant signé, libellé, dossier et
+-- service normalisés). Le montant est signé : entrée +X et sortie -X restent distinctes.
 CREATE TABLE public.cashier_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   date text NOT NULL,
@@ -263,7 +300,11 @@ CREATE TABLE public.cashier_transactions (
   CONSTRAINT chk_operations_requires_dossier
     CHECK (service <> 'Opérations' OR no_dossier IS NOT NULL OR dossier_id IS NOT NULL),
   CONSTRAINT chk_operations_requires_quantity
-    CHECK (service <> 'Opérations' OR quantity IS NOT NULL)
+    CHECK (service <> 'Opérations' OR quantity IS NOT NULL),
+  CONSTRAINT chk_cashier_date_iso
+    CHECK (date ~ '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])'),
+  CONSTRAINT chk_cashier_sign_matches_category
+    CHECK ((category = 'entree' AND montant > 0) OR (category = 'sortie' AND montant < 0))
 );
 CREATE INDEX idx_cashier_piece_comptable ON public.cashier_transactions (piece_comptable);
 CREATE UNIQUE INDEX uq_cashier_transactions_piece_comptable
@@ -280,7 +321,8 @@ CREATE INDEX idx_cashier_transactions_keyset ON public.cashier_transactions (dat
 CREATE UNIQUE INDEX uq_cashier_transactions_business_fingerprint
   ON public.cashier_transactions (
     left(date, 10),
-    abs(montant),
+    category,
+    montant,
     regexp_replace(lower(btrim(libelle)), '\s+', ' ', 'g'),
     regexp_replace(lower(btrim(COALESCE(no_dossier, ''))), '\s+', ' ', 'g'),
     regexp_replace(lower(btrim(COALESCE(service, ''))), '\s+', ' ', 'g')
@@ -296,6 +338,9 @@ CREATE TABLE public.prospects (
   email text CHECK (email IS NULL OR length(btrim(email)) <= 320),
   phone text CHECK (phone IS NULL OR length(btrim(phone)) <= 40),
   source text CHECK (source IS NULL OR length(btrim(source)) <= 100),
+  country text,
+  contact_role text,
+  sector text,
   status text NOT NULL DEFAULT 'new'
     CHECK (status IN ('new', 'contacted', 'qualified', 'converted', 'lost')),
   assigned_to uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -313,6 +358,67 @@ CREATE INDEX idx_prospects_status_created ON public.prospects (status, created_a
 CREATE INDEX idx_prospects_assigned_to ON public.prospects (assigned_to);
 CREATE INDEX idx_prospects_email_lower ON public.prospects (lower(email)) WHERE (email IS NOT NULL);
 
+-- dossiers.prospect_id -> prospects (ajouté ici car prospects est créée après dossiers)
+ALTER TABLE public.dossiers
+  ADD CONSTRAINT dossiers_prospect_id_fkey
+  FOREIGN KEY (prospect_id) REFERENCES public.prospects (id) ON DELETE SET NULL;
+CREATE INDEX idx_dossiers_prospect_id ON public.dossiers (prospect_id) WHERE prospect_id IS NOT NULL;
+
+-- Contacts d'un prospect
+CREATE TABLE public.prospect_contacts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE CASCADE,
+  full_name text NOT NULL CHECK (length(btrim(full_name)) BETWEEN 2 AND 200),
+  job_title text CHECK (job_title IS NULL OR length(job_title) <= 120),
+  email text CHECK (email IS NULL OR length(email) <= 320),
+  phone text CHECK (phone IS NULL OR length(phone) <= 40),
+  is_primary boolean NOT NULL DEFAULT false,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_prospect_contacts_prospect
+  ON public.prospect_contacts (prospect_id, is_primary DESC, full_name);
+
+-- Opportunités commerciales
+CREATE TABLE public.sales_opportunities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE RESTRICT,
+  assigned_to uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 2 AND 200),
+  stage text NOT NULL DEFAULT 'new'
+    CHECK (stage IN ('new', 'qualified', 'quote_preparation', 'quote_sent', 'negotiation', 'won', 'lost')),
+  transport_mode text CHECK (transport_mode IS NULL OR transport_mode IN ('air', 'sea')),
+  direction text CHECK (direction IS NULL OR direction IN ('import', 'export')),
+  origin text CHECK (origin IS NULL OR length(origin) <= 160),
+  destination text CHECK (destination IS NULL OR length(destination) <= 160),
+  goods_description text CHECK (goods_description IS NULL OR length(goods_description) <= 2000),
+  weight_kg numeric(14, 3) CHECK (weight_kg IS NULL OR weight_kg >= 0),
+  volume_m3 numeric(14, 3) CHECK (volume_m3 IS NULL OR volume_m3 >= 0),
+  incoterm text CHECK (incoterm IS NULL OR length(incoterm) <= 20),
+  estimated_value numeric(14, 2) NOT NULL DEFAULT 0 CHECK (estimated_value >= 0),
+  currency varchar(3) NOT NULL DEFAULT 'XAF' CHECK (currency ~ '^[A-Z]{3}$'),
+  expected_close_date date,
+  won_reason text CHECK (won_reason IS NULL OR won_reason IN ('accepted_quote', 'signed_contract')),
+  contract_reference text CHECK (contract_reference IS NULL OR length(contract_reference) <= 120),
+  notes text CHECK (notes IS NULL OR length(notes) <= 10000),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (stage <> 'won' OR won_reason IS NOT NULL),
+  CHECK (won_reason <> 'signed_contract' OR contract_reference IS NOT NULL)
+);
+CREATE INDEX idx_sales_opportunities_owner_stage
+  ON public.sales_opportunities (assigned_to, stage, updated_at DESC);
+CREATE INDEX idx_sales_opportunities_prospect
+  ON public.sales_opportunities (prospect_id, updated_at DESC);
+
+-- dossiers.opportunity_id : un dossier au plus par opportunité
+ALTER TABLE public.dossiers
+  ADD COLUMN opportunity_id uuid REFERENCES public.sales_opportunities(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX idx_dossiers_opportunity_unique
+  ON public.dossiers (opportunity_id) WHERE opportunity_id IS NOT NULL;
+
 -- Cotations commerciales à structure personnalisable par cotation
 CREATE SEQUENCE public.sales_quote_number_seq;
 
@@ -323,6 +429,7 @@ CREATE TABLE public.sales_quotes (
     lpad(nextval('public.sales_quote_number_seq'::regclass)::text, 7, '0')
   ),
   prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE RESTRICT,
+  opportunity_id uuid REFERENCES public.sales_opportunities(id) ON DELETE SET NULL,
   assigned_to uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   title text NOT NULL DEFAULT 'Cotation' CHECK (length(btrim(title)) BETWEEN 2 AND 200),
@@ -341,6 +448,7 @@ CREATE INDEX idx_sales_quotes_assigned_updated ON public.sales_quotes (assigned_
 CREATE INDEX idx_sales_quotes_prospect_created ON public.sales_quotes (prospect_id, created_at DESC);
 CREATE INDEX idx_sales_quotes_status_valid_until ON public.sales_quotes (status, valid_until)
   WHERE status IN ('draft', 'sent') AND valid_until IS NOT NULL;
+CREATE INDEX idx_sales_quotes_opportunity ON public.sales_quotes (opportunity_id) WHERE opportunity_id IS NOT NULL;
 
 CREATE TABLE public.sales_quote_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -353,6 +461,61 @@ CREATE TABLE public.sales_quote_templates (
 );
 CREATE INDEX idx_sales_quote_templates_name ON public.sales_quote_templates (name);
 CREATE INDEX idx_sales_quote_templates_creator ON public.sales_quote_templates (created_by);
+
+CREATE TABLE public.sales_activities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE CASCADE,
+  opportunity_id uuid REFERENCES public.sales_opportunities(id) ON DELETE CASCADE,
+  contact_id uuid REFERENCES public.prospect_contacts(id) ON DELETE SET NULL,
+  assigned_to uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  activity_type text NOT NULL CHECK (activity_type IN ('call', 'email', 'meeting', 'task')),
+  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 2 AND 200),
+  due_at timestamptz,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled')),
+  notes text CHECK (notes IS NULL OR length(notes) <= 5000),
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (opportunity_id IS NULL OR prospect_id IS NOT NULL)
+);
+CREATE INDEX idx_sales_activities_owner_due
+  ON public.sales_activities (assigned_to, due_at) WHERE status = 'pending';
+CREATE INDEX idx_sales_activities_opportunity
+  ON public.sales_activities (opportunity_id, due_at);
+
+CREATE TABLE public.sales_campaigns (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 2 AND 200),
+  status text NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'active', 'completed', 'cancelled')),
+  starts_at date,
+  ends_at date,
+  filters jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(filters) = 'object'),
+  notes text CHECK (notes IS NULL OR length(notes) <= 5000),
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at >= starts_at)
+);
+CREATE INDEX idx_sales_campaigns_status_dates
+  ON public.sales_campaigns (status, starts_at);
+
+CREATE TABLE public.sales_campaign_prospects (
+  campaign_id uuid NOT NULL REFERENCES public.sales_campaigns(id) ON DELETE CASCADE,
+  prospect_id uuid NOT NULL REFERENCES public.prospects(id) ON DELETE CASCADE,
+  prepared_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (campaign_id, prospect_id)
+);
+
+-- Index sur les clés étrangères du module CRM
+CREATE INDEX idx_prospect_contacts_created_by ON public.prospect_contacts (created_by);
+CREATE INDEX idx_sales_activities_contact ON public.sales_activities (contact_id);
+CREATE INDEX idx_sales_activities_created_by ON public.sales_activities (created_by);
+CREATE INDEX idx_sales_activities_prospect ON public.sales_activities (prospect_id);
+CREATE INDEX idx_sales_campaign_prospects_prospect ON public.sales_campaign_prospects (prospect_id);
+CREATE INDEX idx_sales_campaigns_created_by ON public.sales_campaigns (created_by);
+CREATE INDEX idx_sales_opportunities_created_by ON public.sales_opportunities (created_by);
+CREATE INDEX idx_sales_quotes_created_by ON public.sales_quotes (created_by);
 
 -- ------------------------------------------------------------------
 -- Système RBAC (catalogue de rôles/permissions)
@@ -580,6 +743,7 @@ BEGIN
   END IF;
 
   annee_piece := COALESCE(
+    NULLIF(substring(NEW.date from '^\d{4}'), '')::int,
     NULLIF(substring(NEW.date from '\d{4}$'), '')::int,
     EXTRACT(YEAR FROM now())::int
   );
@@ -771,7 +935,7 @@ $function$;
 CREATE OR REPLACE FUNCTION public.access_control_mutate(
   p_actor_user_id uuid,
   p_operation text,
-  p_payload jsonb
+  p_payload jsonb DEFAULT '{}'::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -794,6 +958,7 @@ DECLARE
   previous_state jsonb;
   next_state jsonb;
   audit_subject uuid;
+  admin_count integer;
 BEGIN
   SELECT p.is_active INTO actor_is_active
   FROM public.profiles p WHERE p.id = p_actor_user_id;
@@ -850,8 +1015,8 @@ BEGIN
   target_reason := NULLIF(btrim(payload->>'reason'), '');
 
   IF jsonb_typeof(target_scope) <> 'object'
-     OR COALESCE(target_scope->>'type', '') = ''
-     OR target_scope->>'version' <> '1' THEN
+     OR COALESCE(target_scope->>'type', '') NOT IN ('all', 'self', 'owner', 'department')
+     OR target_scope->>'version' IS DISTINCT FROM '1' THEN
     RAISE EXCEPTION 'Unsupported permission scope document' USING ERRCODE = '22023';
   END IF;
 
@@ -924,8 +1089,8 @@ BEGIN
         SELECT 1 FROM jsonb_array_elements(payload->'grants') AS item
         WHERE NOT EXISTS (SELECT 1 FROM public.access_permissions p WHERE p.permission_key = item->>'permissionKey')
         OR jsonb_typeof(item->'scope') <> 'object'
-        OR COALESCE(item->'scope'->>'type', '') = ''
-        OR item->'scope'->>'version' <> '1'
+        OR COALESCE(item->'scope'->>'type', '') NOT IN ('all', 'self', 'owner', 'department')
+        OR item->'scope'->>'version' IS DISTINCT FROM '1'
       ) THEN
         RAISE EXCEPTION 'Unknown permission or invalid scope' USING ERRCODE = '22023';
       END IF;
@@ -959,6 +1124,21 @@ BEGIN
       IF NOT FOUND OR NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = target_user_id) THEN
         RAISE EXCEPTION 'Active role or user profile not found' USING ERRCODE = 'P0002';
       END IF;
+      IF target_role_key <> 'admin' THEN
+        SELECT count(DISTINCT ur.user_id) INTO admin_count
+        FROM public.access_user_roles ur
+        JOIN public.access_roles r ON r.id = ur.role_id
+        WHERE r.role_key = 'admin' AND (ur.expires_at IS NULL OR ur.expires_at > now());
+        IF admin_count <= 1 AND EXISTS (
+          SELECT 1 FROM public.access_user_roles ur
+          JOIN public.access_roles r ON r.id = ur.role_id
+          WHERE ur.user_id = target_user_id AND r.role_key = 'admin'
+        ) THEN
+          RAISE EXCEPTION 'Cannot replace the last administrator assignment' USING ERRCODE = '42501';
+        END IF;
+      END IF;
+      DELETE FROM public.access_user_roles
+      WHERE user_id = target_user_id AND role_id <> target_role_id;
       INSERT INTO public.access_user_roles (user_id, role_id, assigned_by, assignment_source, expires_at)
       VALUES (target_user_id, target_role_id, p_actor_user_id, 'admin', NULLIF(payload->>'expiresAt', '')::timestamptz)
       ON CONFLICT (user_id, role_id) DO UPDATE
@@ -973,12 +1153,14 @@ BEGIN
       IF target_role_key IS NULL THEN
         RAISE EXCEPTION 'Role not found' USING ERRCODE = 'P0002';
       END IF;
-      IF target_role_key = 'admin' AND (
-        SELECT count(*) FROM public.access_user_roles ur
+      IF target_role_key = 'admin' THEN
+        SELECT count(DISTINCT ur.user_id) INTO admin_count
+        FROM public.access_user_roles ur
         JOIN public.access_roles r ON r.id = ur.role_id
-        WHERE r.role_key = 'admin' AND (ur.expires_at IS NULL OR ur.expires_at > now())
-      ) <= 1 THEN
-        RAISE EXCEPTION 'Cannot revoke the last administrator assignment' USING ERRCODE = '42501';
+        WHERE r.role_key = 'admin' AND (ur.expires_at IS NULL OR ur.expires_at > now());
+        IF admin_count <= 1 THEN
+          RAISE EXCEPTION 'Cannot revoke the last administrator assignment' USING ERRCODE = '42501';
+        END IF;
       END IF;
       DELETE FROM public.access_user_roles WHERE user_id = target_user_id AND role_id = target_role_id;
       IF NOT FOUND THEN
@@ -1032,6 +1214,105 @@ BEGIN
 
   RETURN COALESCE(next_state, '{}'::jsonb);
 END;
+$function$;
+
+-- --------------------------------------------------------------
+-- CRM commercial : préparation d'audience de campagne (remplace l'audience
+-- existante) et synchronisation cotation acceptée -> opportunité/prospect.
+-- --------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.prepare_sales_campaign_audience(
+  p_campaign_id uuid,
+  p_prospect_ids uuid[]
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  inserted_count integer;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.sales_campaigns WHERE id = p_campaign_id
+  ) THEN
+    RAISE EXCEPTION 'Campagne introuvable.';
+  END IF;
+
+  DELETE FROM public.sales_campaign_prospects WHERE campaign_id = p_campaign_id;
+  INSERT INTO public.sales_campaign_prospects (campaign_id, prospect_id)
+  SELECT p_campaign_id, recipient_id
+  FROM unnest(coalesce(p_prospect_ids, ARRAY[]::uuid[])) AS recipient_id
+  ON CONFLICT (campaign_id, prospect_id) DO NOTHING;
+  GET DIAGNOSTICS inserted_count = ROW_COUNT;
+  RETURN inserted_count;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_accepted_quote_to_sales_crm()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF NEW.status = 'accepted'
+    AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
+    IF NEW.opportunity_id IS NOT NULL THEN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM public.sales_opportunities
+        WHERE id = NEW.opportunity_id AND prospect_id = NEW.prospect_id
+      ) THEN
+        RAISE EXCEPTION 'La cotation et l’opportunité associée doivent appartenir à la même société.';
+      END IF;
+      UPDATE public.sales_opportunities
+      SET stage = 'won', won_reason = 'accepted_quote', contract_reference = NULL
+      WHERE id = NEW.opportunity_id AND stage <> 'won';
+    END IF;
+    UPDATE public.prospects
+    SET status = 'converted'
+    WHERE id = NEW.prospect_id AND status <> 'converted';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+-- Un utilisateur connecté non admin ne peut pas changer l'identité de son profil.
+-- Les écritures service_role (auth.uid() NULL) et admin ne sont pas concernées.
+CREATE OR REPLACE FUNCTION public.protect_profile_identity_columns()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF (SELECT auth.uid()) IS NOT NULL AND NOT public.is_admin() THEN
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.user_code IS DISTINCT FROM OLD.user_code THEN
+      RAISE EXCEPTION 'Identity columns of a profile cannot be changed by the user'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+-- Toute nouvelle permission du catalogue est automatiquement accordée à admin.
+CREATE OR REPLACE FUNCTION public.grant_new_permission_to_admin()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
+  SELECT r.id, NEW.permission_key, '{"type":"all","version":1}'::jsonb, NULL
+  FROM public.access_roles r
+  WHERE r.role_key = 'admin'
+  ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
+  RETURN NEW;
+END
 $function$;
 
 -- ------------------------------------------------------------------
@@ -1120,6 +1401,7 @@ CREATE OR REPLACE FUNCTION private.audit_row_change()
 AS $function$
 DECLARE
   v_uid uuid := auth.uid();
+  v_actor_source text := 'auth_uid';
   v_email text;
   v_role text;
   v_old jsonb;
@@ -1133,6 +1415,15 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Client service_role : auth.uid() est NULL. Sur INSERT, created_by désigne
+  -- l'acteur ; sur UPDATE/DELETE l'acteur n'est pas déductible côté base.
+  IF v_uid IS NULL THEN
+    IF TG_OP = 'INSERT' THEN
+      v_uid := NULLIF(v_new->>'created_by', '')::uuid;
+    END IF;
+    v_actor_source := CASE WHEN v_uid IS NULL THEN 'unattributed' ELSE 'row_created_by' END;
+  END IF;
+
   SELECT p.email, p.role::text INTO v_email, v_role
   FROM public.profiles p WHERE p.id = v_uid;
 
@@ -1144,7 +1435,7 @@ BEGIN
     'DB_' || TG_OP || '_' || upper(TG_TABLE_NAME),
     TG_TABLE_NAME,
     COALESCE(v_new->>'id', v_old->>'id'),
-    jsonb_build_object('source', 'db_trigger', 'old', v_old, 'new', v_new)
+    jsonb_build_object('source', 'db_trigger', 'actor_source', v_actor_source, 'old', v_old, 'new', v_new)
   );
 
   RETURN COALESCE(NEW, OLD);
@@ -1225,14 +1516,6 @@ CREATE TRIGGER trg_prospects_updated_at
   BEFORE UPDATE ON public.prospects
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-CREATE TRIGGER trg_sales_quotes_updated_at
-  BEFORE UPDATE ON public.sales_quotes
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
-CREATE TRIGGER trg_sales_quote_templates_updated_at
-  BEFORE UPDATE ON public.sales_quote_templates
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
 -- Audit automatique (écrit dans public.audit_logs)
 CREATE TRIGGER trg_audit_cashier_transactions
   AFTER INSERT OR UPDATE OR DELETE ON public.cashier_transactions
@@ -1241,6 +1524,49 @@ CREATE TRIGGER trg_audit_cashier_transactions
 CREATE TRIGGER trg_audit_journal_entries
   AFTER INSERT OR UPDATE OR DELETE ON public.journal_entries
   FOR EACH ROW EXECUTE FUNCTION private.audit_row_change();
+
+CREATE TRIGGER trg_sales_quotes_updated_at
+  BEFORE UPDATE ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_sales_quote_templates_updated_at
+  BEFORE UPDATE ON public.sales_quote_templates
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_prospect_contacts_updated_at
+  BEFORE UPDATE ON public.prospect_contacts
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER trg_sales_opportunities_updated_at
+  BEFORE UPDATE ON public.sales_opportunities
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER trg_sales_activities_updated_at
+  BEFORE UPDATE ON public.sales_activities
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER trg_sales_campaigns_updated_at
+  BEFORE UPDATE ON public.sales_campaigns
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_sync_accepted_quote_to_sales_crm
+  AFTER INSERT OR UPDATE OF status ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.sync_accepted_quote_to_sales_crm();
+
+CREATE TRIGGER trg_protect_profile_identity
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_profile_identity_columns();
+
+CREATE TRIGGER trg_journals_updated_at
+  BEFORE UPDATE ON public.journals
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER trg_journal_entries_updated_at
+  BEFORE UPDATE ON public.journal_entries
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER trg_access_permissions_updated_at
+  BEFORE UPDATE ON public.access_permissions
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_grant_new_permission_to_admin
+  AFTER INSERT ON public.access_permissions
+  FOR EACH ROW EXECUTE FUNCTION public.grant_new_permission_to_admin();
 
 CREATE TRIGGER trg_access_roles_updated_at
   BEFORE UPDATE ON public.access_roles
@@ -1260,6 +1586,11 @@ ALTER TABLE public.cashier_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prospects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sales_quotes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sales_quote_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prospect_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_opportunities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_campaign_prospects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_role_permissions ENABLE ROW LEVEL SECURITY;
@@ -1271,9 +1602,12 @@ REVOKE ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals
   public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
   public.audit_logs, public.cashier_transactions, public.prospects,
   public.sales_quotes, public.sales_quote_templates,
+  public.prospect_contacts, public.sales_opportunities, public.sales_activities,
+  public.sales_campaigns, public.sales_campaign_prospects,
   public.access_roles, public.access_permissions, public.access_role_permissions,
   public.access_user_roles, public.access_user_overrides, public.access_audit_log
   FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON SEQUENCE public.sales_quote_number_seq FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.dossiers, public.journals, public.journal_entries, public.cashier_transactions TO authenticated;
@@ -1284,6 +1618,8 @@ GRANT ALL PRIVILEGES ON TABLE public.profiles, public.dossiers, public.journals,
   public.journal_entries, public.cashier_piece_counters, public.journal_piece_counters,
   public.audit_logs, public.cashier_transactions, public.prospects,
   public.sales_quotes, public.sales_quote_templates,
+  public.prospect_contacts, public.sales_opportunities, public.sales_activities,
+  public.sales_campaigns, public.sales_campaign_prospects,
   public.access_roles, public.access_permissions, public.access_role_permissions,
   public.access_user_roles, public.access_user_overrides, public.access_audit_log,
   public.cashier_balance_summary, public.cashier_transactions_with_balance
@@ -1316,41 +1652,53 @@ CREATE POLICY profiles_update_policy ON public.profiles
     )
   );
 
--- dossiers
+-- dossiers (un compte désactivé n'a aucun accès)
 CREATE POLICY dossiers_select_by_role ON public.dossiers
   FOR SELECT TO authenticated
   USING (
-    public.is_admin()
-    OR EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = (SELECT auth.uid())
-        AND p.role IN ('admin', 'caissier', 'caissiere', 'manager', 'tresorier', 'comptable', 'rh')
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = (SELECT auth.uid())
+          AND p.role IN ('admin', 'caissier', 'caissiere', 'manager', 'tresorier', 'comptable', 'rh')
+      )
+      OR created_by = (SELECT auth.uid())
     )
-    OR created_by = (SELECT auth.uid())
   );
 
 CREATE POLICY dossiers_insert_by_role ON public.dossiers
   FOR INSERT TO authenticated
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = (SELECT auth.uid())
-      AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager')
-  ));
+  WITH CHECK (
+    public.is_active_user()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = (SELECT auth.uid())
+        AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager')
+    )
+  );
 
 CREATE POLICY dossiers_update_by_role ON public.dossiers
   FOR UPDATE TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = (SELECT auth.uid())
-      AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager')
-  ));
+  USING (
+    public.is_active_user()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = (SELECT auth.uid())
+        AND profiles.role IN ('admin', 'caissier', 'caissiere', 'manager')
+    )
+  );
 
 CREATE POLICY dossiers_delete_admin_only ON public.dossiers
   FOR DELETE TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = (SELECT auth.uid()) AND profiles.role = 'admin'
-  ));
+  USING (
+    public.is_active_user()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = (SELECT auth.uid()) AND profiles.role = 'admin'
+    )
+  );
 
 -- journals (lecture : tresorier/manager/admin ; écriture : tresorier/admin)
 CREATE POLICY journals_select_authenticated ON public.journals
@@ -1495,11 +1843,17 @@ CREATE POLICY journal_piece_counters_service_role ON public.journal_piece_counte
 -- écriture : caissier/caissiere + admin uniquement, avec contrôle de propriété)
 CREATE POLICY cashier_transactions_select_by_role ON public.cashier_transactions
   FOR SELECT TO authenticated
-  USING (public.is_admin() OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = (SELECT auth.uid())
-      AND p.role IN ('caissier', 'caissiere', 'manager', 'comptable', 'tresorier')
-  ));
+  USING (
+    public.is_active_user()
+    AND (
+      public.is_admin()
+      OR EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = (SELECT auth.uid())
+          AND p.role IN ('caissier', 'caissiere', 'manager', 'comptable', 'tresorier')
+      )
+    )
+  );
 
 CREATE POLICY cashier_transactions_insert_by_role ON public.cashier_transactions
   FOR INSERT TO authenticated
@@ -1574,9 +1928,23 @@ CREATE POLICY audit_logs_service_role_all ON public.audit_logs
 -- prospects : service_role uniquement (aucun accès direct authenticated)
 CREATE POLICY prospects_service_role_all ON public.prospects
   FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- cotations commerciales : service_role uniquement
 CREATE POLICY sales_quotes_service_role_all ON public.sales_quotes
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY sales_quote_templates_service_role_all ON public.sales_quote_templates
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- CRM commercial : service_role uniquement
+CREATE POLICY prospect_contacts_service_role_all ON public.prospect_contacts
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_opportunities_service_role_all ON public.sales_opportunities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_activities_service_role_all ON public.sales_activities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_campaigns_service_role_all ON public.sales_campaigns
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY sales_campaign_prospects_service_role_all ON public.sales_campaign_prospects
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- access_* (RBAC) : service_role uniquement, catalogue non branché aux policies ci-dessus
@@ -1612,6 +1980,14 @@ GRANT EXECUTE ON FUNCTION public.sync_user_primary_role(uuid, uuid, text, boolea
 REVOKE ALL ON FUNCTION public.provision_collaborator(uuid, uuid, text, text, text, text, text, text, boolean, boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.provision_collaborator(uuid, uuid, text, text, text, text, text, text, boolean, boolean) TO service_role;
 
+REVOKE ALL ON FUNCTION public.prepare_sales_campaign_audience(uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_sales_campaign_audience(uuid, uuid[]) TO service_role;
+
+REVOKE ALL ON FUNCTION public.grant_new_permission_to_admin() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.protect_profile_identity_columns() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.sync_accepted_quote_to_sales_crm() FROM PUBLIC, anon, authenticated;
+
 -- Fonctions privées : aucun accès direct via l'API, appelées uniquement par les triggers
 REVOKE ALL ON FUNCTION private.is_active_user() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.assign_journal_entry_piece_comptable() FROM PUBLIC, anon, authenticated;
@@ -1630,7 +2006,6 @@ ON CONFLICT (sequence_prefix) DO NOTHING;
 INSERT INTO public.access_roles (role_key, label, description, is_system)
 VALUES
   ('admin', 'Administrateur', 'Administration complète de la plateforme.', true),
-  ('commercial', 'Commercial', 'Création et suivi des cotations commerciales attribuées.', true),
   ('manager', 'Manager', 'Supervision des opérations et des équipes.', true),
   ('caissiere', 'Caissière', 'Opérations autorisées sur la caisse.', true),
   ('comptable', 'Comptable', 'Consultation et opérations comptables autorisées.', true),
@@ -1673,15 +2048,6 @@ VALUES
   ('prospects.create', 'prospects', 'create', 'Créer un prospect', 'Créer un nouveau prospect.', true),
   ('prospects.update', 'prospects', 'update', 'Modifier un prospect', 'Modifier les informations et le suivi d''un prospect.', true),
   ('prospects.delete', 'prospects', 'delete', 'Supprimer un prospect', 'Supprimer un prospect.', true),
-  ('quotes.read', 'quotes', 'read', 'Consulter les cotations', 'Consulter les cotations attribuées au commercial.', true),
-  ('quotes.create', 'quotes', 'create', 'Créer une cotation', 'Créer une cotation et en définir les colonnes.', true),
-  ('quotes.update', 'quotes', 'update', 'Modifier une cotation', 'Modifier une cotation attribuée au commercial.', true),
-  ('quotes.delete', 'quotes', 'delete', 'Supprimer une cotation', 'Supprimer une cotation attribuée au commercial.', true),
-  ('quotes.assign', 'quotes', 'assign', 'Attribuer les cotations', 'Attribuer et réattribuer les cotations aux commerciaux.', true),
-  ('quotes.templates.read', 'quotes.templates', 'read', 'Consulter les modèles de cotation', 'Consulter les modèles partagés de cotation.', true),
-  ('quotes.templates.create', 'quotes.templates', 'create', 'Créer un modèle de cotation', 'Enregistrer une structure de cotation comme modèle partagé.', true),
-  ('quotes.templates.update', 'quotes.templates', 'update', 'Modifier un modèle de cotation', 'Modifier un modèle de cotation créé par soi-même.', true),
-  ('quotes.templates.delete', 'quotes.templates', 'delete', 'Supprimer un modèle de cotation', 'Supprimer un modèle de cotation créé par soi-même.', true),
   ('access.roles.read', 'access.roles', 'read', 'Consulter les rôles', 'Afficher le catalogue des rôles.', true),
   ('access.roles.manage', 'access.roles', 'manage', 'Gérer les rôles', 'Créer et modifier les rôles applicatifs.', true),
   ('access.permissions.read', 'access.permissions', 'read', 'Consulter les permissions', 'Afficher le catalogue des permissions.', true),
@@ -1689,7 +2055,16 @@ VALUES
   ('access.users.read', 'access.users', 'read', 'Consulter les accès utilisateurs', 'Afficher les rôles et exceptions d''un utilisateur.', true),
   ('access.users.assign_roles', 'access.users', 'assign_roles', 'Attribuer des rôles', 'Affecter ou retirer des rôles à un utilisateur.', true),
   ('access.users.override', 'access.users', 'override', 'Définir une exception utilisateur', 'Ajouter une permission ou un refus individuel motivé.', true),
-  ('access.audit.read', 'access.audit', 'read', 'Consulter le journal d''audit', 'Lire les changements de rôles et permissions.', true)
+  ('access.audit.read', 'access.audit', 'read', 'Consulter le journal d''audit', 'Lire les changements de rôles et permissions.', true),
+  ('crm.read', 'crm', 'read', 'Consulter le CRM commercial', 'Accéder au pipeline et aux données commerciales attribuées.', true),
+  ('crm.create', 'crm', 'create', 'Créer dans le CRM commercial', 'Créer des clients, opportunités, contacts, activités et dossiers commerciaux.', true),
+  ('crm.update', 'crm', 'update', 'Modifier le CRM commercial', 'Modifier ses propres opportunités et activités commerciales.', true),
+  ('crm.delete', 'crm', 'delete', 'Supprimer dans le CRM commercial', 'Supprimer des données commerciales autorisées.', true),
+  ('crm.team.read', 'crm.team', 'read', 'Voir toute l’équipe commerciale', 'Consulter les opportunités et activités de toute l’équipe commerciale.', true),
+  ('crm.team.manage', 'crm.team', 'manage', 'Gérer toute l’équipe commerciale', 'Réattribuer et modifier les opportunités et activités de toute l’équipe.', true),
+  ('crm.campaigns.manage', 'crm.campaigns', 'manage', 'Gérer les campagnes commerciales', 'Planifier des campagnes et préparer des segments sans envoi automatique.', true),
+  ('dossiers.read', 'dossiers', 'read', 'Consulter les dossiers', 'Consulter les dossiers et leurs synthèses de dépenses.', true),
+  ('dossiers.create', 'dossiers', 'create', 'Créer un dossier', 'Créer un dossier directement ou depuis une opportunité commerciale.', true)
 ON CONFLICT (permission_key) DO NOTHING;
 
 -- Octrois "all" (étendue générale), reproduisant la matrice de base
@@ -1713,14 +2088,6 @@ WITH initial_grants(role_key, permission_key) AS (
     ('tresorier', 'configuration.read'), ('tresorier', 'configuration.manage'),
     ('employe', 'apps.view'), ('employe', 'dashboard.view'), ('employe', 'profile.read'), ('employe', 'profile.update')
   ) AS grants(role_key, permission_key)
-  UNION ALL
-  SELECT 'commercial', permission_key FROM public.access_permissions
-  WHERE permission_key IN (
-    'apps.view', 'dashboard.view', 'profile.read', 'profile.update',
-    'quotes.read', 'quotes.create', 'quotes.update', 'quotes.delete',
-    'quotes.templates.read', 'quotes.templates.create',
-    'quotes.templates.update', 'quotes.templates.delete'
-  )
 )
 INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
 SELECT roles.id, permissions.permission_key, '{"type":"all","version":1}'::jsonb, NULL
@@ -1748,23 +2115,35 @@ JOIN public.access_roles roles ON roles.role_key = owner_grants.role_key
 JOIN public.access_permissions permissions ON permissions.permission_key = owner_grants.permission_key
 ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
 
-COMMIT;
+-- Octrois dossiers : dossiers.read comme cashier.read ; dossiers.create comme
+-- cashier.create / crm.create, plus le rôle manager.
+INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
+SELECT DISTINCT grants.role_id, 'dossiers.read', grants.scope, NULL::uuid
+FROM public.access_role_permissions grants
+WHERE grants.permission_key = 'cashier.read'
+ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
 
--- ==============================================================================
--- IMPORTANT — Ce que ce fichier NE recrée PAS, et pourquoi
--- ==============================================================================
--- Les données des tables suivantes dépendent d'UUID réels de auth.users de ce
--- projet Supabase précis (nkeornagjbbejmkqqzfq) : profiles, cashier_transactions,
--- dossiers, audit_logs, prospects, access_user_roles, access_user_overrides,
--- access_audit_log, ainsi que les journaux « bancaires » réels ajoutés après le
--- journal CSH1. Sur un NOUVEAU projet Supabase, ces UUID n'existeront pas tant
--- que les comptes n'auront pas été recréés via Supabase Auth (Dashboard ou
--- Admin API) — jamais par copie SQL brute des mots de passe hashés, qui ne
--- doivent jamais être exportés ni partagés.
---
--- Ce fichier recrée fidèlement : structure complète (y compris le schéma
--- private), fonctions, triggers (y compris l'audit automatique), policies RLS
--- actives, et les données de référence qui ne dépendent d'aucun compte
--- utilisateur (journal CSH1, access_roles, access_permissions,
--- access_role_permissions avec leurs portées "all" et "owner").
--- ==============================================================================
+INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
+SELECT DISTINCT grants.role_id, 'dossiers.create', grants.scope, NULL::uuid
+FROM public.access_role_permissions grants
+WHERE grants.permission_key IN ('cashier.create', 'crm.create')
+UNION
+SELECT roles.id, 'dossiers.create', '{"type":"all","version":1}'::jsonb, NULL::uuid
+FROM public.access_roles roles
+WHERE roles.role_key = 'manager' AND roles.is_active IS TRUE
+ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
+
+-- Octrois CRM pour un éventuel rôle "commercial". Ce rôle n'est PAS créé par ce
+-- script (ni présent en production au 10/10/2026) : sans lui, ce bloc n'insère rien.
+WITH crm_grants(permission_key) AS (
+  VALUES ('crm.read'), ('crm.create'), ('crm.update'), ('crm.campaigns.manage')
+)
+INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
+SELECT roles.id, permissions.permission_key, '{"type":"all","version":1}'::jsonb, NULL
+FROM public.access_roles roles
+JOIN crm_grants grants ON true
+JOIN public.access_permissions permissions ON permissions.permission_key = grants.permission_key
+WHERE roles.role_key = 'commercial'
+ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
+
+COMMIT;

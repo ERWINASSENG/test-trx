@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal, effect, PLATFORM_ID } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { CreateUserPayload, UpdateUserPayload, UserProfile } from '../models/auth.model';
 import { SupabaseService } from './supabase.service';
@@ -15,6 +15,7 @@ export class UserService {
   private readonly authService = inject(AuthService);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
+  private usersLoadedForUserId: string | null = null;
 
   private checkSupabaseConfigured(): boolean {
     const configured = this.supabaseService.isConfigured;
@@ -76,35 +77,23 @@ export class UserService {
   public readonly employeCount = computed(() => this._users().filter((u) => u.role === 'employe').length);
 
   constructor() {
-    this.restoreFromStorage();
+    this.clearAllUsers();
     effect(() => {
-      const user = this.authService.currentUser();
-      if (user && this.isBrowser) {
-        void this.loadInitialUsers();
+      const userId = this.authService.currentUser()?.id ?? null;
+      if (this.usersLoadedForUserId !== userId) {
+        this.usersLoadedForUserId = userId;
+        this.clearAllUsers();
       }
     });
-  }
-
-  private restoreFromStorage(): void {
-    if (this.isBrowser) {
-      try {
-        const stored = localStorage.getItem(USERS_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            this._users.set(parsed);
-          }
-        }
-      } catch {
-        // Ignorer
-      }
-    }
   }
 
   /**
    * Charge la liste des utilisateurs depuis l’API serveur.
    */
   public async loadInitialUsers(): Promise<void> {
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
+    this.usersLoadedForUserId = requestedUserId;
+    this.clearAllUsers();
     this._isLoading.set(true);
     this._error.set(null);
 
@@ -115,7 +104,6 @@ export class UserService {
 
       const authToken = await this.getAuthToken();
       if (!authToken) {
-        // Si l'utilisateur n'est pas encore identifié, préserver le cache local existant sans vider la liste
         this._isLoading.set(false);
         return;
       }
@@ -135,6 +123,8 @@ export class UserService {
         throw new Error('Réponse invalide du serveur de gestion des utilisateurs.');
       }
 
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
+
       const mapped: UserProfile[] = data.users.map((row: UserProfile) => ({
         id: row.id,
         email: row.email,
@@ -152,14 +142,9 @@ export class UserService {
       }));
 
       this._users.set(mapped);
-      this.saveToStorage(mapped);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur lors du chargement des utilisateurs';
       this._error.set(msg);
-      // En cas d'erreur de communication réseau, préserver les données locales déjà en mémoire
-      if (this._users().length === 0) {
-        this.restoreFromStorage();
-      }
     } finally {
       this._isLoading.set(false);
     }
@@ -239,7 +224,6 @@ export class UserService {
 
       const updatedList = [newUser, ...this._users()];
       this._users.set(updatedList);
-      this.saveToStorage(updatedList);
       this._isLoading.set(false);
 
       return { success: true, user: newUser };
@@ -374,13 +358,4 @@ export class UserService {
     }
   }
 
-  private saveToStorage(list: UserProfile[]): void {
-    if (this.isBrowser) {
-      try {
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(list));
-      } catch {
-        // Ignorer
-      }
-    }
-  }
 }

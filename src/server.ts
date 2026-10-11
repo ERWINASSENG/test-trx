@@ -87,7 +87,7 @@ import {
   setUserPermissionOverrideHandler,
   updateAccessRoleHandler,
 } from './server/access-control.handlers';
-import { hasPermission, requirePermission, resolveJournalOwnerContext } from './server/access-control';
+import { requirePermission, resolveJournalOwnerContext } from './server/access-control';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -247,24 +247,7 @@ app.get('/api/config', getSupabaseConfigHandler);
 const collaboratorCollectionAliases = ['/api/system/collaborators', '/api/admin/users'];
 
 collaboratorCollectionAliases.forEach((path) => {
-  app.get(path, requireAuth, async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
-    const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
-    if (!user?.id) {
-      res.status(401).json({ error: 'Utilisateur non authentifié.' });
-      return;
-    }
-
-    try {
-      const canRead = (await hasPermission(user.id, 'hr.read', undefined)) || (await hasPermission(user.id, 'users.read', undefined));
-      if (canRead) {
-        next();
-        return;
-      }
-      requirePermission('users.read')(req, res, next);
-    } catch {
-      requirePermission('users.read')(req, res, next);
-    }
-  }, getCollaboratorsHandler);
+  app.get(path, requireAuth, requirePermission('users.read'), getCollaboratorsHandler);
 });
 
 /**
@@ -1184,7 +1167,13 @@ app.post('/api/crm/clients', requireAuth, requirePermission('crm.create'), creat
 app.post('/api/crm/clients/:prospectId/contacts', requireAuth, requirePermission('crm.create'), createCrmContactHandler);
 app.post('/api/crm/opportunities', requireAuth, requirePermission('crm.create'), createCrmOpportunityHandler);
 app.patch('/api/crm/opportunities/:id', requireAuth, requirePermission('crm.update'), updateCrmOpportunityHandler);
-app.post('/api/crm/opportunities/:id/dossier', requireAuth, requirePermission('crm.create'), createCrmDossierHandler);
+app.post(
+  '/api/crm/opportunities/:id/dossier',
+  requireAuth,
+  requirePermission('crm.create'),
+  requirePermission('dossiers.create'),
+  createCrmDossierHandler
+);
 app.post('/api/crm/activities', requireAuth, requirePermission('crm.create'), createCrmActivityHandler);
 app.patch('/api/crm/activities/:id', requireAuth, requirePermission('crm.update'), updateCrmActivityHandler);
 app.post('/api/crm/campaigns', requireAuth, requirePermission('crm.campaigns.manage'), createCrmCampaignHandler);
@@ -1197,14 +1186,10 @@ app.post('/api/prospects', requireAuth, requirePermission('prospects.create'), c
 app.patch('/api/prospects/:id', requireAuth, requirePermission('prospects.update'), updateProspectHandler);
 app.delete('/api/prospects/:id', requireAuth, requirePermission('prospects.delete'), deleteProspectHandler);
 
-// Module Dossiers : lecture et création protégées par les permissions Caisse.
-app.get('/api/dossiers', requireAuth, requirePermission('cashier.read'), listDossiersHandler);
-app.get('/api/dossiers/expenses', requireAuth, requirePermission('cashier.read'), getDossierExpenseSummaryHandler);
-app.post('/api/dossiers', requireAuth, (req, res, next) => {
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string } | undefined;
-  const permission = authenticatedUser?.role === 'manager' ? 'cashier.read' : 'cashier.create';
-  requirePermission(permission)(req, res, next);
-}, createDossierHandler);
+// Module Dossiers : chaque opération possède une permission métier dédiée.
+app.get('/api/dossiers', requireAuth, requirePermission('dossiers.read'), listDossiersHandler);
+app.get('/api/dossiers/expenses', requireAuth, requirePermission('dossiers.read'), getDossierExpenseSummaryHandler);
+app.post('/api/dossiers', requireAuth, requirePermission('dossiers.create'), createDossierHandler);
 
 // Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
 app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);

@@ -17,12 +17,13 @@ export class AppLauncher implements OnInit {
 
   public readonly searchQuery = signal('');
   public readonly visibleModules = computed<readonly AppModule[]>(() => {
-    const permissions = this.accessControl.effectivePermissions();
     const query = this.normalizeSearchValue(this.searchQuery());
 
     return APP_MODULES.filter((module) => {
       // 1. Contrôle d'habilitation direct via accessControl (supporte admin, rôle restauré, et permissions fines)
-      const isAllowed = this.accessControl.hasPermission(module.permissionKey) ||
+      const isAllowedByService = this.accessControl.hasPermission(module.visibilityPermissionKey);
+      const permissions = this.accessControl.effectivePermissions();
+      const isAllowed = isAllowedByService ||
         (permissions.length > 0 && isAppModuleVisibleToPermissions(module, permissions));
 
       if (!isAllowed) return false;

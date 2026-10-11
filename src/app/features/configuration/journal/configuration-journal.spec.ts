@@ -53,7 +53,10 @@ describe('ConfigurationJournalComponent', () => {
     createJournal: vi.fn().mockResolvedValue(true),
     updateJournal: vi.fn().mockResolvedValue(mockJournals[1]),
     toggleActive: vi.fn(),
-    canManageJournals: signal(true),
+    canCreateJournal: signal(true),
+    canUpdateJournal: signal(true),
+    canDeleteJournal: signal(true),
+    isReadOnly: signal(false),
   };
 
   beforeEach(() => {
@@ -67,7 +70,10 @@ describe('ConfigurationJournalComponent', () => {
       paginationLabel: mockJournalService.paginationLabel,
       hasPrevPage: mockJournalService.hasPrevPage,
       hasNextPage: mockJournalService.hasNextPage,
-      canManageJournals: mockJournalService.canManageJournals,
+      canCreateJournal: mockJournalService.canCreateJournal,
+      canUpdateJournal: mockJournalService.canUpdateJournal,
+      canDeleteJournal: mockJournalService.canDeleteJournal,
+      isReadOnly: mockJournalService.isReadOnly,
       totalJournalsCount: signal(2),
       isActionsMenuOpen: signal(false),
       isDeleting: signal(false),

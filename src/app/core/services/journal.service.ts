@@ -4,6 +4,7 @@ import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { CashierService } from './cashier.service';
+import { AccessControlService } from './access-control.service';
 import { CreateJournalDto, Journal, JournalType, UpdateJournalDto } from '../models/journal.model';
 
 @Injectable({
@@ -14,6 +15,7 @@ export class JournalService {
   private readonly authService = inject(AuthService);
   private readonly notificationService = inject(NotificationService);
   private readonly cashierService = inject(CashierService);
+  private readonly accessControl = inject(AccessControlService);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
 
@@ -95,27 +97,24 @@ export class JournalService {
     this._journals().filter((j) => j.is_active)
   );
 
-  // Permissions d'accès aux journaux
-  // Seuls admin, tresorier et manager peuvent consulter les journaux
   public readonly canViewJournals = computed(() => {
-    const role = this.authService.currentRole();
-    return role === 'admin' || role === 'tresorier' || role === 'manager';
+    return this.accessControl.hasPermission('journals.read');
   });
 
-  // Seul le trésorier et l'administrateur sont autorisés à créer ou supprimer des journaux
   public readonly canCreateJournal = computed(() => {
-    const role = this.authService.currentRole();
-    return role === 'admin' || role === 'tresorier';
+    return this.accessControl.hasPermission('journals.create');
   });
 
-  public readonly canManageJournals = computed(() => {
-    const role = this.authService.currentRole();
-    return role === 'admin' || role === 'tresorier';
+  public readonly canUpdateJournal = computed(() => {
+    return this.accessControl.hasPermission('journals.update');
   });
 
-  // Indique si l'utilisateur consulte en lecture seule (les managers)
-  public readonly isManagerReadOnly = computed(() => {
-    return this.authService.currentRole() === 'manager';
+  public readonly canDeleteJournal = computed(() => {
+    return this.accessControl.hasPermission('journals.delete');
+  });
+
+  public readonly isReadOnly = computed(() => {
+    return this.canViewJournals() && !this.canUpdateJournal();
   });
 
   public getJournalById(id: string): Journal | undefined {
@@ -159,12 +158,19 @@ export class JournalService {
   }
 
   constructor() {
+    let activeDataUserId: string | null | undefined;
     // Initialise avec le journal natif de caisse pour garantir qu'aucune rupture n'arrive
     this._journals.set([this.defaultNativeCashJournal]);
 
     if (this.isBrowser) {
       effect(() => {
         const user = this.authService.currentUser();
+        this.accessControl.effectivePermissions();
+        const userId = user?.id ?? null;
+        if (activeDataUserId !== userId) {
+          activeDataUserId = userId;
+          this._journals.set([this.defaultNativeCashJournal]);
+        }
         if (user) {
           this.loadJournals();
         }
@@ -219,6 +225,7 @@ export class JournalService {
 
     try {
       this._isLoading.set(true);
+      const requestedUserId = this.authService.currentUser()?.id ?? null;
 
       // Récupération du jeton d'authentification
       let token = this.authService.token();
@@ -245,7 +252,9 @@ export class JournalService {
           });
 
           if (res.ok) {
+            if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
             const resJson = await res.json();
+            if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
             const serverList = resJson.journals;
             if (Array.isArray(serverList) && serverList.length > 0) {
               const mapped: Journal[] = serverList.map((row: Record<string, unknown>) => ({
@@ -277,49 +286,12 @@ export class JournalService {
         }
       }
 
-      // Canal 2 : Repli Supabase direct si disponible
-      const client = this.supabaseService.supabase;
-      if (client) {
-        const { data, error } = await client
-          .from('journals')
-          .select('*')
-          .order('created_at', { ascending: true });
-
-        if (error) {
-          if (this._journals().length === 0) {
-            this._journals.set([this.defaultNativeCashJournal]);
-          }
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const mapped: Journal[] = data.map((row: Record<string, unknown>) => ({
-            id: String(row['id'] ?? ''),
-            name: String(row['name'] ?? ''),
-            type: (row['type'] as JournalType) || 'cash',
-            type_label: this.getTypeLabel(String(row['type'] ?? '')),
-            ledger_type: String(row['ledger_type'] ?? ''),
-            sequence_prefix: String(row['sequence_prefix'] ?? ''),
-            default_account: String(row['default_account'] ?? ''),
-            currency: String(row['currency'] ?? 'XAF'),
-            is_active: typeof row['is_active'] === 'boolean' ? row['is_active'] : true,
-            selected: false,
-            created_by: typeof row['created_by'] === 'string' ? row['created_by'] : undefined,
-            created_at: typeof row['created_at'] === 'string' ? row['created_at'] : undefined,
-            updated_at: typeof row['updated_at'] === 'string' ? row['updated_at'] : undefined,
-          }));
-
-          const hasNative = mapped.some((j) => j.sequence_prefix === 'CSH1' || j.id === this.defaultNativeCashJournal.id);
-          this._journals.set(hasNative ? mapped : [this.defaultNativeCashJournal, ...mapped]);
-        } else {
-          this._journals.set([this.defaultNativeCashJournal]);
-        }
-      }
+      // The server is the authorization boundary; a failed response must not
+      // fall back to a direct browser query that could bypass it.
+      this._journals.set([this.defaultNativeCashJournal]);
     } catch (err) {
-      console.warn('Fallback local pour les journaux comptables:', err);
-      if (this._journals().length === 0) {
-        this._journals.set([this.defaultNativeCashJournal]);
-      }
+      console.error('Impossible de charger les journaux via l’API sécurisée:', err);
+      this._journals.set([this.defaultNativeCashJournal]);
     } finally {
       this._isLoading.set(false);
     }
@@ -332,7 +304,7 @@ export class JournalService {
   public async createJournal(dto: CreateJournalDto): Promise<Journal | null> {
     if (!this.canCreateJournal()) {
       this.notificationService.error(
-        'Seul le trésorier et l’administrateur sont autorisés à créer de nouveaux journaux.',
+        'Tu ne disposes pas de la permission nécessaire pour créer des journaux.',
         'Action non autorisée'
       );
       return null;
@@ -414,9 +386,9 @@ export class JournalService {
    * Strictement réservé à l'administrateur et au trésorier.
    */
   public async updateJournal(id: string, dto: UpdateJournalDto): Promise<Journal | null> {
-    if (!this.canManageJournals()) {
+    if (!this.canUpdateJournal()) {
       this.notificationService.error(
-        'Seul le trésorier et l’administrateur sont autorisés à modifier des journaux.',
+        'Tu ne disposes pas de la permission nécessaire pour modifier des journaux.',
         'Action non autorisée'
       );
       return null;
@@ -499,9 +471,9 @@ export class JournalService {
    * Strictement réservé à l'administrateur et au trésorier.
    */
   public async deleteSelectedJournals(): Promise<boolean> {
-    if (!this.canManageJournals()) {
+    if (!this.canDeleteJournal()) {
       this.notificationService.error(
-        'Seul le trésorier et l’administrateur sont autorisés à supprimer des journaux.',
+        'Tu ne disposes pas de la permission nécessaire pour supprimer des journaux.',
         'Action non autorisée'
       );
       return false;
@@ -607,21 +579,55 @@ export class JournalService {
    * Active ou désactive un journal
    */
   public async toggleActive(id: string): Promise<void> {
+    if (!this.canUpdateJournal()) {
+      this.notificationService.error(
+        'Tu ne disposes pas de la permission nécessaire pour modifier des journaux.',
+        'Action non autorisée'
+      );
+      return;
+    }
+
     const target = this._journals().find((j) => j.id === id);
-    if (!target) return;
-
+    if (!target || id.startsWith('native-')) return;
     const updatedState = !target.is_active;
-    this._journals.update((list) =>
-      list.map((j) => (j.id === id ? { ...j, is_active: updatedState } : j))
-    );
 
-    const client = this.supabaseService.supabase;
-    if (client && !id.startsWith('native-')) {
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
       try {
-        await client.from('journals').update({ is_active: updatedState }).eq('id', id);
-      } catch (e) {
-        console.warn('Erreur mise à jour statut journal:', e);
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        token = data.session?.access_token || null;
+      } catch (error) {
+        console.error('Impossible de récupérer la session pour modifier le journal:', error);
+        this.notificationService.error('Session expirée ou non autorisée.', 'Authentification requise');
+        return;
       }
+    }
+    if (!token) {
+      this.notificationService.error('Session expirée ou non autorisée.', 'Authentification requise');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/journals/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ is_active: updatedState }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        this.notificationService.error(payload.error || 'Impossible de modifier le statut du journal.', 'Échec de modification');
+        return;
+      }
+      this._journals.update((list) =>
+        list.map((journal) => (journal.id === id ? { ...journal, is_active: updatedState } : journal))
+      );
+    } catch (error) {
+      console.error('Erreur API mise à jour du statut journal:', error);
+      this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
     }
   }
 

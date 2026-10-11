@@ -24,7 +24,33 @@ interface AccessRule {
 interface LoadedAccessRules {
   roleKeys: string[];
   rules: AccessRule[];
+  hasActiveRoleAssignments?: boolean;
 }
+
+const LEGACY_MODULE_VISIBILITY_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
+  manager: [
+    'module.dashboard.view',
+    'module.accounting.view',
+    'module.hr.view',
+    'module.prospects.view',
+    'module.dossiers.view',
+  ],
+  tresorier: [
+    'module.dashboard.view',
+    'module.accounting.view',
+    'module.configuration.view',
+  ],
+  comptable: [
+    'module.dashboard.view',
+    'module.accounting.view',
+    'module.configuration.view',
+  ],
+  caissiere: ['module.dashboard.view', 'module.accounting.view'],
+  employe: ['module.dashboard.view', 'module.hr.view'],
+};
+
+export const legacyModuleVisibilityPermissions = (roleKeys: readonly string[]): string[] =>
+  [...new Set(roleKeys.flatMap((roleKey) => LEGACY_MODULE_VISIBILITY_BY_ROLE[roleKey] || []))];
 
 type ScopeEvaluator = (
   scope: AccessScope,
@@ -84,6 +110,16 @@ const isUnexpired = (expiresAt: unknown, currentTime: number): boolean => {
   if (typeof expiresAt !== 'string') return false;
   const expirationTime = Date.parse(expiresAt);
   return Number.isFinite(expirationTime) && expirationTime > currentTime;
+};
+
+export const resolveEffectiveRoleKeys = (
+  assignedRoleKeys: readonly string[],
+  legacyProfileRole: unknown
+): string[] => {
+  if (assignedRoleKeys.length > 0) return [...new Set(assignedRoleKeys)];
+  return typeof legacyProfileRole === 'string' && legacyProfileRole
+    ? [legacyProfileRole]
+    : [];
 };
 
 const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null> => {
@@ -154,14 +190,15 @@ const loadAccessRules = async (userId: string): Promise<LoadedAccessRules | null
       isUserOverride: true,
     }));
 
-  const resolvedRoleKeys = roleRows.map((role) => role.role_key);
-  if (profile?.role && !resolvedRoleKeys.includes(String(profile.role))) {
-    resolvedRoleKeys.push(String(profile.role));
-  }
+  const resolvedRoleKeys = resolveEffectiveRoleKeys(
+    roleRows.map((role) => role.role_key),
+    profile.role
+  );
 
   return {
     roleKeys: resolvedRoleKeys,
     rules: [...roleRules, ...userRules],
+    hasActiveRoleAssignments: activeRoleIds.length > 0,
   };
 };
 
@@ -187,18 +224,28 @@ export const resolveEffectivePermissions = async (userId: string): Promise<Effec
   if (!effective.some((p) => p.permissionKey === 'profile.read')) {
     effective.push({ permissionKey: 'profile.read', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
   }
+  if (accessRules.hasActiveRoleAssignments === false) {
+    for (const permissionKey of legacyModuleVisibilityPermissions(accessRules.roleKeys)) {
+      if (!effective.some((permission) => permission.permissionKey === permissionKey)) {
+        effective.push({
+          permissionKey,
+          scope: { type: 'all', version: 1 },
+          effect: 'allow',
+          sourceRoleKey: primaryRole,
+        });
+      }
+    }
+  }
 
   return effective;
 };
 
-export const hasPermission = async (
+const evaluatePermission = (
   userId: string,
   permissionKey: string,
   resource: AccessResourceContext | undefined,
-  loadedRules?: LoadedAccessRules
-): Promise<boolean> => {
-  const accessRules = loadedRules || await loadAccessRules(userId);
-  if (!accessRules) return false;
+  accessRules: LoadedAccessRules
+): boolean => {
 
   // 1. Règle d'or : le rôle admin possède tous les droits sans exception
   if (accessRules.roleKeys.includes('admin')) {
@@ -230,14 +277,32 @@ export const hasPermission = async (
     return false;
   }
 
+  if (
+    accessRules.hasActiveRoleAssignments === false &&
+    legacyModuleVisibilityPermissions(accessRules.roleKeys).includes(permissionKey)
+  ) {
+    return true;
+  }
+
   // 3. Repli métier par rôle canonique côté serveur
   const hasRole = (role: string) => accessRules.roleKeys.includes(role);
-  if (hasRole('manager') && ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey)) {
+  if (hasRole('manager') && [
+    'cashier.read',
+    'cashier.write',
+    'dossiers.read',
+    'dossiers.create',
+    'hr.read',
+    'hr.write',
+    'users.read',
+    'prospects.read',
+    'prospects.write',
+  ].includes(permissionKey)) {
     return true;
   }
   if (hasRole('tresorier') && [
     'cashier.read',
     'cashier.write',
+    'dossiers.read',
     'cashier.update',
     'cashier.status_update',
     'cashier.duplicate',
@@ -257,6 +322,7 @@ export const hasPermission = async (
   if (hasRole('comptable') && [
     'cashier.read',
     'cashier.write',
+    'dossiers.read',
     'cashier.duplicate',
     'journals.read',
     'journals.write',
@@ -271,7 +337,13 @@ export const hasPermission = async (
   ].includes(permissionKey)) {
     return true;
   }
-  if (hasRole('caissiere') && ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey)) {
+  if (hasRole('caissiere') && [
+    'cashier.read',
+    'cashier.write',
+    'dossiers.read',
+    'cashier.status_update',
+    'cashier.update',
+  ].includes(permissionKey)) {
     return true;
   }
   if (hasRole('employe') && ['hr.read'].includes(permissionKey)) {
@@ -279,6 +351,16 @@ export const hasPermission = async (
   }
 
   return false;
+};
+
+export const hasPermission = async (
+  userId: string,
+  permissionKey: string,
+  resource: AccessResourceContext | undefined,
+  loadedRules?: LoadedAccessRules
+): Promise<boolean> => {
+  const accessRules = loadedRules || await loadAccessRules(userId);
+  return accessRules ? evaluatePermission(userId, permissionKey, resource, accessRules) : false;
 };
 
 export type AccessResourceResolver = (
@@ -345,13 +427,5 @@ export const requestHasPermission = (
   const actor = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
   if (!actor?.id) return false;
 
-  const matchingRules = accessRules.rules.filter((rule) => rule.permissionKey === permissionKey);
-  const matchingOverrides = matchingRules.filter((rule) => rule.isUserOverride);
-  if (matchingOverrides.some((rule) => rule.effect === 'deny' && scopeAllows(rule.scope, { userId: actor.id! }, resource))) {
-    return false;
-  }
-  if (matchingOverrides.some((rule) => rule.effect === 'allow' && scopeAllows(rule.scope, { userId: actor.id! }, resource))) {
-    return true;
-  }
-  return matchingRules.some((rule) => !rule.isUserOverride && scopeAllows(rule.scope, { userId: actor.id! }, resource));
+  return evaluatePermission(actor.id, permissionKey, resource, accessRules);
 };

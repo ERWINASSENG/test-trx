@@ -5,7 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { UserProfile } from '../../core/models/auth.model';
-import { signal } from '@angular/core';
+import { signal, WritableSignal } from '@angular/core';
 import { vi } from 'vitest';
 
 describe('HrManagement Component', () => {
@@ -17,12 +17,14 @@ describe('HrManagement Component', () => {
     createUser: ReturnType<typeof vi.fn>;
     updateUser: ReturnType<typeof vi.fn>;
     loadInitialUsers: ReturnType<typeof vi.fn>;
+    clearAllUsers: ReturnType<typeof vi.fn>;
   };
   let mockAuthService: {
-    isAdmin: () => boolean;
+    isAdmin: WritableSignal<boolean>;
   };
   let mockAccessControlService: {
     roles: () => { id: string; roleKey: string; label: string; description: string | null; isActive: boolean }[];
+    hasPermission: ReturnType<typeof vi.fn>;
     loadRoles: ReturnType<typeof vi.fn>;
     assignRole: ReturnType<typeof vi.fn>;
   };
@@ -60,6 +62,7 @@ describe('HrManagement Component', () => {
       createUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
       updateUser: vi.fn().mockResolvedValue({ success: true, user: sampleUsers[1] }),
       loadInitialUsers: vi.fn().mockResolvedValue(undefined),
+      clearAllUsers: vi.fn(),
     };
 
     mockAuthService = {
@@ -76,6 +79,7 @@ describe('HrManagement Component', () => {
           isActive: true,
         },
       ]),
+      hasPermission: vi.fn((permission: string) => permission === 'users.read'),
       loadRoles: vi.fn().mockResolvedValue(undefined),
       assignRole: vi.fn().mockResolvedValue({ success: true }),
     };
@@ -100,6 +104,18 @@ describe('HrManagement Component', () => {
     expect(component.isAdmin()).toBe(true);
     const available = component.availableRoles();
     expect(available.some((r) => r.id === 'daf')).toBe(true);
+  });
+
+  it('n’affiche ni ne charge les collaborateurs sans users.read', () => {
+    mockAccessControlService.hasPermission.mockReturnValue(false);
+    mockAuthService.isAdmin.set(false);
+
+    component.ngOnInit();
+
+    expect(component.canReadUsers()).toBe(false);
+    expect(mockUserService.clearAllUsers).toHaveBeenCalledOnce();
+    expect(mockUserService.loadInitialUsers).not.toHaveBeenCalled();
+    expect(mockAccessControlService.loadRoles).not.toHaveBeenCalled();
   });
 
   it('devrait extraire les départements uniques avec "all"', () => {

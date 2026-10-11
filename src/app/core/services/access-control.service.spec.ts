@@ -41,6 +41,7 @@ describe('AccessControlService', () => {
   it('autorise la caissière à mettre à jour le statut des opérations', () => {
     expect(service.hasPermission('cashier.status_update')).toBe(true);
     expect(service.hasPermission('cashier.update')).toBe(true);
+    expect(service.hasPermission('dossiers.read')).toBe(true);
   });
 
   it('refuse le droit de mise à jour du statut au comptable par défaut', () => {
@@ -49,5 +50,21 @@ describe('AccessControlService', () => {
 
     expect(service.hasPermission('cashier.status_update')).toBe(false);
     expect(service.hasPermission('cashier.update')).toBe(false);
+  });
+
+  it('does not grant employee fallback permissions to a dynamically assigned DAF role', () => {
+    currentRole.set('employe');
+    currentUser.update((user) => user ? { ...user, role: 'employe', customRole: 'daf' } : null);
+
+    expect(service.hasPermission('hr.read')).toBe(false);
+    expect(service.hasPermission('users.read')).toBe(false);
+  });
+
+  it('does not grant collaborator-list access to the legacy employee role', () => {
+    currentRole.set('employe');
+    currentUser.update((user) => user ? { ...user, role: 'employe', customRole: null } : null);
+
+    expect(service.hasPermission('hr.read')).toBe(true);
+    expect(service.hasPermission('users.read')).toBe(false);
   });
 });

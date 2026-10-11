@@ -332,7 +332,13 @@ export const getRolePermissionsHandler = async (req: express.Request, res: expre
 };
 
 export const getUserAccessHandler = async (req: express.Request, res: express.Response): Promise<void> => {
-  const userId = req.params['userId'];
+  const rawUserId = req.params['userId'];
+  const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
+  if (!userId) {
+    res.status(400).json({ error: 'Identifiant utilisateur invalide.' });
+    return;
+  }
+
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });

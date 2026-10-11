@@ -32,13 +32,13 @@ describe('MainLayout Component', () => {
   let currentUser = signal<UserProfile | null>(mockUser);
   let currentRole = signal<UserRole>(mockUser.role);
   let effectivePermissions = signal([
-    { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-    { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.accounting.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-    { permissionKey: 'prospects.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-    { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-    { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-    { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.prospects.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.hr.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.access_control.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    { permissionKey: 'module.configuration.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
   ]);
 
   beforeEach(() => {
@@ -46,13 +46,13 @@ describe('MainLayout Component', () => {
     currentUser = signal<UserProfile | null>(mockUser);
     currentRole = signal<UserRole>(mockUser.role);
     effectivePermissions = signal([
-      { permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-      { permissionKey: 'cashier.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.accounting.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
       { permissionKey: 'cashier.create', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-      { permissionKey: 'prospects.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-      { permissionKey: 'hr.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-      { permissionKey: 'access.roles.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
-      { permissionKey: 'configuration.read', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.prospects.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.hr.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.access_control.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.configuration.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     ]);
     TestBed.configureTestingModule({
       imports: [MainLayout],

@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   AccessAuditEntry,
   AccessPermission,
@@ -51,6 +51,7 @@ export interface AccessControlUser {
 @Injectable({ providedIn: 'root' })
 export class AccessControlService {
   private readonly authService = inject(AuthService);
+  private permissionsUserId: string | null | undefined;
 
   private readonly _roles = signal<AccessRole[]>([]);
   private readonly _users = signal<AccessControlUser[]>([]);
@@ -74,7 +75,16 @@ export class AccessControlService {
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
+  constructor() {
+    effect(() => {
+      this.authService.currentUser();
+      this.resetForAccountChange();
+    });
+  }
+
   public hasPermission(permissionKey: string): boolean {
+    this.resetForAccountChange();
+
     // 1. Règle d'or : l'administrateur système possède tous les droits
     if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
       return true;
@@ -93,6 +103,9 @@ export class AccessControlService {
     if (matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all')) return true;
     if (matchingPermissions.length > 0) return false;
 
+    // Dynamic roles must not inherit privileges from their normalized legacy role.
+    if (this.authService.currentUser()?.customRole) return false;
+
     // 4. Repli canonique robuste selon le rôle Transmex du collaborateur
     const userRole = this.authService.currentRole();
     if (!userRole) return false;
@@ -101,11 +114,22 @@ export class AccessControlService {
       case 'admin':
         return true;
       case 'manager':
-        return ['cashier.read', 'cashier.write', 'hr.read', 'hr.write', 'prospects.read', 'prospects.write'].includes(permissionKey);
+        return [
+          'cashier.read',
+          'cashier.write',
+          'users.read',
+          'dossiers.read',
+          'dossiers.create',
+          'hr.read',
+          'hr.write',
+          'prospects.read',
+          'prospects.write',
+        ].includes(permissionKey);
       case 'tresorier':
         return [
           'cashier.read',
           'cashier.write',
+          'dossiers.read',
           'cashier.update',
           'cashier.status_update',
           'cashier.duplicate',
@@ -124,6 +148,7 @@ export class AccessControlService {
         return [
           'cashier.read',
           'cashier.write',
+          'dossiers.read',
           'cashier.duplicate',
           'journals.read',
           'journals.write',
@@ -137,7 +162,7 @@ export class AccessControlService {
           'journal_entries.delete',
         ].includes(permissionKey);
       case 'caissiere':
-        return ['cashier.read', 'cashier.write', 'cashier.status_update', 'cashier.update'].includes(permissionKey);
+        return ['cashier.read', 'cashier.write', 'dossiers.read', 'cashier.status_update', 'cashier.update'].includes(permissionKey);
       case 'employe':
         return ['hr.read'].includes(permissionKey);
       default:
@@ -149,6 +174,8 @@ export class AccessControlService {
     permissionKey: string,
     resource: { subjectUserId?: string; ownerUserId?: string; departmentId?: string }
   ): boolean {
+    this.resetForAccountChange();
+
     if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
       return true;
     }
@@ -171,37 +198,59 @@ export class AccessControlService {
     return matchingPermissions.some((permission) => permission.effect === 'allow' && scopeMatches(permission.scope));
   }
 
-  public async loadMyPermissions(): Promise<void> {
+  public async loadMyPermissions(): Promise<boolean> {
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
     const result = await this.request<{ permissions: EffectivePermission[] }>('/me');
+    if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return false;
     this._effectivePermissions.set(result.success ? result.data?.permissions || [] : []);
     this._error.set(result.success ? null : result.error || 'Impossible de charger les permissions.');
+    return result.success;
   }
 
-  public async loadRoles(): Promise<void> {
+  private resetForAccountChange(): void {
+    const userId = this.authService.currentUser()?.id ?? null;
+    if (this.permissionsUserId === userId) return;
+
+    this.permissionsUserId = userId;
+    this._roles.set([]);
+    this._users.set([]);
+    this._permissions.set([]);
+    this._effectivePermissions.set([]);
+    this._roleGrants.set([]);
+    this._selectedRole.set(null);
+    this._selectedUserAccess.set(null);
+    this._auditEntries.set([]);
+    this._error.set(null);
+  }
+
+  public async loadRoles(): Promise<boolean> {
     const result = await this.request<{ roles: Record<string, unknown>[] }>('/roles');
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les rôles.');
-      return;
+      return false;
     }
     this._roles.set((result.data?.roles || []).map((role) => this.mapRole(role)));
     this._error.set(null);
+    return true;
   }
 
-  public async loadPermissions(): Promise<void> {
+  public async loadPermissions(): Promise<boolean> {
     const result = await this.request<{ permissions: Record<string, unknown>[] }>('/permissions');
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions.');
-      return;
+      return false;
     }
     this._permissions.set((result.data?.permissions || []).map((permission) => this.mapPermission(permission)));
     this._error.set(null);
+    return true;
   }
 
-  public async loadUsers(limit = 200): Promise<void> {
+  public async loadUsers(limit = 200): Promise<boolean> {
     const result = await this.request<{ users: Record<string, unknown>[] }>(`/users?limit=${encodeURIComponent(String(limit))}`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les utilisateurs.');
-      return;
+      return false;
     }
     this._users.set((result.data?.users || []).map((user) => ({
       id: String(user['id'] ?? ''),
@@ -219,42 +268,46 @@ export class AccessControlService {
         : [],
     })));
     this._error.set(null);
+    return true;
   }
 
-  public async loadRolePermissions(roleId: string): Promise<void> {
+  public async loadRolePermissions(roleId: string): Promise<boolean> {
     const result = await this.request<{
       role: Record<string, unknown>;
       grants: Record<string, unknown>[];
     }>(`/roles/${encodeURIComponent(roleId)}/permissions`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les permissions du rôle.');
-      return;
+      return false;
     }
     this._selectedRole.set(result.data?.role ? this.mapRole(result.data.role) : null);
     this._roleGrants.set((result.data?.grants || []).map((grant) => this.mapRoleGrant(grant)));
     this._error.set(null);
+    return true;
   }
 
-  public async loadUserAccess(userId: string): Promise<void> {
+  public async loadUserAccess(userId: string): Promise<boolean> {
     const result = await this.request<Record<string, unknown>>(`/users/${encodeURIComponent(userId)}`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger les accès utilisateur.');
-      return;
+      return false;
     }
     this._selectedUserAccess.set(result.data ? this.mapUserAccess(result.data) : null);
     this._error.set(null);
+    return true;
   }
 
-  public async loadAudit(limit = 50, userId?: string): Promise<void> {
+  public async loadAudit(limit = 50, userId?: string): Promise<boolean> {
     const query = new URLSearchParams({ limit: String(limit) });
     if (userId) query.set('userId', userId);
     const result = await this.request<{ entries: Record<string, unknown>[] }>(`/audit?${query.toString()}`);
     if (!result.success) {
       this._error.set(result.error || 'Impossible de charger le journal d’audit.');
-      return;
+      return false;
     }
     this._auditEntries.set((result.data?.entries || []).map((entry) => this.mapAuditEntry(entry)));
     this._error.set(null);
+    return true;
   }
 
   public async createRole(input: CreateAccessRoleInput): Promise<AccessApiResult<AccessRole>> {
@@ -415,6 +468,8 @@ export class AccessControlService {
   private async request<T>(path: string, method = 'GET', body?: unknown): Promise<AccessApiResult<T>> {
     // 1. Attendre la résolution initiale de la session d'authentification
     await this.authService.waitForSession();
+    this.resetForAccountChange();
+    const requestedUserId = this.authService.currentUser()?.id ?? null;
 
     let token = this.authService.token();
     if (!token && typeof window !== 'undefined' && window.sessionStorage) {
@@ -434,6 +489,9 @@ export class AccessControlService {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
       if (!response.ok) {
         return { success: false, error: payload.error || `Échec de la requête (${response.status}).` };
       }
