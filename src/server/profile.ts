@@ -1,12 +1,12 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
 
-type AccessRoleAssignment = {
+interface AccessRoleAssignment {
   created_at: string;
   expires_at: string | null;
   access_roles: { role_key: string; label: string; is_active: boolean } |
     { role_key: string; label: string; is_active: boolean }[] | null;
-};
+}
 
 export function getActiveAccessRole(assignments: AccessRoleAssignment[], now = Date.now()): {
   customRole: string;

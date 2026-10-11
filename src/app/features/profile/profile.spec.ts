@@ -97,4 +97,54 @@ describe('Profile Component', () => {
     expect(component.isSavedSuccess()).toBe(false);
     expect(component.profileError()).toBe('Mise à jour impossible');
   });
+
+  describe('getRoleDisplay', () => {
+    it('devrait prioriser roleLabel (ex: DAF) sur le rôle canonique (employe)', () => {
+      const user = {
+        id: 'u1',
+        email: 'daf@transmex.com',
+        firstName: 'Paul',
+        lastName: 'Finance',
+        role: 'employe',
+        roleLabel: 'DAF',
+        isActive: true,
+        createdAt: '2026-01-01',
+      } as unknown as UserProfile;
+
+      expect(component.getRoleDisplay(user)).toBe('DAF');
+    });
+
+    it('devrait utiliser customRole si roleLabel est absent', () => {
+      const user = {
+        id: 'u2',
+        email: 'user@transmex.com',
+        firstName: 'Alain',
+        lastName: 'Logistique',
+        role: 'employe',
+        customRole: 'Superviseur Logistique',
+        isActive: true,
+        createdAt: '2026-01-01',
+      } as unknown as UserProfile;
+
+      expect(component.getRoleDisplay(user)).toBe('Superviseur Logistique');
+    });
+
+    it('devrait utiliser le libellé du rôle standard par défaut', () => {
+      const user = {
+        id: 'u3',
+        email: 'emp@transmex.com',
+        firstName: 'Claire',
+        lastName: 'Agent',
+        role: 'employe',
+        isActive: true,
+        createdAt: '2026-01-01',
+      } as unknown as UserProfile;
+
+      expect(component.getRoleDisplay(user)).toBe('Employé');
+    });
+
+    it('devrait retourner une chaîne vide si aucun utilisateur n est fourni', () => {
+      expect(component.getRoleDisplay(undefined)).toBe('');
+    });
+  });
 });
