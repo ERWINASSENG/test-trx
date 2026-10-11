@@ -545,7 +545,6 @@ code {
 .feedback.error,
 .inline-error { border-color: var(--access-red); background: rgba(213, 43, 30, 0.08); color: #9f2530; }
 .inline-error { margin: 0; padding: 8px; font-size: 11px; }
-.sensitive-icon { width: 14px; height: 14px; color: var(--access-red); font-size: 14px; }
 .danger-icon { color: var(--access-red); }
 
 @media (max-width: 900px) {
