@@ -123,6 +123,7 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   });
 
   private caisseChartInstance: Chart | null = null;
+  private caisseChartCanvasObserver: MutationObserver | null = null;
 
   // Préparation réactive des données chronologiques pour Chart.js (Caisse Principale exclusivement)
   public readonly chartData = computed<CaisseTimelineData>(() => {
@@ -216,9 +217,15 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
 
   public ngAfterViewInit(): void {
     if (isPlatformBrowser(this.platformId)) {
-      if (this.caisseChartCanvas?.nativeElement) {
-        this.initCaisseChart();
-      }
+      this.caisseChartCanvasObserver = new MutationObserver(() => {
+        const canvas = document.getElementById('caisse-chart-canvas');
+        if (canvas instanceof HTMLCanvasElement && this.caisseChartInstance?.canvas !== canvas) {
+          this.initCaisseChart(canvas);
+        }
+      });
+      this.caisseChartCanvasObserver.observe(document.body, { childList: true, subtree: true });
+      this.initCaisseChart();
+
       const journals = this.additionalJournals();
       if (journals.length > 0) {
         void this.loadAllJournalCharts(journals);
@@ -227,6 +234,8 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public ngOnDestroy(): void {
+    this.caisseChartCanvasObserver?.disconnect();
+    this.caisseChartCanvasObserver = null;
     if (this.caisseChartInstance) {
       this.caisseChartInstance.destroy();
       this.caisseChartInstance = null;
@@ -234,11 +243,14 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     this.journalChartsMap.forEach((chart) => chart.destroy());
     this.journalChartsMap.clear();
   }
-
   // Initialisation du graphique Caisse Principale
-  private initCaisseChart(): void {
-    const canvas = this.caisseChartCanvas?.nativeElement;
-    if (!canvas) return;
+  private initCaisseChart(canvas = this.caisseChartCanvas?.nativeElement): void {
+    if (!canvas?.isConnected) return;
+
+    if (this.caisseChartInstance) {
+      this.caisseChartInstance.destroy();
+      this.caisseChartInstance = null;
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;

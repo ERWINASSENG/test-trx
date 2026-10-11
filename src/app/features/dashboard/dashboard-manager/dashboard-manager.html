@@ -1,8 +1,7 @@
-<div class="space-y-6" id="dashboard-manager-view">
-  <!-- Grille des cartes du tableau de bord (2 cartes par ligne sur desktop) -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="dashboard-manager-grid">
+<div class="space-y-4 px-3 pt-3 pb-4 sm:px-4 sm:pt-4 sm:pb-6" id="dashboard-manager-view">
+  <div class="grid grid-cols-1 gap-3 xl:grid-cols-[716px_minmax(0,1fr)]" id="dashboard-manager-grid">
     <!-- Carte Caisse Principale -->
-    <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="caisse-card">
+    <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between xl:h-[594px]" id="caisse-card">
       
       <!-- En-tête de la carte Caisse -->
       <div>
@@ -36,7 +35,7 @@
       </div>
 
       <!-- Ligne 3 : Courbe Chart.js native compacte -->
-      <div class="relative w-full h-48 sm:h-52 mt-2" id="caisse-chart-wrapper">
+      <div class="relative w-full flex-1 min-h-[12rem] mt-2" id="caisse-chart-wrapper">
         <canvas
           #caisseChartCanvas
           id="caisse-chart-canvas"
@@ -47,52 +46,54 @@
       </div>
     </div>
 
-    <!-- Cartes des Journaux Additionnels (Banques, etc.) avec isolation stricte et propre courbe Chart.js -->
-    @for (journal of additionalJournals(); track journal.id) {
-      <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" [id]="'journal-card-' + journal.id">
-        <!-- En-tête de la carte Journal -->
-        <div>
-          <!-- Ligne 1 : Nom du journal & badge de type -->
-          <div class="flex items-center justify-between">
-            <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50">
-              {{ journal.name }}
-            </h2>
-          </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 xl:h-[594px] xl:grid-rows-2" id="journal-cards-grid">
+      <!-- Journaux additionnels : deux par ligne, jusqu'à quatre cartes -->
+      @for (journal of additionalJournals().slice(0, 4); track journal.id) {
+        <div class="bg-white dark:bg-[#0d1f3a] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between xl:min-h-0" [id]="'journal-card-' + journal.id">
+          <!-- En-tête de la carte Journal -->
+          <div>
+            <!-- Ligne 1 : Nom du journal & badge de type -->
+            <div class="flex items-center justify-between">
+              <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50">
+                {{ journal.name }}
+              </h2>
+            </div>
 
-          <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
-          <div class="flex items-center justify-between gap-3 mt-1.5 pb-2.5 border-b border-slate-100 dark:border-white/10">
-            <!-- Transactions à gauche -->
-            <a
-              [routerLink]="['/caisse']"
-              [queryParams]="{ journalId: journal.id }"
-              class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
-              title="Consulter les écritures de ce journal">
-              <span>Transactions</span>
-            </a>
+            <!-- Ligne 2 : Transactions (à gauche) et Solde : (à droite) -->
+            <div class="flex items-center justify-between gap-3 mt-1.5 pb-2.5 border-b border-slate-100 dark:border-white/10">
+              <!-- Transactions à gauche -->
+              <a
+                [routerLink]="['/caisse']"
+                [queryParams]="{ journalId: journal.id }"
+                class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] transition-colors cursor-pointer inline-flex items-center gap-1"
+                title="Consulter les écritures de ce journal">
+                <span>Transactions</span>
+              </a>
 
-            <!-- Solde à droite -->
-            <div class="flex items-baseline gap-1.5">
-              <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
-              <span
-                class="text-sm sm:text-base font-bold tracking-tight"
-                [class]="getJournalBalance(journal.id) >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'">
-                {{ formatCurrency(getJournalBalance(journal.id)) }}
-              </span>
+              <!-- Solde à droite -->
+              <div class="flex items-baseline gap-1.5">
+                <span class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">Solde :</span>
+                <span
+                  class="text-sm sm:text-base font-bold tracking-tight"
+                  [class]="getJournalBalance(journal.id) >= 0 ? 'text-[#0b5ed7] dark:text-[#8cc2ff]' : 'text-rose-600 dark:text-rose-400'">
+                  {{ formatCurrency(getJournalBalance(journal.id)) }}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Ligne 3 : Courbe Chart.js native du journal -->
-        <div class="relative w-full h-48 sm:h-52 mt-2" [id]="'journal-chart-wrapper-' + journal.id">
-          <canvas
-            [id]="'chart-canvas-' + journal.id"
-            class="w-full h-full block"
-            [attr.aria-label]="'Courbe d\'évolution du solde pour le journal ' + journal.name"
-            role="img">
-          </canvas>
+          <!-- Ligne 3 : Courbe Chart.js native du journal -->
+          <div class="relative w-full flex-1 min-h-0 mt-2" [id]="'journal-chart-wrapper-' + journal.id">
+            <canvas
+              [id]="'chart-canvas-' + journal.id"
+              class="w-full h-full block"
+              [attr.aria-label]="'Courbe d\'évolution du solde pour le journal ' + journal.name"
+              role="img">
+            </canvas>
+          </div>
         </div>
-      </div>
-    }
+      }
+    </div>
   </div>
 
   @if (canViewDossierExpenseSummary()) {
