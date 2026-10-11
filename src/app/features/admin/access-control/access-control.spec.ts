@@ -166,4 +166,20 @@ describe('AccessControl Component', () => {
     expect(Array.isArray(emptyGroups)).toBe(true);
     expect(emptyGroups.length).toBe(0);
   });
+
+  it('devrait faire disparaître le message de feedback après 15 secondes', () => {
+    vi.useFakeTimers();
+    try {
+      component.setFeedback('Opération réussie');
+      expect(component.feedback()).toBe('Opération réussie');
+
+      vi.advanceTimersByTime(14000);
+      expect(component.feedback()).toBe('Opération réussie');
+
+      vi.advanceTimersByTime(1000);
+      expect(component.feedback()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

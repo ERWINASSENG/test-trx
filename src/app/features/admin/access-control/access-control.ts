@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessPermission, AccessRole, AccessRolePermission, AccessScope, AccessUserRole, PermissionEffect } from '../../../core/models/access-control.model';
@@ -100,7 +100,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   styleUrl: './access-control.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AccessControlCenter implements OnInit {
+export class AccessControlCenter implements OnInit, OnDestroy {
   public readonly accessControl = inject(AccessControlService);
 
   public readonly activeView = signal<AccessView>('roles');
@@ -117,6 +117,7 @@ export class AccessControlCenter implements OnInit {
   public readonly userAssignmentError = signal<string | null>(null);
   public readonly scopeError = signal<string | null>(null);
   public readonly feedback = signal<string | null>(null);
+  private feedbackTimeoutId: ReturnType<typeof setTimeout> | null = null;
   public readonly initialLoadError = signal<string | null>(null);
   public readonly permissionScopeDrafts = signal<Record<string, string>>({});
   public readonly userRoleDraft = signal('');
@@ -249,7 +250,7 @@ export class AccessControlCenter implements OnInit {
     this.roleLabelDraft.set(role.label);
     this.roleDescriptionDraft.set(role.description);
     this.scopeError.set(null);
-    this.feedback.set(null);
+    this.setFeedback(null);
     await this.accessControl.loadRolePermissions(role.id);
     this.draftGrants.set(this.accessControl.roleGrants());
     this.permissionScopeDrafts.set(Object.fromEntries(
@@ -312,7 +313,7 @@ export class AccessControlCenter implements OnInit {
     await this.accessControl.loadRoles();
     const createdRole = this.accessControl.roles().find((role) => role.roleKey === result.data?.roleKey);
     if (createdRole) await this.selectRole(createdRole);
-    this.feedback.set('Rôle créé. Aucune permission ne lui est accordée par défaut.');
+    this.setFeedback('Rôle créé. Aucune permission ne lui est accordée par défaut.');
   }
 
   public async saveRoleDetails(): Promise<void> {
@@ -327,7 +328,7 @@ export class AccessControlCenter implements OnInit {
       return;
     }
     await this.accessControl.loadRoles();
-    this.feedback.set('Informations du rôle enregistrées.');
+    this.setFeedback('Informations du rôle enregistrées.');
   }
 
   public async saveRolePermissions(): Promise<void> {
@@ -352,7 +353,7 @@ export class AccessControlCenter implements OnInit {
       return;
     }
     await this.selectRole(this.accessControl.roles().find((role) => role.id === roleId)!);
-    this.feedback.set('Permissions du rôle enregistrées.');
+    this.setFeedback('Permissions du rôle enregistrées.');
   }
 
   public async deleteSelectedRole(): Promise<void> {
@@ -367,7 +368,7 @@ export class AccessControlCenter implements OnInit {
     this.selectedRoleId.set(null);
     await this.accessControl.loadRoles();
     if (this.accessControl.roles().length > 0) await this.selectRole(this.accessControl.roles()[0]);
-    this.feedback.set('Rôle supprimé.');
+    this.setFeedback('Rôle supprimé.');
   }
 
   public async selectUser(user: AccessControlUser): Promise<void> {
@@ -375,7 +376,7 @@ export class AccessControlCenter implements OnInit {
     this.userRoleDraft.set('');
     this.userAssignmentError.set(null);
     this.scopeError.set(null);
-    this.feedback.set(null);
+    this.setFeedback(null);
     await this.accessControl.loadUserAccess(user.id);
   }
 
@@ -389,7 +390,7 @@ export class AccessControlCenter implements OnInit {
     if (!userId || !roleId) return;
 
     this.userAssignmentError.set(null);
-    this.feedback.set(null);
+    this.setFeedback(null);
 
     const result = await this.accessControl.assignRole({ userId, roleId });
     if (!result.success) {
@@ -399,7 +400,7 @@ export class AccessControlCenter implements OnInit {
     await this.accessControl.loadUserAccess(userId);
     await this.accessControl.loadUsers();
     this.userRoleDraft.set('');
-    this.feedback.set('Rôle attribué avec succès.');
+    this.setFeedback('Rôle attribué avec succès.');
   }
 
   public async revokeRole(assignment: AccessUserRole): Promise<void> {
@@ -407,7 +408,7 @@ export class AccessControlCenter implements OnInit {
     if (!userId) return;
 
     this.userAssignmentError.set(null);
-    this.feedback.set(null);
+    this.setFeedback(null);
 
     const result = await this.accessControl.revokeRole(userId, assignment.roleId);
     if (!result.success) {
@@ -416,7 +417,7 @@ export class AccessControlCenter implements OnInit {
     }
     await this.accessControl.loadUserAccess(userId);
     await this.accessControl.loadUsers();
-    this.feedback.set('Rôle retiré avec succès.');
+    this.setFeedback('Rôle retiré avec succès.');
   }
 
   public async saveOverride(): Promise<void> {
@@ -445,7 +446,7 @@ export class AccessControlCenter implements OnInit {
     }
     await this.accessControl.loadUserAccess(userId);
     this.overrideReasonDraft.set('');
-    this.feedback.set('Exception enregistrée.');
+    this.setFeedback('Exception enregistrée.');
   }
 
   public async revokeOverride(overrideId: string): Promise<void> {
@@ -457,13 +458,34 @@ export class AccessControlCenter implements OnInit {
       return;
     }
     await this.accessControl.loadUserAccess(userId);
-    this.feedback.set('Exception retirée.');
+    this.setFeedback('Exception retirée.');
   }
 
   public async refreshAudit(): Promise<void> {
     const loaded = await this.accessControl.loadAudit();
     if (!loaded) {
       this.initialLoadError.set(this.accessControl.error() || 'Impossible d’actualiser l’historique des accès.');
+    }
+  }
+
+  public setFeedback(message: string | null): void {
+    if (this.feedbackTimeoutId) {
+      clearTimeout(this.feedbackTimeoutId);
+      this.feedbackTimeoutId = null;
+    }
+    this.feedback.set(message);
+    if (message) {
+      this.feedbackTimeoutId = setTimeout(() => {
+        this.feedback.set(null);
+        this.feedbackTimeoutId = null;
+      }, 15000);
+    }
+  }
+
+  public ngOnDestroy(): void {
+    if (this.feedbackTimeoutId) {
+      clearTimeout(this.feedbackTimeoutId);
+      this.feedbackTimeoutId = null;
     }
   }
 }
