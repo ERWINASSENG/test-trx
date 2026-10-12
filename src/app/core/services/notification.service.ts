@@ -23,7 +23,7 @@ export class NotificationService {
   private readonly notificationsSubject = new BehaviorSubject<AppNotification[]>([]);
   public readonly notifications$: Observable<AppNotification[]> = this.notificationsSubject.asObservable();
 
-  private defaultDuration = 5000;
+  private defaultDuration = 15000;
 
   /**
    * Retourne la liste actuelle des notifications actives

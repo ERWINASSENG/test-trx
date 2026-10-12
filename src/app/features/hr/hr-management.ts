@@ -273,10 +273,10 @@ export class HrManagement implements OnInit {
       this.isModalOpen.set(false);
       this.editingUserId.set(null);
 
-      // Effacer le message de succès après 5 secondes
+      // Effacer le message de succès après 15 secondes
       setTimeout(() => {
         this.successMessage.set(null);
-      }, 5000);
+      }, 15000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Une erreur est survenue lors de l’enregistrement.';
       this.errorMessage.set(msg);

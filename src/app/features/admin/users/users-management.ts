@@ -186,6 +186,6 @@ export class UsersManagement {
     this.successMessage.set(msg);
     setTimeout(() => {
       this.successMessage.set(null);
-    }, 4000);
+    }, 15000);
   }
 }

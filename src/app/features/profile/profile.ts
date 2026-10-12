@@ -136,7 +136,7 @@ export class Profile {
 
     this.profileError.set(null);
     this.isSavedSuccess.set(true);
-    setTimeout(() => this.isSavedSuccess.set(false), 3000);
+    setTimeout(() => this.isSavedSuccess.set(false), 15000);
   }
 
   public async onSavePassword(): Promise<void> {
@@ -164,6 +164,6 @@ export class Profile {
     this.passwordError.set(null);
     this.isPasswordSuccess.set(true);
     this.passwordForm.reset();
-    setTimeout(() => this.isPasswordSuccess.set(false), 3000);
+    setTimeout(() => this.isPasswordSuccess.set(false), 15000);
   }
 }

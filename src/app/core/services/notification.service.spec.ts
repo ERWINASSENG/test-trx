@@ -81,4 +81,17 @@ describe('NotificationService', () => {
     expect(service.getNotifications().length).toBe(0);
     vi.useRealTimers();
   });
+
+  it('devrait auto-dismiss une notification sans durée spécifiée après 15000 ms par défaut', () => {
+    vi.useFakeTimers();
+    service.success('Succès standard');
+    expect(service.getNotifications().length).toBe(1);
+
+    vi.advanceTimersByTime(14000);
+    expect(service.getNotifications().length).toBe(1);
+
+    vi.advanceTimersByTime(1100);
+    expect(service.getNotifications().length).toBe(0);
+    vi.useRealTimers();
+  });
 });

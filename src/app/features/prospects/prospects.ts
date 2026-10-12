@@ -174,7 +174,7 @@ export class ProspectsComponent {
     this.feedbackTimeout = setTimeout(() => {
       this.feedback.set(null);
       this.feedbackTimeout = null;
-    }, 10000);
+    }, 15000);
   }
 
   public async loadPage(): Promise<void> {
