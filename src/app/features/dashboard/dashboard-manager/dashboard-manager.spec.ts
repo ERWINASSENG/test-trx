@@ -56,6 +56,7 @@ describe('DashboardManager', () => {
   const currentUserSignal = signal<UserProfile | null>(mockManagerUser);
   const transactionsSignal = signal<CashierTransaction[]>(mockTransactions);
   const balanceSignal = signal<number>(450000);
+  const isLoadingSignal = signal(false);
   const journalBalanceRefreshVersionSignal = signal(0);
   const dossierExpenseSummarySignal = signal<DossierExpenseSummary[]>([]);
 
@@ -68,6 +69,7 @@ describe('DashboardManager', () => {
     caisseTransactions: transactionsSignal,
     currentBalance: balanceSignal,
     caisseBalance: balanceSignal,
+    isLoading: isLoadingSignal,
     journalBalanceRefreshVersion: journalBalanceRefreshVersionSignal,
     loadTransactions: () => Promise.resolve(),
   };
@@ -91,6 +93,7 @@ describe('DashboardManager', () => {
   beforeEach(async () => {
     transactionsSignal.set(mockTransactions);
     balanceSignal.set(450000);
+    isLoadingSignal.set(false);
     dossierExpenseSummarySignal.set([]);
 
     await TestBed.configureTestingModule({
@@ -117,6 +120,79 @@ describe('DashboardManager', () => {
   it('should format currency correctly in FCFA', () => {
     expect(component.formatCurrency(450000)).toContain('450');
     expect(component.formatCurrency(450000)).toContain('FCFA');
+  });
+
+  it('should summarize loaded operation statuses and posted expenses', () => {
+    transactionsSignal.set([
+      ...mockTransactions,
+      {
+        id: 'tx-3',
+        date: '2026-03-03',
+        libelle: 'Carburant transport',
+        service: 'TRANSPORT',
+        category: 'sortie',
+        status: 'posted',
+        montant: -25000,
+      },
+      {
+        id: 'tx-4',
+        date: '2026-03-04',
+        libelle: 'Frais en brouillon',
+        service: 'TRANSPORT',
+        category: 'sortie',
+        status: 'draft',
+        montant: -8000,
+      },
+      {
+        id: 'tx-5',
+        date: '2026-03-05',
+        libelle: 'Carburant annulé',
+        service: 'DG',
+        category: 'sortie',
+        status: 'cancelled',
+        montant: -10000,
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect(component.loadedOperationCount()).toBe(5);
+    expect(component.operationStatusMetrics().map(({ key, count }) => [key, count])).toEqual([
+      ['posted', 3],
+      ['draft', 1],
+      ['cancelled', 1],
+    ]);
+    expect(component.operationStatusRing()).toContain('conic-gradient(');
+    expect(component.expensesByService()).toEqual([
+      { name: 'TRANSPORT', total: 75000, percent: 100 },
+    ]);
+    expect(component.topExpenses()).toEqual([
+      { label: 'Carburant transport', operationCount: 2, total: 75000, percent: 100 },
+    ]);
+    expect(fixture.nativeElement.textContent).toContain('Opérations par statut');
+    expect(fixture.nativeElement.textContent).toContain('Dépenses par service');
+    expect(fixture.nativeElement.textContent).toContain('Principales dépenses');
+    expect(fixture.nativeElement.textContent).not.toContain('Frais en brouillon');
+    expect(fixture.nativeElement.textContent).not.toContain('Carburant annulé');
+  });
+
+  it('should show empty states when no transactions are loaded', () => {
+    transactionsSignal.set([]);
+    fixture.detectChanges();
+
+    expect(component.loadedOperationCount()).toBe(0);
+    expect(component.operationStatusRing()).toBe('conic-gradient(#e8dfca 0deg 360deg)');
+    expect(component.expensesByService()).toEqual([]);
+    expect(component.topExpenses()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain('Aucune dépense comptabilisée dans les opérations chargées.');
+  });
+
+  it('should show loading states before the first transaction response', () => {
+    transactionsSignal.set([]);
+    isLoadingSignal.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Chargement des opérations de caisse…');
+    expect(fixture.nativeElement.textContent).not.toContain('Aucune dépense comptabilisée dans les opérations chargées.');
   });
 
   it('should display dossier expenses and compute the overall total', () => {
@@ -271,6 +347,3 @@ describe('DashboardManager', () => {
     expect(() => component.ngOnDestroy()).not.toThrow();
   });
 });
-
-
-

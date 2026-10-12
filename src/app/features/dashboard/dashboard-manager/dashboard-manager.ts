@@ -70,6 +70,26 @@ export interface CaisseTimelineData {
   descriptions: string[];
 }
 
+interface OperationStatusMetric {
+  key: 'posted' | 'draft' | 'cancelled';
+  label: string;
+  count: number;
+  color: string;
+}
+
+interface ExpenseServiceMetric {
+  name: string;
+  total: number;
+  percent: number;
+}
+
+interface TopExpenseMetric {
+  label: string;
+  operationCount: number;
+  total: number;
+  percent: number;
+}
+
 @Component({
   selector: 'app-dashboard-manager',
   imports: [RouterLink, MatIconModule],
@@ -94,6 +114,7 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   public readonly currentUser = this.authService.currentUser;
   public readonly caisseTransactions = this.cashierService.caisseTransactions;
   public readonly caisseBalance = this.cashierService.caisseBalance;
+  public readonly isCaisseLoading = this.cashierService.isLoading;
   public readonly canViewDossierExpenseSummary = computed(() => this.currentUser()?.role === 'manager');
   public readonly dossierExpenseSummary = this.dossierService.expenseSummary;
   public readonly dossierExpenseSummaryError = this.dossierService.expenseSummaryError;
@@ -104,6 +125,72 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
   public readonly totalDossierExpenseCount = computed(() =>
     this.dossierExpenseSummary().reduce((total, dossier) => total + dossier.expenseCount, 0)
   );
+  public readonly operationStatusMetrics = computed<OperationStatusMetric[]>(() => {
+    const transactions = this.caisseTransactions();
+    const metrics: OperationStatusMetric[] = [
+      { key: 'posted', label: 'Comptabilisées', count: 0, color: '#292727' },
+      { key: 'draft', label: 'Brouillons', count: 0, color: '#e2b83f' },
+      { key: 'cancelled', label: 'Annulées', count: 0, color: '#e8dfca' },
+    ];
+    return metrics.map((metric) => ({
+      ...metric,
+      count: transactions.filter((transaction) => transaction.status === metric.key).length,
+    }));
+  });
+  public readonly loadedOperationCount = computed(() => this.caisseTransactions().length);
+  public readonly operationStatusRing = computed(() => {
+    const metrics = this.operationStatusMetrics();
+    const total = metrics.reduce((sum, metric) => sum + metric.count, 0);
+    if (total === 0) return 'conic-gradient(#e8dfca 0deg 360deg)';
+
+    let offset = 0;
+    const segments = metrics.map((metric) => {
+      const end = offset + metric.count / total * 360;
+      const segment = `${metric.color} ${offset}deg ${end}deg`;
+      offset = end;
+      return segment;
+    });
+    return `conic-gradient(${segments.join(', ')})`;
+  });
+  public readonly expensesByService = computed<ExpenseServiceMetric[]>(() => {
+    const totals = new Map<string, number>();
+    for (const transaction of this.caisseTransactions()) {
+      if (transaction.status !== 'posted' || transaction.category !== 'sortie') continue;
+      const service = transaction.service?.trim() || 'Sans service';
+      totals.set(service, (totals.get(service) || 0) + Math.abs(Number(transaction.montant) || 0));
+    }
+
+    const sorted = [...totals.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name, 'fr'))
+      .slice(0, 4);
+    const maxTotal = sorted[0]?.total || 0;
+    return sorted.map((metric) => ({
+      ...metric,
+      percent: maxTotal > 0 ? metric.total / maxTotal * 100 : 0,
+    }));
+  });
+  public readonly topExpenses = computed<TopExpenseMetric[]>(() => {
+    const expenses = new Map<string, { operationCount: number; total: number }>();
+    for (const transaction of this.caisseTransactions()) {
+      if (transaction.status !== 'posted' || transaction.category !== 'sortie') continue;
+      const label = transaction.libelle.trim() || 'Dépense sans libellé';
+      const metric = expenses.get(label) || { operationCount: 0, total: 0 };
+      metric.operationCount += 1;
+      metric.total += Math.abs(Number(transaction.montant) || 0);
+      expenses.set(label, metric);
+    }
+
+    const sorted = [...expenses.entries()]
+      .map(([label, metric]) => ({ label, ...metric }))
+      .sort((left, right) => right.total - left.total || left.label.localeCompare(right.label, 'fr'))
+      .slice(0, 5);
+    const maxTotal = sorted[0]?.total || 0;
+    return sorted.map((metric) => ({
+      ...metric,
+      percent: maxTotal > 0 ? metric.total / maxTotal * 100 : 0,
+    }));
+  });
 
   // Données de graphiques en cache par journal
   private readonly journalChartsMap = new Map<string, Chart>();
