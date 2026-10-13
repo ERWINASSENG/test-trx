@@ -1,8 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Input,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
-import { ActivatedRoute } from '@angular/router';
+import { AccessControlService } from '../../core/services/access-control.service';
+import { AuthService } from '../../core/services/auth.service';
+import { QuoteInput, QuoteService } from '../../core/services/quote.service';
 import {
   QUOTE_COLUMN_TYPES,
   QUOTE_STATUSES,
@@ -10,21 +18,20 @@ import {
   QuoteColumnType,
   QuoteRow,
   QuoteStatus,
-  QuoteTemplate,
   SalesQuote,
+  SeaFreightDetails,
 } from '../../core/models/quote.model';
-import { AccessControlService } from '../../core/services/access-control.service';
-import { AuthService } from '../../core/services/auth.service';
-import { QuoteInput, QuoteService } from '../../core/services/quote.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
-import { generateSecureUUID } from '../../core/utils/crypto.utils';
 
-const COLUMN_TYPE_LABELS: Record<QuoteColumnType, string> = {
-  text: 'Texte',
-  number: 'Nombre',
-  amount: 'Montant',
-  date: 'Date',
-  checkbox: 'Case à cocher',
+const generateSecureUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 };
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
@@ -35,6 +42,14 @@ const STATUS_LABELS: Record<QuoteStatus, string> = {
   expired: 'Expirée',
 };
 
+const COLUMN_TYPE_LABELS: Record<QuoteColumnType, string> = {
+  text: 'Texte',
+  number: 'Nombre',
+  amount: 'Montant',
+  date: 'Date',
+  checkbox: 'Case',
+};
+
 interface QuoteStatusColumn {
   status: QuoteStatus;
   quotes: SalesQuote[];
@@ -42,52 +57,61 @@ interface QuoteStatusColumn {
 
 @Component({
   selector: 'app-quotes',
-  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel],
+  imports: [DatePipe, MatIconModule, ModuleControlPanel],
   templateUrl: './quotes.html',
-  styleUrl: './quotes.scss',
+  styleUrls: ['./quotes.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class QuotesComponent {
+  @Input() public linkedProspectId?: string;
+  @Input() public linkedOpportunityId?: string;
+
   public readonly quoteService = inject(QuoteService);
   private readonly accessControl = inject(AccessControlService);
   private readonly authService = inject(AuthService);
-  private readonly route = inject(ActivatedRoute);
-  private readonly linkedProspectId = this.route.snapshot.queryParamMap.get('prospectId');
-  private readonly linkedOpportunityId = this.route.snapshot.queryParamMap.get('opportunityId');
 
-  public readonly columnTypes = QUOTE_COLUMN_TYPES;
   public readonly statuses = QUOTE_STATUSES;
-  public readonly statusFilter = signal('');
-  public readonly quoteSearch = signal('');
+  public readonly columnTypes = QUOTE_COLUMN_TYPES;
+  public readonly pageSize = 12;
+
   public readonly view = signal<'list' | 'kanban'>('list');
+  public readonly quoteSearch = signal('');
+  public readonly statusFilter = signal<string>('');
   public readonly pageIndex = signal(0);
-  public readonly pageSize = 25;
+
+  public readonly currentUserId = computed(() => this.authService.currentUser()?.id || null);
   public readonly canCreate = computed(() => this.accessControl.hasPermission('quotes.create'));
   public readonly canUpdate = computed(() => this.accessControl.hasPermission('quotes.update'));
   public readonly canDelete = computed(() => this.accessControl.hasPermission('quotes.delete'));
   public readonly canAssign = computed(() => this.accessControl.hasPermission('quotes.assign'));
   public readonly canSaveTemplate = computed(() => this.accessControl.hasPermission('quotes.templates.create'));
   public readonly canDeleteTemplate = computed(() => this.accessControl.hasPermission('quotes.templates.delete'));
-  public readonly currentUserId = computed(() => this.authService.currentUser()?.id || '');
+
   public readonly totalColumnOptions = computed(() =>
     this.columns().filter((column) => column.type === 'amount')
   );
+
   public readonly filteredQuotes = computed(() => {
     const query = this.quoteSearch().trim().toLocaleLowerCase('fr');
     const quotes = this.quoteService.quotes();
     if (!query) return quotes;
-    return quotes.filter((quote) => [
-      quote.quoteNumber,
-      quote.prospectName || this.prospectLabel(quote.prospectId),
-      quote.title,
-      quote.assignedToName || this.assigneeLabel(quote.assignedTo),
-      this.statusLabel(quote.status),
-    ].some((value) => value.toLocaleLowerCase('fr').includes(query)));
+    return quotes.filter((quote) =>
+      quote.quoteNumber.toLocaleLowerCase('fr').includes(query) ||
+      quote.title.toLocaleLowerCase('fr').includes(query) ||
+      (quote.prospectName && quote.prospectName.toLocaleLowerCase('fr').includes(query)) ||
+      (quote.assignedToName && quote.assignedToName.toLocaleLowerCase('fr').includes(query)) ||
+      (quote.seaFreight?.portOfLoading && quote.seaFreight.portOfLoading.toLocaleLowerCase('fr').includes(query)) ||
+      (quote.seaFreight?.portOfDischarge && quote.seaFreight.portOfDischarge.toLocaleLowerCase('fr').includes(query))
+    );
   });
-  public readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filteredQuotes().length / this.pageSize)));
-  public readonly displayedQuotes = computed(() =>
-    this.filteredQuotes().slice(this.pageIndex() * this.pageSize, (this.pageIndex() + 1) * this.pageSize)
+
+  public readonly pageCount = computed(() =>
+    Math.max(1, Math.ceil(this.filteredQuotes().length / this.pageSize))
   );
+  public readonly displayedQuotes = computed(() => {
+    const start = this.pageIndex() * this.pageSize;
+    return this.filteredQuotes().slice(start, start + this.pageSize);
+  });
   public readonly statusColumns = computed<QuoteStatusColumn[]>(() =>
     this.statuses.map((status) => ({
       status,
@@ -102,6 +126,7 @@ export class QuotesComponent {
   });
   public readonly canPrevPage = computed(() => this.pageIndex() > 0);
   public readonly canNextPage = computed(() => (this.pageIndex() + 1) * this.pageSize < this.filteredQuotes().length);
+
   public readonly draftTotal = computed(() => {
     const totalId = this.totalColumnId();
     return this.rows().reduce((sum, row) => {
@@ -110,29 +135,78 @@ export class QuotesComponent {
     }, 0);
   });
 
+  // États du formulaire modal Fiche Maritime Transimex
   public readonly isEditorOpen = signal(false);
   public readonly editingId = signal<string | null>(null);
   public readonly isSaving = signal(false);
   public readonly error = signal<string | null>(null);
   public readonly feedback = signal<string | null>(null);
+
+  // Informations générales
   public readonly clientSearch = signal('');
   public readonly prospectId = signal('');
   public readonly opportunityId = signal<string | null>(null);
   public readonly assignedTo = signal('');
-  public readonly title = signal('Cotation client');
+  public readonly title = signal('Cotation Fret Maritime Transimex');
   public readonly currency = signal('XAF');
   public readonly status = signal<QuoteStatus>('draft');
   public readonly validUntil = signal('');
+
+  // 1. Informations client (Maritime)
+  public readonly seaContactName = signal('');
+  public readonly seaPhone = signal('');
+  public readonly seaEmail = signal('');
+  public readonly seaAddress = signal('');
+
+  // 2. Détails expédition
+  public readonly seaGoodsType = signal('');
+  public readonly seaGoodsDescription = signal('');
+  public readonly seaGrossWeightKg = signal<number | null>(null);
+  public readonly seaTotalVolumeM3 = signal<number | null>(null);
+  public readonly seaPackagesCount = signal<number | null>(null);
+  public readonly seaPackagingType = signal('');
+
+  // 3. Itinéraire
+  public readonly seaPortOfLoading = signal('');
+  public readonly seaPortOfDischarge = signal('');
+  public readonly seaIncoterm = signal('');
+  public readonly seaNeedInlandTransport = signal(false);
+  public readonly seaEstimatedDepartureDate = signal<string | null>(null);
+  public readonly seaEstimatedArrivalDate = signal<string | null>(null);
+
+  // 4. Type de service
+  public readonly serviceFcl = signal(false);
+  public readonly serviceLcl = signal(false);
+  public readonly serviceRoro = signal(false);
+  public readonly serviceBreakBulk = signal(false);
+  public readonly serviceOther = signal('');
+
+  // 5. Documents disponibles
+  public readonly docCommercialInvoice = signal(false);
+  public readonly docPackingList = signal(false);
+  public readonly docCertificateOfOrigin = signal(false);
+  public readonly docMsdsTechnicalSheet = signal(false);
+  public readonly docOther = signal('');
+
+  // 6. Services additionnels requis
+  public readonly addonCustomsClearance = signal(false);
+  public readonly addonCargoInsurance = signal(false);
+  public readonly addonWarehousing = signal(false);
+  public readonly addonPortHandling = signal(false);
+  public readonly addonTracking = signal(false);
+
+  // 7. Chiffrage dynamique
   public readonly columns = signal<QuoteColumn[]>([]);
   public readonly rows = signal<QuoteRow[]>([]);
   public readonly totalColumnId = signal('');
   public readonly columnLabelDraft = signal('');
-  public readonly columnTypeDraft = signal<QuoteColumnType>('text');
+  public readonly columnTypeDraft = signal<QuoteColumnType>('amount');
+
+  // Modèle partagé & Création rapide de prospect
   public readonly saveTemplate = signal(false);
   public readonly templateName = signal('');
   public readonly selectedTemplateId = signal('');
   public readonly showNewProspect = signal(false);
-  public readonly newProspectCompany = signal('');
   public readonly newProspectContact = signal('');
   public readonly newProspectEmail = signal('');
   public readonly newProspectPhone = signal('');
@@ -145,8 +219,7 @@ export class QuotesComponent {
       const prospect = this.quoteService.prospects().find((item) => item.id === prospectId);
       if (!prospect) return;
       this.openCreate();
-      this.prospectId.set(prospect.id);
-      this.clientSearch.set(prospect.companyName || prospect.name);
+      this.onProspectSelected(prospect.id);
       this.opportunityId.set(this.linkedOpportunityId);
     });
   }
@@ -199,7 +272,7 @@ export class QuotesComponent {
 
   public prospectLabel(prospectId: string): string {
     const prospect = this.quoteService.prospects().find((candidate) => candidate.id === prospectId);
-    return prospect?.companyName || prospect?.name || 'Choisir un client';
+    return prospect?.companyName || prospect?.name || 'Client non défini';
   }
 
   public assigneeLabel(assigneeId: string | null): string {
@@ -208,23 +281,83 @@ export class QuotesComponent {
     return assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() || assignee.email : 'Commercial indisponible';
   }
 
+  public onClientSearchInput(val: string): void {
+    this.clientSearch.set(val);
+  }
+
+  public onProspectSelected(selectedId: string): void {
+    this.prospectId.set(selectedId);
+    if (!selectedId) return;
+    const prospect = this.quoteService.prospects().find((candidate) => candidate.id === selectedId);
+    if (prospect) {
+      this.clientSearch.set(prospect.companyName || prospect.name);
+      if (prospect.contactName && !this.seaContactName()) this.seaContactName.set(prospect.contactName);
+      if (prospect.phone && !this.seaPhone()) this.seaPhone.set(prospect.phone);
+      if (prospect.email && !this.seaEmail()) this.seaEmail.set(prospect.email);
+    }
+  }
+
   public openCreate(): void {
     if (!this.canCreate()) return;
     this.editingId.set(null);
     this.error.set(null);
     this.prospectId.set('');
-    this.opportunityId.set(this.linkedOpportunityId);
+    this.opportunityId.set(this.linkedOpportunityId || null);
     this.clientSearch.set('');
-    this.assignedTo.set(this.canAssign() ? '' : this.currentUserId());
-    this.title.set('Cotation client');
+    this.assignedTo.set(this.canAssign() ? '' : (this.currentUserId() || ''));
+    this.title.set('Cotation Fret Maritime Transimex');
     this.currency.set('XAF');
     this.status.set('draft');
     this.validUntil.set('');
-    const description: QuoteColumn = { id: generateSecureUUID(), label: 'Désignation', type: 'text' };
-    const amount: QuoteColumn = { id: generateSecureUUID(), label: 'Montant', type: 'amount' };
-    this.columns.set([description, amount]);
-    this.totalColumnId.set(amount.id);
-    this.rows.set([{ [description.id]: null, [amount.id]: null }]);
+
+    // Réinitialisation des champs maritimes
+    this.seaContactName.set('');
+    this.seaPhone.set('');
+    this.seaEmail.set('');
+    this.seaAddress.set('');
+    this.seaGoodsType.set('');
+    this.seaGoodsDescription.set('');
+    this.seaGrossWeightKg.set(null);
+    this.seaTotalVolumeM3.set(null);
+    this.seaPackagesCount.set(null);
+    this.seaPackagingType.set('');
+    this.seaPortOfLoading.set('Douala Port (CMDLA)');
+    this.seaPortOfDischarge.set('');
+    this.seaIncoterm.set('FOB');
+    this.seaNeedInlandTransport.set(false);
+    this.seaEstimatedDepartureDate.set(null);
+    this.seaEstimatedArrivalDate.set(null);
+
+    this.serviceFcl.set(true);
+    this.serviceLcl.set(false);
+    this.serviceRoro.set(false);
+    this.serviceBreakBulk.set(false);
+    this.serviceOther.set('');
+
+    this.docCommercialInvoice.set(true);
+    this.docPackingList.set(true);
+    this.docCertificateOfOrigin.set(false);
+    this.docMsdsTechnicalSheet.set(false);
+    this.docOther.set('');
+
+    this.addonCustomsClearance.set(false);
+    this.addonCargoInsurance.set(false);
+    this.addonWarehousing.set(false);
+    this.addonPortHandling.set(true);
+    this.addonTracking.set(true);
+
+    // Initialisation des colonnes de chiffrage adaptées au maritime
+    const colDesignation: QuoteColumn = { id: generateSecureUUID(), label: 'Désignation de la prestation', type: 'text' };
+    const colUnite: QuoteColumn = { id: generateSecureUUID(), label: 'Unité / Conteneur', type: 'text' };
+    const colMontant: QuoteColumn = { id: generateSecureUUID(), label: 'Montant HT', type: 'amount' };
+    this.columns.set([colDesignation, colUnite, colMontant]);
+    this.totalColumnId.set(colMontant.id);
+    this.rows.set([
+      { [colDesignation.id]: 'Fret maritime de base', [colUnite.id]: '1 x 40\' HC', [colMontant.id]: 0 },
+      { [colDesignation.id]: 'Surcharge BAF / CAF', [colUnite.id]: 'Forfait', [colMontant.id]: 0 },
+      { [colDesignation.id]: 'Manutention portuaire & Débarquement', [colUnite.id]: 'Unité', [colMontant.id]: 0 },
+    ]);
+
     this.saveTemplate.set(false);
     this.templateName.set('');
     this.selectedTemplateId.set('');
@@ -238,14 +371,53 @@ export class QuotesComponent {
     this.error.set(null);
     this.prospectId.set(quote.prospectId);
     this.opportunityId.set(quote.opportunityId || null);
+    this.clientSearch.set(quote.prospectName || this.prospectLabel(quote.prospectId));
     this.assignedTo.set(quote.assignedTo || '');
     this.title.set(quote.title);
     this.currency.set(quote.currency);
     this.status.set(quote.status);
     this.validUntil.set(quote.validUntil || '');
+
+    const sf = quote.seaFreight;
+    this.seaContactName.set(sf?.contactName || '');
+    this.seaPhone.set(sf?.phone || '');
+    this.seaEmail.set(sf?.email || '');
+    this.seaAddress.set(sf?.address || '');
+    this.seaGoodsType.set(sf?.goodsType || '');
+    this.seaGoodsDescription.set(sf?.goodsDescription || '');
+    this.seaGrossWeightKg.set(sf?.grossWeightKg ?? null);
+    this.seaTotalVolumeM3.set(sf?.totalVolumeM3 ?? null);
+    this.seaPackagesCount.set(sf?.packagesCount ?? null);
+    this.seaPackagingType.set(sf?.packagingType || '');
+    this.seaPortOfLoading.set(sf?.portOfLoading || '');
+    this.seaPortOfDischarge.set(sf?.portOfDischarge || '');
+    this.seaIncoterm.set(sf?.incoterm || '');
+    this.seaNeedInlandTransport.set(sf?.needInlandTransport ?? false);
+    this.seaEstimatedDepartureDate.set(sf?.estimatedDepartureDate || null);
+    this.seaEstimatedArrivalDate.set(sf?.estimatedArrivalDate || null);
+
+    this.serviceFcl.set(sf?.serviceTypes?.fcl ?? false);
+    this.serviceLcl.set(sf?.serviceTypes?.lcl ?? false);
+    this.serviceRoro.set(sf?.serviceTypes?.roro ?? false);
+    this.serviceBreakBulk.set(sf?.serviceTypes?.breakBulk ?? false);
+    this.serviceOther.set(sf?.serviceTypes?.other || '');
+
+    this.docCommercialInvoice.set(sf?.availableDocuments?.commercialInvoice ?? false);
+    this.docPackingList.set(sf?.availableDocuments?.packingList ?? false);
+    this.docCertificateOfOrigin.set(sf?.availableDocuments?.certificateOfOrigin ?? false);
+    this.docMsdsTechnicalSheet.set(sf?.availableDocuments?.msdsTechnicalSheet ?? false);
+    this.docOther.set(sf?.availableDocuments?.other || '');
+
+    this.addonCustomsClearance.set(sf?.additionalServices?.customsClearance ?? false);
+    this.addonCargoInsurance.set(sf?.additionalServices?.cargoInsurance ?? false);
+    this.addonWarehousing.set(sf?.additionalServices?.warehousing ?? false);
+    this.addonPortHandling.set(sf?.additionalServices?.portHandling ?? false);
+    this.addonTracking.set(sf?.additionalServices?.tracking ?? false);
+
     this.columns.set(quote.columns.map((column) => ({ ...column })));
     this.rows.set(quote.rows.map((row) => ({ ...row })));
     this.totalColumnId.set(quote.totalColumnId);
+
     this.saveTemplate.set(false);
     this.templateName.set('');
     this.selectedTemplateId.set('');
@@ -278,12 +450,15 @@ export class QuotesComponent {
       ...row,
       [column.id]: column.type === 'checkbox' ? false : null,
     })));
-    if (column.type === 'amount' && !this.totalColumnId()) this.totalColumnId.set(column.id);
+    if (column.type === 'amount' && !this.totalColumnId()) {
+      this.totalColumnId.set(column.id);
+    }
     this.columnLabelDraft.set('');
     this.error.set(null);
   }
 
   public removeColumn(columnId: string): void {
+    if (this.columns().length <= 1) return;
     this.columns.update((columns) => columns.filter((column) => column.id !== columnId));
     this.rows.update((rows) => rows.map((row) => {
       const remaining: QuoteRow = {};
@@ -313,10 +488,13 @@ export class QuotesComponent {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
     let value: string | number | boolean | null;
-    if (column.type === 'checkbox' && target instanceof HTMLInputElement) value = target.checked;
-    else if (column.type === 'amount' || column.type === 'number') {
+    if (column.type === 'checkbox' && target instanceof HTMLInputElement) {
+      value = target.checked;
+    } else if (column.type === 'amount' || column.type === 'number') {
       value = target.value.trim() === '' ? null : Number(target.value);
-    } else value = target.value || null;
+    } else {
+      value = target.value || null;
+    }
     this.rows.update((rows) => rows.map((row, index) =>
       index === rowIndex ? { ...row, [column.id]: value } : row
     ));
@@ -351,29 +529,28 @@ export class QuotesComponent {
   }
 
   public async createProspect(): Promise<void> {
-    const companyName = this.newProspectCompany().trim();
+    const companyName = this.clientSearch().trim();
     if (companyName.length < 2) {
-      this.error.set('Le nom du client doit comporter au moins deux caractères.');
+      this.error.set('Saisissez le nom de la société (au moins 2 caractères).');
       return;
     }
     this.isCreatingProspect.set(true);
     this.error.set(null);
     const result = await this.quoteService.createProspect({
       companyName,
-      contactName: this.newProspectContact().trim() || undefined,
-      email: this.newProspectEmail().trim().toLowerCase() || undefined,
-      phone: this.newProspectPhone().trim() || undefined,
+      contactName: this.newProspectContact().trim() || this.seaContactName().trim() || undefined,
+      email: this.newProspectEmail().trim().toLowerCase() || this.seaEmail().trim().toLowerCase() || undefined,
+      phone: this.newProspectPhone().trim() || this.seaPhone().trim() || undefined,
       ...(this.canAssign() && this.assignedTo() ? { assignedTo: this.assignedTo() } : {}),
     });
     this.isCreatingProspect.set(false);
     if (!result.success || !result.data) {
-      this.error.set(result.error || 'Impossible de créer le client.');
+      this.error.set(result.error || 'Impossible d’enregistrer le client.');
       return;
     }
     this.prospectId.set(result.data.id);
     this.clientSearch.set(result.data.companyName || result.data.name);
     this.showNewProspect.set(false);
-    this.newProspectCompany.set('');
     this.newProspectContact.set('');
     this.newProspectEmail.set('');
     this.newProspectPhone.set('');
@@ -381,26 +558,73 @@ export class QuotesComponent {
 
   public async saveQuote(): Promise<void> {
     if (this.isSaving()) return;
+
+    // Si aucun prospectId n'est sélectionné mais qu'un nom de société est saisi, on le crée
+    if (!this.prospectId() && this.clientSearch().trim().length >= 2) {
+      await this.createProspect();
+    }
+
     if (!this.prospectId()) {
-      this.error.set('Sélectionnez un client avant d’enregistrer la cotation.');
+      this.error.set('Veuillez renseigner et sélectionner le nom de la société cliente.');
       return;
     }
     if (this.columns().length === 0 || !this.totalColumnOptions().some((column) => column.id === this.totalColumnId())) {
-      this.error.set('Ajoutez une colonne de type montant et sélectionnez-la pour calculer le total.');
+      this.error.set('Configurez au moins une colonne de type montant pour calculer le total de la cotation.');
       return;
     }
     if (this.rows().length === 0) {
-      this.error.set('Ajoutez au moins une ligne à la cotation.');
+      this.error.set('Ajoutez au moins une ligne de chiffrage maritime.');
       return;
     }
     if (this.canAssign() && !this.assignedTo()) {
-      this.error.set('Choisissez le commercial auquel attribuer cette cotation.');
+      this.error.set('Veuillez affecter un commercial à cette cotation maritime.');
       return;
     }
     if (this.saveTemplate() && this.templateName().trim().length < 2) {
       this.error.set('Indiquez un nom de modèle partagé ou décochez cette option.');
       return;
     }
+
+    const seaFreightPayload: SeaFreightDetails = {
+      contactName: this.seaContactName().trim() || undefined,
+      phone: this.seaPhone().trim() || undefined,
+      email: this.seaEmail().trim() || undefined,
+      address: this.seaAddress().trim() || undefined,
+      goodsType: this.seaGoodsType().trim() || undefined,
+      goodsDescription: this.seaGoodsDescription().trim() || undefined,
+      grossWeightKg: this.seaGrossWeightKg(),
+      totalVolumeM3: this.seaTotalVolumeM3(),
+      packagesCount: this.seaPackagesCount(),
+      packagingType: this.seaPackagingType().trim() || undefined,
+      portOfLoading: this.seaPortOfLoading().trim() || undefined,
+      portOfDischarge: this.seaPortOfDischarge().trim() || undefined,
+      incoterm: this.seaIncoterm().trim() || undefined,
+      needInlandTransport: this.seaNeedInlandTransport(),
+      estimatedDepartureDate: this.seaEstimatedDepartureDate(),
+      estimatedArrivalDate: this.seaEstimatedArrivalDate(),
+      serviceTypes: {
+        fcl: this.serviceFcl(),
+        lcl: this.serviceLcl(),
+        roro: this.serviceRoro(),
+        breakBulk: this.serviceBreakBulk(),
+        other: this.serviceOther().trim() || undefined,
+      },
+      availableDocuments: {
+        commercialInvoice: this.docCommercialInvoice(),
+        packingList: this.docPackingList(),
+        certificateOfOrigin: this.docCertificateOfOrigin(),
+        msdsTechnicalSheet: this.docMsdsTechnicalSheet(),
+        other: this.docOther().trim() || undefined,
+      },
+      additionalServices: {
+        customsClearance: this.addonCustomsClearance(),
+        cargoInsurance: this.addonCargoInsurance(),
+        warehousing: this.addonWarehousing(),
+        portHandling: this.addonPortHandling(),
+        tracking: this.addonTracking(),
+      },
+    };
+
     const input: QuoteInput = {
       prospectId: this.prospectId(),
       ...(this.opportunityId() ? { opportunityId: this.opportunityId() } : {}),
@@ -412,55 +636,56 @@ export class QuotesComponent {
       totalColumnId: this.totalColumnId(),
       status: this.status(),
       validUntil: this.validUntil() || null,
+      seaFreight: seaFreightPayload,
     };
+
     this.isSaving.set(true);
     this.error.set(null);
     const quoteId = this.editingId();
     const result = quoteId
       ? await this.quoteService.updateQuote(quoteId, input)
       : await this.quoteService.createQuote(input);
+
     if (!result.success) {
       this.isSaving.set(false);
-      this.error.set(result.error || 'Impossible d’enregistrer la cotation.');
+      this.error.set(result.error || 'Impossible d’enregistrer la cotation maritime.');
       return;
     }
 
-    let templateError: string | undefined;
     if (this.saveTemplate() && !quoteId) {
-      const templateResult = await this.quoteService.createTemplate({
+      await this.quoteService.createTemplate({
         name: this.templateName().trim(),
         columns: this.columns(),
         totalColumnId: this.totalColumnId(),
       });
-      if (!templateResult.success) templateError = templateResult.error || 'Le modèle partagé n’a pas pu être enregistré.';
     }
+
+    await this.load();
     this.isSaving.set(false);
     this.isEditorOpen.set(false);
-    this.feedback.set(templateError
-      ? `Cotation enregistrée, mais le modèle n’a pas pu être créé : ${templateError}`
-      : quoteId ? 'Cotation mise à jour.' : 'Cotation créée.');
-    await this.load();
+    this.feedback.set(quoteId ? 'Cotation maritime mise à jour avec succès.' : 'Fiche de cotation maritime enregistrée avec succès.');
+    setTimeout(() => this.feedback.set(null), 15000);
   }
 
   public async deleteQuote(quote: SalesQuote): Promise<void> {
-    if (!this.canDelete() || !confirm(`Supprimer la cotation ${quote.quoteNumber} ?`)) return;
+    if (!this.canDelete()) return;
+    const confirmed = confirm(`Confirmez-vous la suppression de la cotation ${quote.quoteNumber} ?`);
+    if (!confirmed) return;
     const result = await this.quoteService.deleteQuote(quote.id);
     if (!result.success) {
-      this.feedback.set(result.error || 'Impossible de supprimer cette cotation.');
+      this.error.set(result.error || 'Impossible de supprimer la cotation.');
       return;
     }
-    this.feedback.set('Cotation supprimée.');
     await this.load();
+    this.feedback.set(`Cotation ${quote.quoteNumber} supprimée.`);
+    setTimeout(() => this.feedback.set(null), 15000);
   }
 
-  public async deleteTemplate(template: QuoteTemplate): Promise<void> {
-    if (!confirm(`Supprimer le modèle partagé « ${template.name} » ?`)) return;
-    const result = await this.quoteService.deleteTemplate(template.id);
-    if (!result.success) {
-      this.error.set(result.error || 'Impossible de supprimer le modèle.');
-      return;
-    }
+  public async deleteTemplate(template: { id: string; name: string }): Promise<void> {
+    if (!this.canDeleteTemplate()) return;
+    const confirmed = confirm(`Supprimer le modèle ${template.name} ?`);
+    if (!confirmed) return;
+    await this.quoteService.deleteTemplate(template.id);
     await this.quoteService.loadTemplates();
-    if (this.selectedTemplateId() === template.id) this.selectedTemplateId.set('');
   }
 }

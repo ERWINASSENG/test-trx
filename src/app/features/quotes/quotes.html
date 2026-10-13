@@ -3,12 +3,13 @@
     <div controlPanelStart class="quotes-control-start">
       @if (canCreate()) {
         <button type="button" class="cashier-action-primary" (click)="openCreate()">
-          Nouveau
+          <mat-icon>add</mat-icon>
+          <span>Nouvelle cotation</span>
         </button>
       }
       <div class="quotes-breadcrumb" aria-label="Fil d’Ariane">
-        <span>Cotations</span>
-        <small>Développement commercial</small>
+        <span>Cotations maritimes</span>
+        <small>Développement commercial & transit</small>
       </div>
     </div>
     <div controlPanelCenter class="quotes-control-center">
@@ -19,7 +20,7 @@
           type="search"
           [value]="quoteSearch()"
           (input)="searchQuotes($any($event.target).value)"
-          placeholder="Rechercher…"
+          placeholder="Rechercher par référence, client, objet…"
           aria-label="Rechercher dans les cotations" />
       </div>
       <select
@@ -78,14 +79,14 @@
     <div class="loading-state" role="status"><mat-icon>progress_activity</mat-icon>Chargement des cotations…</div>
   } @else if (filteredQuotes().length === 0) {
     <section class="empty-state">
-      <div class="empty-icon"><mat-icon>request_quote</mat-icon></div>
-      <h2>{{ quoteService.quotes().length === 0 ? 'Aucune cotation pour le moment' : 'Aucun résultat' }}</h2>
+      <div class="empty-icon"><mat-icon>directions_boat</mat-icon></div>
+      <h2>{{ quoteService.quotes().length === 0 ? 'Aucune cotation maritime pour le moment' : 'Aucun résultat' }}</h2>
       <p>{{ quoteService.quotes().length === 0
-        ? 'Créez une cotation personnalisée et suivez son avancement avec vos clients.'
+        ? 'Remplissez une fiche de demande de cotation maritime conforme aux standards Transimex.'
         : 'Modifiez la recherche ou le filtre pour afficher des cotations.' }}</p>
       @if (canCreate() && quoteService.quotes().length === 0) {
         <button type="button" class="primary-action" (click)="openCreate()">
-          <mat-icon>add</mat-icon>Créer une cotation
+          <mat-icon>add</mat-icon>Créer une cotation maritime
         </button>
       }
     </section>
@@ -97,9 +98,9 @@
             <tr>
               <th scope="col">Référence</th>
               <th scope="col">Client</th>
-              <th scope="col">Objet</th>
+              <th scope="col">Objet & Itinéraire</th>
               <th scope="col">Commercial</th>
-              <th scope="col">Total</th>
+              <th scope="col">Montant chiffré</th>
               <th scope="col">Validité</th>
               <th scope="col">Statut</th>
               <th scope="col"><span class="sr-only">Actions</span></th>
@@ -110,7 +111,14 @@
               <tr>
                 <td class="reference-cell">{{ quote.quoteNumber }}</td>
                 <td>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</td>
-                <td>{{ quote.title }}</td>
+                <td>
+                  <strong>{{ quote.title }}</strong>
+                  @if (quote.seaFreight?.portOfLoading || quote.seaFreight?.portOfDischarge) {
+                    <small class="route-hint">
+                      {{ quote.seaFreight?.portOfLoading || 'Port chargement' }} → {{ quote.seaFreight?.portOfDischarge || 'Port déchargement' }}
+                    </small>
+                  }
+                </td>
                 <td>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</td>
                 <td class="amount-cell">{{ formatAmount(quote.totalAmount, quote.currency) }}</td>
                 <td>{{ quote.validUntil ? (quote.validUntil | date:'dd/MM/yyyy') : '—' }}</td>
@@ -148,6 +156,11 @@
                 </div>
                 <p class="quote-kanban-title">{{ quote.title }}</p>
                 <p>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</p>
+                @if (quote.seaFreight?.portOfLoading || quote.seaFreight?.portOfDischarge) {
+                  <small class="route-hint">
+                    {{ quote.seaFreight?.portOfLoading || 'Départ' }} → {{ quote.seaFreight?.portOfDischarge || 'Arrivée' }}
+                  </small>
+                }
                 <div class="quote-kanban-details">
                   <strong>{{ formatAmount(quote.totalAmount, quote.currency) }}</strong>
                   @if (quote.validUntil) {
@@ -183,7 +196,7 @@
     <section class="templates-section" aria-labelledby="templates-title">
       <div>
         <p class="quotes-eyebrow">Structures réutilisables</p>
-        <h2 id="templates-title">Modèles partagés</h2>
+        <h2 id="templates-title">Modèles de chiffrage partagés</h2>
       </div>
       <div class="template-list">
         @for (template of quoteService.templates(); track template.id) {
@@ -191,7 +204,7 @@
             <div class="template-icon"><mat-icon>view_column</mat-icon></div>
             <div class="template-info">
               <strong>{{ template.name }}</strong>
-              <span>{{ template.columns.length }} colonnes</span>
+              <span>{{ template.columns.length }} colonnes de chiffrage</span>
             </div>
             @if (canCreate()) {
               <button type="button" class="secondary-action" (click)="openCreate(); applyTemplate(template.id)">
@@ -212,170 +225,519 @@
 
 @if (isEditorOpen()) {
   <div class="modal-backdrop" role="presentation" tabindex="-1" (click)="closeEditor()" (keydown.escape)="closeEditor()">
-    <section class="quote-editor" role="dialog" aria-modal="true" aria-labelledby="editor-title" tabindex="-1" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-      <header class="editor-header">
-        <div>
-          <p class="quotes-eyebrow">{{ editingId() ? 'Mise à jour' : 'Nouvelle offre' }}</p>
-          <h2 id="editor-title">{{ editingId() ? 'Modifier la cotation' : 'Créer une cotation' }}</h2>
+    <section class="quote-editor odoo-sheet-container" role="dialog" aria-modal="true" aria-labelledby="editor-title" tabindex="-1" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+      <!-- EN-TÊTE OFFICIEL TRANSIMEX -->
+      <header class="editor-header odoo-sheet-header">
+        <div class="transimex-brand-row">
+          <div class="transimex-brand-box">
+            <span class="transimex-logo-title">TRANSIMEX</span>
+            <span class="transimex-logo-subtitle">Global Logistics Provider</span>
+          </div>
+          <div class="odoo-sheet-titles">
+            <h1 id="editor-title" class="odoo-doc-title">FICHE DE DEMANDE DE COTATION MARITIME</h1>
+            <span class="odoo-doc-subtitle">SEA FREIGHT QUOTATION REQUEST FORM</span>
+          </div>
         </div>
         <button type="button" class="icon-action close-action" aria-label="Fermer" (click)="closeEditor()">
           <mat-icon>close</mat-icon>
         </button>
       </header>
 
-      <div class="editor-content">
+      <div class="editor-content odoo-sheet-body">
         @if (error()) { <p class="feedback feedback-error" role="alert">{{ error() }}</p> }
 
-        @if (!editingId() && quoteService.templates().length > 0) {
-          <label class="field-label">
-            Partir d’un modèle partagé
-            <select [value]="selectedTemplateId()" (change)="applyTemplate($any($event.target).value)">
-              <option value="">Structure vierge</option>
-              @for (template of quoteService.templates(); track template.id) {
-                <option [value]="template.id">{{ template.name }}</option>
+        <!-- BARRE DE GESTION RAPIDE ODOO (Statut, Attribution, Devise, Modèle) -->
+        <div class="odoo-control-strip">
+          <div class="strip-field">
+            <label for="quote-meta-title">Objet de la demande / Subject</label>
+            <input
+              id="quote-meta-title"
+              type="text"
+              [value]="title()"
+              (input)="title.set($any($event.target).value)"
+              placeholder="Ex. Fret maritime Conteneur 40' Douala - Le Havre" />
+          </div>
+          <div class="strip-field strip-field-narrow">
+            <label for="quote-meta-currency">Devise / Currency</label>
+            <input
+              id="quote-meta-currency"
+              type="text"
+              [value]="currency()"
+              (input)="currency.set($any($event.target).value)"
+              maxlength="3"
+              placeholder="XAF" />
+          </div>
+          <div class="strip-field">
+            <label for="quote-meta-status">Statut / Status</label>
+            <select
+              id="quote-meta-status"
+              [value]="status()"
+              (change)="status.set($any($event.target).value)">
+              @for (quoteStatus of statuses; track quoteStatus) {
+                <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
               }
             </select>
-          </label>
-        }
-
-        <div class="form-grid">
-          <label class="field-label">
-            Objet de la cotation
-            <input type="text" [value]="title()" (input)="title.set($any($event.target).value)" maxlength="160" placeholder="Ex. Fourniture de matériel" />
-          </label>
-          <label class="field-label">
-            Devise
-            <input type="text" [value]="currency()" (input)="currency.set($any($event.target).value)" maxlength="3" placeholder="XAF" />
-          </label>
-
-          <label class="field-label client-field">
-            Client / prospect
-            @if (opportunityId()) {
-              <span class="field-help">Cette cotation restera reliée à l’opportunité commerciale.</span>
-            }
-            <div class="client-picker">
-              <input type="search" [value]="clientSearch()" (input)="clientSearch.set($any($event.target).value)" placeholder="Rechercher un client…" />
-              <select [value]="prospectId()" [disabled]="!!opportunityId()" (change)="prospectId.set($any($event.target).value)">
-                <option value="">Sélectionner un client</option>
-                @for (prospect of filteredProspects(); track prospect.id) {
-                  <option [value]="prospect.id">{{ prospect.companyName || prospect.name }}</option>
+          </div>
+          @if (canAssign()) {
+            <div class="strip-field">
+              <label for="quote-meta-assignee">Commercial assigné / Sales rep</label>
+              <select
+                id="quote-meta-assignee"
+                [value]="assignedTo()"
+                (change)="assignedTo.set($any($event.target).value)">
+                <option value="">Sélectionner un commercial</option>
+                @for (assignee of quoteService.assignees(); track assignee.id) {
+                  <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }}</option>
                 }
               </select>
             </div>
-            <button type="button" class="text-action" (click)="toggleNewProspect()">
-              <mat-icon>{{ showNewProspect() ? 'remove' : 'add' }}</mat-icon>
-              {{ showNewProspect() ? 'Annuler' : 'Créer un nouveau client' }}
-            </button>
-          </label>
-
-          @if (canAssign()) {
-            <label class="field-label">
-              Attribuer au commercial
-              <select [value]="assignedTo()" (change)="assignedTo.set($any($event.target).value)">
-                <option value="">Choisir un commercial</option>
-                @for (assignee of quoteService.assignees(); track assignee.id) {
-                  <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }} — {{ assignee.email }}</option>
-                }
-              </select>
-            </label>
-          } @else {
-            <label class="field-label">
-              Statut
-              <select [value]="status()" (change)="status.set($any($event.target).value)">
-                @for (quoteStatus of statuses; track quoteStatus) {
-                  <option [value]="quoteStatus" [disabled]="quoteStatus === 'expired' && status() !== 'expired'">{{ statusLabel(quoteStatus) }}</option>
-                }
-              </select>
-            </label>
           }
-
-          @if (canAssign()) {
-            <label class="field-label">
-              Statut
-              <select [value]="status()" (change)="status.set($any($event.target).value)">
-                @for (quoteStatus of statuses; track quoteStatus) {
-                  <option [value]="quoteStatus" [disabled]="quoteStatus === 'expired' && status() !== 'expired'">{{ statusLabel(quoteStatus) }}</option>
-                }
-              </select>
-            </label>
-          }
-
-          <label class="field-label">
-            Valide jusqu’au <span class="optional-label">(facultatif)</span>
-            <input type="date" [value]="validUntil()" (input)="validUntil.set($any($event.target).value)" />
-          </label>
         </div>
 
-        @if (showNewProspect()) {
-          <div class="prospect-quick-form">
-            <h3>Nouveau client</h3>
-            <div class="form-grid">
-              <label class="field-label">Entreprise *
-                <input type="text" [value]="newProspectCompany()" (input)="newProspectCompany.set($any($event.target).value)" maxlength="200" />
-              </label>
-              <label class="field-label">Personne à contacter
-                <input type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" maxlength="160" />
-              </label>
-              <label class="field-label">E-mail
-                <input type="email" [value]="newProspectEmail()" (input)="newProspectEmail.set($any($event.target).value)" />
-              </label>
-              <label class="field-label">Téléphone
-                <input type="tel" [value]="newProspectPhone()" (input)="newProspectPhone.set($any($event.target).value)" />
-              </label>
+        <!-- SECTION 1: Informations sur le client / Client Information -->
+        <section class="odoo-section" aria-labelledby="section-client-title">
+          <h2 id="section-client-title" class="odoo-section-banner">
+            Informations sur le client / Client Information
+          </h2>
+          <div class="odoo-section-grid">
+            <div class="odoo-field col-span-2">
+              <label for="field-company-name">Nom de la société / Company Name *</label>
+              <div class="client-picker-row">
+                <input
+                  id="field-company-name"
+                  type="text"
+                  [value]="clientSearch()"
+                  (input)="onClientSearchInput($any($event.target).value)"
+                  placeholder="Rechercher ou saisir la raison sociale de l'entreprise…" />
+                <select
+                  [value]="prospectId()"
+                  [disabled]="!!opportunityId()"
+                  (change)="onProspectSelected($any($event.target).value)"
+                  aria-label="Sélectionner un client existant">
+                  <option value="">-- Clients existants --</option>
+                  @for (prospect of filteredProspects(); track prospect.id) {
+                    <option [value]="prospect.id">{{ prospect.companyName || prospect.name }}</option>
+                  }
+                </select>
+                <button type="button" class="secondary-action mini-action" (click)="toggleNewProspect()" title="Créer un nouveau prospect">
+                  <mat-icon>{{ showNewProspect() ? 'close' : 'add' }}</mat-icon>
+                  <span>{{ showNewProspect() ? 'Annuler' : 'Nouveau client' }}</span>
+                </button>
+              </div>
             </div>
-            <button type="button" class="secondary-action" [disabled]="isCreatingProspect()" (click)="createProspect()">
-              {{ isCreatingProspect() ? 'Création…' : 'Enregistrer le client' }}
-            </button>
-          </div>
-        }
 
-        <section class="structure-section" aria-labelledby="structure-title">
-          <div class="section-heading">
-            <div>
-              <p class="quotes-eyebrow">Éditeur de structure</p>
-              <h3 id="structure-title">Colonnes et lignes</h3>
+            @if (showNewProspect()) {
+              <div class="col-span-2 new-prospect-panel">
+                <div class="new-prospect-grid">
+                  <div class="odoo-field">
+                    <label for="new-prop-contact">Contact direct</label>
+                    <input id="new-prop-contact" type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" placeholder="Nom complet" />
+                  </div>
+                  <div class="odoo-field">
+                    <label for="new-prop-email">Email</label>
+                    <input id="new-prop-email" type="email" [value]="newProspectEmail()" (input)="newProspectEmail.set($any($event.target).value)" placeholder="contact@entreprise.com" />
+                  </div>
+                  <div class="odoo-field">
+                    <label for="new-prop-phone">Téléphone</label>
+                    <input id="new-prop-phone" type="tel" [value]="newProspectPhone()" (input)="newProspectPhone.set($any($event.target).value)" placeholder="+237 ..." />
+                  </div>
+                </div>
+                <button type="button" class="primary-action mini-action" [disabled]="isCreatingProspect()" (click)="createProspect()">
+                  <mat-icon>check</mat-icon>
+                  <span>{{ isCreatingProspect() ? 'Création…' : 'Enregistrer et lier ce client' }}</span>
+                </button>
+              </div>
+            }
+
+            <div class="odoo-field">
+              <label for="field-contact-name">Nom du contact / Contact Name :</label>
+              <input
+                id="field-contact-name"
+                type="text"
+                [value]="seaContactName()"
+                (input)="seaContactName.set($any($event.target).value)"
+                placeholder="Ex. M. Asseng Alberic" />
             </div>
-            <button type="button" class="secondary-action" (click)="addRow()"><mat-icon>add</mat-icon>Ajouter une ligne</button>
-          </div>
 
-          <div class="add-column-form">
-            <label class="field-label">Nom de colonne
-              <input type="text" [value]="columnLabelDraft()" (input)="columnLabelDraft.set($any($event.target).value)" placeholder="Ex. Quantité" />
+            <div class="odoo-field">
+              <label for="field-phone">Téléphone / Phone :</label>
+              <input
+                id="field-phone"
+                type="tel"
+                [value]="seaPhone()"
+                (input)="seaPhone.set($any($event.target).value)"
+                placeholder="Ex. +237 620 363 043" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-email">Email / Email :</label>
+              <input
+                id="field-email"
+                type="email"
+                [value]="seaEmail()"
+                (input)="seaEmail.set($any($event.target).value)"
+                placeholder="Ex. client@entreprise.cm" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-address">Adresse / Address :</label>
+              <input
+                id="field-address"
+                type="text"
+                [value]="seaAddress()"
+                (input)="seaAddress.set($any($event.target).value)"
+                placeholder="Ex. Zone Portuaire, Bonabéri, Douala" />
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 2: Détails de l'expédition / Shipment Details -->
+        <section class="odoo-section" aria-labelledby="section-shipment-title">
+          <h2 id="section-shipment-title" class="odoo-section-banner">
+            Détails de l'expédition / Shipment Details
+          </h2>
+          <div class="odoo-section-grid">
+            <div class="odoo-field">
+              <label for="field-goods-type">Type de marchandise / Type of Goods :</label>
+              <input
+                id="field-goods-type"
+                type="text"
+                [value]="seaGoodsType()"
+                (input)="seaGoodsType.set($any($event.target).value)"
+                placeholder="Ex. Équipements industriels, Bois, Cacao…" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-goods-desc">Description / Description :</label>
+              <input
+                id="field-goods-desc"
+                type="text"
+                [value]="seaGoodsDescription()"
+                (input)="seaGoodsDescription.set($any($event.target).value)"
+                placeholder="Précisions sur la nature du fret…" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-gross-weight">Poids brut total (kg) / Total Gross Weight (kg) :</label>
+              <input
+                id="field-gross-weight"
+                type="number"
+                min="0"
+                step="any"
+                [value]="seaGrossWeightKg() ?? ''"
+                (input)="seaGrossWeightKg.set($any($event.target).value === '' ? null : +$any($event.target).value)"
+                placeholder="Ex. 12500" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-total-volume">Volume total (m³) / Total Volume (m³) :</label>
+              <input
+                id="field-total-volume"
+                type="number"
+                min="0"
+                step="any"
+                [value]="seaTotalVolumeM3() ?? ''"
+                (input)="seaTotalVolumeM3.set($any($event.target).value === '' ? null : +$any($event.target).value)"
+                placeholder="Ex. 48.5" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-packages-count">Nombre de colis / Number of Packages :</label>
+              <input
+                id="field-packages-count"
+                type="number"
+                min="1"
+                step="1"
+                [value]="seaPackagesCount() ?? ''"
+                (input)="seaPackagesCount.set($any($event.target).value === '' ? null : +$any($event.target).value)"
+                placeholder="Ex. 24" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-packaging-type">Type d'emballage / Packaging Type :</label>
+              <input
+                id="field-packaging-type"
+                type="text"
+                [value]="seaPackagingType()"
+                (input)="seaPackagingType.set($any($event.target).value)"
+                placeholder="Ex. Palettes, Caisses bois, Fûts, Big bags…" />
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 3: Itinéraire souhaité / Preferred Route -->
+        <section class="odoo-section" aria-labelledby="section-route-title">
+          <h2 id="section-route-title" class="odoo-section-banner">
+            Itinéraire souhaité / Preferred Route
+          </h2>
+          <div class="odoo-section-grid">
+            <div class="odoo-field">
+              <label for="field-pol">Port de chargement / Port of Loading :</label>
+              <input
+                id="field-pol"
+                type="text"
+                [value]="seaPortOfLoading()"
+                (input)="seaPortOfLoading.set($any($event.target).value)"
+                placeholder="Ex. Douala Port (CMDLA), Kribi (CMKRI), Le Havre…" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-pod">Port de déchargement / Port of Discharge :</label>
+              <input
+                id="field-pod"
+                type="text"
+                [value]="seaPortOfDischarge()"
+                (input)="seaPortOfDischarge.set($any($event.target).value)"
+                placeholder="Ex. Anvers (BEANR), Marseille (FRMRS), Shanghai…" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-incoterm">Incoterm (EXW, FOB, CFR, DAP, CIF, etc.) :</label>
+              <input
+                id="field-incoterm"
+                type="text"
+                [value]="seaIncoterm()"
+                (input)="seaIncoterm.set($any($event.target).value)"
+                placeholder="Ex. FOB, CIF, DAP Douala" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-inland">Transport intérieur requis ? / Need inland transport? :</label>
+              <select
+                id="field-inland"
+                [value]="seaNeedInlandTransport() ? 'yes' : 'no'"
+                (change)="seaNeedInlandTransport.set($any($event.target).value === 'yes')">
+                <option value="no">Non / No</option>
+                <option value="yes">Oui / Yes (Post/Pré-acheminement terrestre)</option>
+              </select>
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-etd">Date estimée de départ / Estimated Departure Date :</label>
+              <input
+                id="field-etd"
+                type="date"
+                [value]="seaEstimatedDepartureDate() ?? ''"
+                (input)="seaEstimatedDepartureDate.set($any($event.target).value || null)" />
+            </div>
+
+            <div class="odoo-field">
+              <label for="field-eta">Date estimée d'arrivée / Estimated Arrival Date :</label>
+              <input
+                id="field-eta"
+                type="date"
+                [value]="seaEstimatedArrivalDate() ?? ''"
+                (input)="seaEstimatedArrivalDate.set($any($event.target).value || null)" />
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 4: Type de service souhaité / Type of Service Required -->
+        <section class="odoo-section" aria-labelledby="section-service-title">
+          <h2 id="section-service-title" class="odoo-section-banner">
+            Type de service souhaité / Type of Service Required
+          </h2>
+          <div class="odoo-checkbox-options-grid">
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="serviceFcl()"
+                (change)="serviceFcl.set($any($event.target).checked)" />
+              <span class="box-label"><strong>[ ] FCL</strong> / Full Container Load (Conteneur complet)</span>
             </label>
-            <label class="field-label">Type
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="serviceLcl()"
+                (change)="serviceLcl.set($any($event.target).checked)" />
+              <span class="box-label"><strong>[ ] LCL</strong> / Less than Container Load (Groupage maritime)</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="serviceRoro()"
+                (change)="serviceRoro.set($any($event.target).checked)" />
+              <span class="box-label"><strong>[ ] RO/RO</strong> (Véhicules / Vehicles)</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="serviceBreakBulk()"
+                (change)="serviceBreakBulk.set($any($event.target).checked)" />
+              <span class="box-label"><strong>[ ] Break Bulk</strong> (Conventionnel / Hors gabarit)</span>
+            </label>
+
+            <div class="odoo-other-input-row col-span-2">
+              <span class="box-label"><strong>[ ] Autre / Other :</strong></span>
+              <input
+                type="text"
+                [value]="serviceOther()"
+                (input)="serviceOther.set($any($event.target).value)"
+                placeholder="Préciser le type de service particulier…" />
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 5: Documents disponibles / Available Documents -->
+        <section class="odoo-section" aria-labelledby="section-docs-title">
+          <h2 id="section-docs-title" class="odoo-section-banner">
+            Documents disponibles / Available Documents
+          </h2>
+          <div class="odoo-checkbox-options-grid">
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="docCommercialInvoice()"
+                (change)="docCommercialInvoice.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Facture commerciale / Commercial Invoice</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="docPackingList()"
+                (change)="docPackingList.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Liste de colisage / Packing List</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="docCertificateOfOrigin()"
+                (change)="docCertificateOfOrigin.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Certificat d'origine / Certificate of Origin</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="docMsdsTechnicalSheet()"
+                (change)="docMsdsTechnicalSheet.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Fiche technique / MSDS</span>
+            </label>
+
+            <div class="odoo-other-input-row col-span-2">
+              <span class="box-label"><strong>[ ] Autre / Other :</strong></span>
+              <input
+                type="text"
+                [value]="docOther()"
+                (input)="docOther.set($any($event.target).value)"
+                placeholder="Certificat phytosanitaire, EUR1, etc." />
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 6: Services additionnels requis / Additional Services Needed -->
+        <section class="odoo-section" aria-labelledby="section-addons-title">
+          <h2 id="section-addons-title" class="odoo-section-banner">
+            Services additionnels requis / Additional Services Needed
+          </h2>
+          <div class="odoo-checkbox-options-grid">
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="addonCustomsClearance()"
+                (change)="addonCustomsClearance.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Dédouanement / Customs Clearance</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="addonCargoInsurance()"
+                (change)="addonCargoInsurance.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Assurance transport / Cargo Insurance</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="addonWarehousing()"
+                (change)="addonWarehousing.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Entreposage / Warehousing</span>
+            </label>
+
+            <label class="odoo-checkbox-pill">
+              <input
+                type="checkbox"
+                [checked]="addonPortHandling()"
+                (change)="addonPortHandling.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Manutention portuaire / Port Handling</span>
+            </label>
+
+            <label class="odoo-checkbox-pill col-span-2">
+              <input
+                type="checkbox"
+                [checked]="addonTracking()"
+                (change)="addonTracking.set($any($event.target).checked)" />
+              <span class="box-label">[ ] Suivi & traçabilité / Tracking</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- SECTION 7: Chiffrage & Lignes de cotation (Structure Odoo compacte) -->
+        <section class="odoo-section" aria-labelledby="section-pricing-title">
+          <div class="pricing-header-row">
+            <h2 id="section-pricing-title" class="odoo-section-banner flex-1">
+              Détails du chiffrage / Cost Breakdown & Quotation Lines
+            </h2>
+            <div class="pricing-actions-inline">
+              <button type="button" class="secondary-action mini-action" (click)="addRow()">
+                <mat-icon>add</mat-icon>Ajouter une prestation
+              </button>
+            </div>
+          </div>
+
+          <!-- Configuration des colonnes compacte -->
+          <div class="add-column-form compact-add-column">
+            <label class="field-label-sm">
+              <span>Nouvelle colonne :</span>
+              <input
+                type="text"
+                [value]="columnLabelDraft()"
+                (input)="columnLabelDraft.set($any($event.target).value)"
+                placeholder="Ex. Devise, Frais portuaires…" />
+            </label>
+            <label class="field-label-sm">
+              <span>Type :</span>
               <select [value]="columnTypeDraft()" (change)="columnTypeDraft.set($any($event.target).value)">
                 @for (columnType of columnTypes; track columnType) {
                   <option [value]="columnType">{{ columnTypeLabel(columnType) }}</option>
                 }
               </select>
             </label>
-            <button type="button" class="secondary-action add-column-action" (click)="addColumn()">
+            <button type="button" class="secondary-action mini-action" (click)="addColumn()">
               <mat-icon>add</mat-icon>Ajouter colonne
             </button>
+            @if (totalColumnOptions().length > 1) {
+              <label class="field-label-sm ml-auto">
+                <span>Colonne du total :</span>
+                <select [value]="totalColumnId()" (change)="totalColumnId.set($any($event.target).value)">
+                  @for (col of totalColumnOptions(); track col.id) {
+                    <option [value]="col.id">{{ col.label }}</option>
+                  }
+                </select>
+              </label>
+            }
           </div>
 
-          @if (totalColumnOptions().length > 0) {
-            <label class="field-label total-column-picker">
-              Colonne utilisée pour calculer le total
-              <select [value]="totalColumnId()" (change)="totalColumnId.set($any($event.target).value)">
-                @for (column of totalColumnOptions(); track column.id) {
-                  <option [value]="column.id">{{ column.label }}</option>
-                }
-              </select>
-            </label>
-          }
-
-          <div class="table-scroll editor-table-scroll">
-            <table class="editor-table">
+          <!-- Grille de chiffrage épurée Odoo -->
+          <div class="table-scroll editor-table-scroll odoo-table-wrapper">
+            <table class="editor-table odoo-table">
               <thead>
                 <tr>
                   @for (column of columns(); track column.id) {
                     <th>
                       <div class="column-heading">
                         <span>{{ column.label }}<small>{{ columnTypeLabel(column.type) }}</small></span>
-                        <button type="button" class="icon-action danger-action" [attr.aria-label]="'Supprimer la colonne ' + column.label" (click)="removeColumn(column.id)">
-                          <mat-icon>close</mat-icon>
-                        </button>
+                        @if (columns().length > 1) {
+                          <button type="button" class="icon-action danger-action mini-btn" [attr.aria-label]="'Supprimer la colonne ' + column.label" (click)="removeColumn(column.id)">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        }
                       </div>
                     </th>
                   }
@@ -390,54 +752,87 @@
                         @if (column.type === 'checkbox') {
                           <input type="checkbox" [checked]="cellValue(row, column) === true" [attr.aria-label]="column.label" (change)="updateCell(rowIndex, column, $event)" />
                         } @else {
-                          <input [type]="column.type === 'number' || column.type === 'amount' ? 'number' : column.type === 'date' ? 'date' : 'text'"
+                          <input
+                            [type]="column.type === 'number' || column.type === 'amount' ? 'number' : column.type === 'date' ? 'date' : 'text'"
                             [step]="column.type === 'number' || column.type === 'amount' ? 'any' : null"
                             [min]="column.type === 'amount' ? 0 : null"
                             [value]="cellValue(row, column)"
+                            [placeholder]="column.type === 'amount' ? '0' : 'Saisir…'"
                             [attr.aria-label]="column.label"
                             (input)="updateCell(rowIndex, column, $event)" />
                         }
                       </td>
                     }
                     <td class="row-actions">
-                      <button type="button" class="icon-action danger-action" aria-label="Supprimer la ligne" (click)="removeRow(rowIndex)">
+                      <button type="button" class="icon-action danger-action mini-btn" aria-label="Supprimer la ligne" (click)="removeRow(rowIndex)">
                         <mat-icon>delete_outline</mat-icon>
                       </button>
                     </td>
                   </tr>
                 } @empty {
-                  <tr><td [attr.colspan]="columns().length + 1" class="empty-row">Ajoutez une ligne pour commencer.</td></tr>
+                  <tr><td [attr.colspan]="columns().length + 1" class="empty-row">Aucune prestation chiffrée. Cliquez sur « Ajouter une prestation » ci-dessus.</td></tr>
                 }
               </tbody>
               <tfoot>
-                <tr><th [attr.colspan]="columns().length || 1">Total calculé</th><td class="amount-cell">{{ formatAmount(draftTotal(), currency()) }}</td></tr>
+                <tr>
+                  <th [attr.colspan]="columns().length || 1">TOTAL GÉNÉRAL CALCULÉ :</th>
+                  <td class="amount-cell">{{ formatAmount(draftTotal(), currency()) }}</td>
+                </tr>
               </tfoot>
             </table>
           </div>
 
-          @if (canSaveTemplate() && !editingId()) {
-            <div class="template-save-option">
-              <label class="checkbox-label">
-                <input type="checkbox" [checked]="saveTemplate()" (change)="saveTemplate.set($any($event.target).checked)" />
-                Enregistrer cette structure comme modèle partagé
-              </label>
-              @if (saveTemplate()) {
-                <label class="field-label">Nom du modèle
-                  <input type="text" [value]="templateName()" (input)="templateName.set($any($event.target).value)" maxlength="100" placeholder="Ex. Offre de transport" />
-                </label>
-              }
+          <!-- Modèle partagé & Date de validité -->
+          <div class="odoo-section-grid mt-3">
+            <div class="odoo-field">
+              <label for="field-validity">Date de validité de l'offre / Valid Until :</label>
+              <input
+                id="field-validity"
+                type="date"
+                [value]="validUntil()"
+                (input)="validUntil.set($any($event.target).value)" />
             </div>
-          }
+
+            @if (canSaveTemplate() && !editingId()) {
+              <div class="odoo-field">
+                <label class="checkbox-label-odoo">
+                  <input type="checkbox" [checked]="saveTemplate()" (change)="saveTemplate.set($any($event.target).checked)" />
+                  <span>Enregistrer la structure comme modèle partagé Transimex</span>
+                </label>
+                @if (saveTemplate()) {
+                  <input
+                    type="text"
+                    [value]="templateName()"
+                    (input)="templateName.set($any($event.target).value)"
+                    placeholder="Nom du modèle (Ex. Fret FCL Export Asie)"
+                    class="mt-1" />
+                }
+              </div>
+            }
+          </div>
         </section>
+
+        <!-- PIED DE FICHE OFFICIEL TRANSIMEX -->
+        <footer class="transimex-official-footer-note">
+          <p><strong>Merci de retourner cette fiche complétée à :</strong></p>
+          <p>Email : <a href="mailto:info@transimex-cm.com">info@transimex-cm.com</a> | Téléphone : <strong>+237 620 363 043</strong></p>
+          <p>Site web : <a href="http://www.transimex-cm.com" target="_blank" rel="noopener noreferrer">http://www.transimex-cm.com</a></p>
+        </footer>
       </div>
 
-      <footer class="editor-footer">
-        <span class="footer-total">Total : <strong>{{ formatAmount(draftTotal(), currency()) }}</strong></span>
+      <!-- FOOTER D'ACTIONS FLOTTANT / MODAL ODOO -->
+      <footer class="editor-footer odoo-footer-actions">
+        <div class="footer-summary-badge">
+          <span>Montant total de la cotation :</span>
+          <strong class="total-display">{{ formatAmount(draftTotal(), currency()) }}</strong>
+        </div>
         <div class="modal-actions">
-          <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">Annuler</button>
-          <button type="button" class="primary-action" [disabled]="isSaving() || isCreatingProspect()" (click)="saveQuote()">
-            <mat-icon>{{ isSaving() ? 'hourglass_top' : 'save' }}</mat-icon>
-            {{ isSaving() ? 'Enregistrement…' : 'Enregistrer la cotation' }}
+          <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">
+            Annuler
+          </button>
+          <button type="button" class="primary-action odoo-btn-save" [disabled]="isSaving() || isCreatingProspect()" (click)="saveQuote()">
+            <mat-icon>{{ isSaving() ? 'hourglass_top' : 'check_circle' }}</mat-icon>
+            <span>{{ isSaving() ? 'Enregistrement en cours…' : (editingId() ? 'Mettre à jour la cotation' : 'Valider & Enregistrer la cotation') }}</span>
           </button>
         </div>
       </footer>

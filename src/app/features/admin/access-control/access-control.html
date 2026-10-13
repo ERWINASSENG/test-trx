@@ -110,7 +110,11 @@
                 <details class="module-accordion" [attr.open]="moduleGroup.moduleId === 'dashboard' ? true : null">
                   <summary class="module-accordion-header">
                     <div class="module-header-info">
-                      <mat-icon class="module-icon">{{ moduleGroup.moduleIcon }}</mat-icon>
+                      @if (moduleGroup.moduleIcon.endsWith('.svg')) {
+                        <img class="module-icon-img" [src]="moduleGroup.moduleIcon" alt="" aria-hidden="true" />
+                      } @else {
+                        <mat-icon class="module-icon">{{ moduleGroup.moduleIcon }}</mat-icon>
+                      }
                       <div class="module-title-wrap">
                         <span class="module-name">{{ moduleGroup.moduleLabel }}</span>
                         <span class="module-desc">{{ moduleGroup.moduleDescription }}</span>

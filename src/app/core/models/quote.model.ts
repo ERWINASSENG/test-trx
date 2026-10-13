@@ -13,6 +13,57 @@ export interface QuoteColumn {
 export type QuoteCellValue = string | number | boolean | null;
 export type QuoteRow = Record<string, QuoteCellValue>;
 
+export interface SeaFreightDetails {
+  // Informations client complémentaires
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+
+  // Détails expédition
+  goodsType?: string;
+  goodsDescription?: string;
+  grossWeightKg?: number | null;
+  totalVolumeM3?: number | null;
+  packagesCount?: number | null;
+  packagingType?: string;
+
+  // Itinéraire souhaité
+  portOfLoading?: string;
+  portOfDischarge?: string;
+  incoterm?: string;
+  estimatedDepartureDate?: string | null;
+  estimatedArrivalDate?: string | null;
+  needInlandTransport?: boolean;
+
+  // Type de service souhaité
+  serviceTypes?: {
+    fcl?: boolean;
+    lcl?: boolean;
+    roro?: boolean;
+    breakBulk?: boolean;
+    other?: string;
+  };
+
+  // Documents disponibles
+  availableDocuments?: {
+    commercialInvoice?: boolean;
+    packingList?: boolean;
+    certificateOfOrigin?: boolean;
+    msdsTechnicalSheet?: boolean;
+    other?: string;
+  };
+
+  // Services additionnels requis
+  additionalServices?: {
+    customsClearance?: boolean;
+    cargoInsurance?: boolean;
+    warehousing?: boolean;
+    portHandling?: boolean;
+    tracking?: boolean;
+  };
+}
+
 export interface SalesQuote {
   id: string;
   quoteNumber: string;
@@ -30,6 +81,7 @@ export interface SalesQuote {
   totalAmount: number;
   status: QuoteStatus;
   validUntil: string | null;
+  seaFreight?: SeaFreightDetails;
   createdAt: string;
   updatedAt: string;
 }

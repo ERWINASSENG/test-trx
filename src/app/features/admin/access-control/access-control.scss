@@ -444,6 +444,13 @@ button:disabled {
   color: var(--access-blue);
 }
 
+.module-icon-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .module-title-wrap {
   display: flex;
   flex-direction: column;

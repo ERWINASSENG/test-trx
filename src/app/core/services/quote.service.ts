@@ -21,6 +21,7 @@ export interface QuoteInput {
   totalColumnId: string;
   status: QuoteStatus;
   validUntil: string | null;
+  seaFreight?: import('../models/quote.model').SeaFreightDetails;
 }
 
 export interface QuoteApiResult<T> {
@@ -298,6 +299,11 @@ export class QuoteService {
       status: String(row['status'] ?? 'draft') as QuoteStatus,
       validUntil: typeof row['validUntil'] === 'string' ? row['validUntil']
         : typeof row['valid_until'] === 'string' ? row['valid_until'] : null,
+      seaFreight: row['seaFreight'] && typeof row['seaFreight'] === 'object'
+        ? row['seaFreight'] as import('../models/quote.model').SeaFreightDetails
+        : row['sea_freight'] && typeof row['sea_freight'] === 'object'
+          ? row['sea_freight'] as import('../models/quote.model').SeaFreightDetails
+          : undefined,
       createdAt: String(row['createdAt'] ?? row['created_at'] ?? ''),
       updatedAt: String(row['updatedAt'] ?? row['updated_at'] ?? ''),
     };
