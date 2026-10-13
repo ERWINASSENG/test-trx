@@ -112,7 +112,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.isEditorOpen()).toBe(false);
   });
 
-  it('devrait ouvrir la fiche de cotation maritime avec les sections et valeurs par défaut conformes au document Transimex', () => {
+  it('devrait ouvrir une fiche vierge avec toutes les cases décochées par défaut', () => {
     component.openCreate();
     fixture.detectChanges();
 
@@ -122,12 +122,21 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.currency()).toBe('XAF');
     expect(component.seaPortOfLoading()).toBe('Douala Port (CMDLA)');
     expect(component.seaIncoterm()).toBe('FOB');
-    expect(component.serviceFcl()).toBe(true);
+    expect(component.seaNeedInlandTransport()).toBe(false);
+    expect(component.serviceFcl()).toBe(false);
     expect(component.serviceLcl()).toBe(false);
-    expect(component.docCommercialInvoice()).toBe(true);
-    expect(component.docPackingList()).toBe(true);
-    expect(component.addonPortHandling()).toBe(true);
-    expect(component.addonTracking()).toBe(true);
+    expect(component.serviceRoro()).toBe(false);
+    expect(component.serviceBreakBulk()).toBe(false);
+    expect(component.docCommercialInvoice()).toBe(false);
+    expect(component.docPackingList()).toBe(false);
+    expect(component.docCertificateOfOrigin()).toBe(false);
+    expect(component.docMsdsTechnicalSheet()).toBe(false);
+    expect(component.addonCustomsClearance()).toBe(false);
+    expect(component.addonCargoInsurance()).toBe(false);
+    expect(component.addonWarehousing()).toBe(false);
+    expect(component.addonPortHandling()).toBe(false);
+    expect(component.addonTracking()).toBe(false);
+    expect(component.saveTemplate()).toBe(false);
     expect(component.columns().length).toBeGreaterThanOrEqual(3);
   });
 

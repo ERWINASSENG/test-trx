@@ -3,22 +3,80 @@
   width: 100%;
   --quote-accent: var(--brand-accent, #0b5ed7);
   --quote-accent-dark: var(--brand-accent-hover, #084db1);
+  --quote-action: var(--brand-action, #0b5ed7);
+  --quote-action-hover: var(--brand-action-hover, #084db1);
+  --quote-focus: var(--brand-focus, #0b5ed7);
   --quote-bg: var(--app-bg, #f4f6f9);
   --quote-surface: var(--app-surface, #ffffff);
   --quote-surface-muted: var(--app-surface-muted, #eef2f7);
   --quote-surface-hover: var(--app-surface-hover, #f8fafd);
   --quote-border: var(--app-border, #d2dbe5);
+  --quote-separator: var(--app-border-subtle, var(--app-border, #e2e8f0));
   --quote-text: var(--app-text, #172b4d);
   --quote-muted: var(--app-text-muted, #495d78);
   --quote-subtle: var(--app-text-subtle, #7a8fa8);
+  --quote-danger: var(--brand-red, #dc2626);
+  --quote-success: var(--odoo-status-green, #15803d);
+  --quote-brand-red: var(--brand-red, #dc2626);
+  --quote-info-bg: #e0f2fe;
+  --quote-info-text: #0b5ed7;
+  --quote-success-bg: #f0fdf4;
+  --quote-success-border: #bbf7d0;
+  --quote-success-text: #166534;
+  --quote-error-bg: #fef2f2;
+  --quote-error-border: #fecaca;
+  --quote-error-text: #991b1b;
+  --quote-draft-bg: #e2e8f0;
+  --quote-draft-text: #475569;
+  --quote-sent-bg: #dbeafe;
+  --quote-sent-text: #1d4ed8;
+  --quote-accepted-bg: #dcfce7;
+  --quote-accepted-text: #15803d;
+  --quote-rejected-bg: #fee2e2;
+  --quote-rejected-text: #b91c1c;
+  --quote-expired-bg: #fef3c7;
+  --quote-expired-text: #b45309;
+  --quote-backdrop: rgba(15, 23, 42, .6);
+  --quote-shadow: 0 20px 45px rgba(15, 23, 42, .25);
+  --quote-control-shadow: 0 1px 3px rgba(18, 60, 109, .14);
+  --quote-success-action: #166534;
+  --quote-success-action-hover: #14532d;
+  --quote-success-action-border: #15803d;
 
-  /* Thème Odoo spécifique */
-  --odoo-banner-bg: #e2e8f0;
-  --odoo-banner-text: #1e293b;
-  --odoo-header-primary: #1e3a8a;
-  --odoo-header-red: #dc2626;
-  --odoo-sheet-bg: #ffffff;
-  --odoo-border: #cbd5e1;
+  --odoo-banner-bg: var(--quote-surface-muted);
+  --odoo-banner-text: var(--quote-text);
+  --odoo-header-primary: var(--quote-accent);
+  --odoo-header-red: var(--quote-brand-red);
+  --odoo-sheet-bg: var(--quote-surface);
+  --odoo-border: var(--quote-border);
+}
+
+:host-context(html.dark),
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  --quote-info-bg: rgba(56, 189, 248, .12);
+  --quote-info-text: #bae6fd;
+  --quote-success-bg: rgba(34, 197, 94, .12);
+  --quote-success-border: rgba(34, 197, 94, .32);
+  --quote-success-text: #bbf7d0;
+  --quote-error-bg: rgba(248, 113, 113, .12);
+  --quote-error-border: rgba(248, 113, 113, .32);
+  --quote-error-text: #fecaca;
+  --quote-draft-bg: var(--quote-surface-hover);
+  --quote-draft-text: var(--quote-text);
+  --quote-danger: #ff8b82;
+  --quote-brand-red: #ff8b82;
+  --quote-sent-bg: rgba(59, 130, 246, .18);
+  --quote-sent-text: #bfdbfe;
+  --quote-accepted-bg: rgba(34, 197, 94, .16);
+  --quote-accepted-text: #bbf7d0;
+  --quote-rejected-bg: rgba(248, 113, 113, .16);
+  --quote-rejected-text: #fecaca;
+  --quote-expired-bg: rgba(245, 158, 11, .16);
+  --quote-expired-text: #fde68a;
+  --quote-backdrop: rgba(3, 10, 20, .76);
+  --quote-shadow: 0 20px 45px rgba(0, 0, 0, .48);
+  --quote-control-shadow: 0 1px 3px rgba(0, 0, 0, .3);
 }
 
 .quotes-page {
@@ -67,10 +125,10 @@ h1, h2, h3, p { margin-top: 0; }
 
 .primary-action {
   color: #fff;
-  background: var(--quote-accent);
+  background: var(--quote-action);
 }
 .primary-action:hover {
-  background: var(--quote-accent-dark);
+  background: var(--quote-action-hover);
 }
 
 .secondary-action {
@@ -79,8 +137,8 @@ h1, h2, h3, p { margin-top: 0; }
   background: var(--quote-surface);
 }
 .secondary-action:hover {
-  border-color: #94a3b8;
-  background: #f1f5f9;
+  border-color: var(--quote-border);
+  background: var(--quote-surface-hover);
 }
 
 .mini-action {
@@ -118,10 +176,11 @@ textarea {
   min-width: 0;
   min-height: 34px;
   padding: 6px 9px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--quote-border);
   border-radius: 4px;
-  color: #1e293b;
-  background: #fff;
+  color: var(--quote-text);
+  background: var(--quote-surface);
+  color-scheme: inherit;
   font: inherit;
   font-size: 12px;
   outline: none;
@@ -131,23 +190,43 @@ textarea {
 select:focus,
 input:focus,
 textarea:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
+  border-color: var(--quote-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--quote-focus) 22%, transparent);
+}
+
+:host-context(html.dark) .quote-editor input:not([type="checkbox"]):not([type="radio"]),
+:host-context(.dark) .quote-editor input:not([type="checkbox"]):not([type="radio"]),
+:host-context([data-theme="dark"]) .quote-editor input:not([type="checkbox"]):not([type="radio"]),
+:host-context(html.dark) .quote-editor select,
+:host-context(.dark) .quote-editor select,
+:host-context([data-theme="dark"]) .quote-editor select,
+:host-context(html.dark) .quote-editor textarea,
+:host-context(.dark) .quote-editor textarea,
+:host-context([data-theme="dark"]) .quote-editor textarea {
+  border-color: var(--quote-border) !important;
+  color: var(--quote-text) !important;
+  background-color: var(--quote-surface) !important;
+}
+
+.quote-editor input::placeholder,
+.quote-editor textarea::placeholder {
+  color: var(--quote-subtle);
+  opacity: 1;
 }
 
 .feedback {
   margin: 12px 18px;
   padding: 10px 14px;
-  border: 1px solid #bbf7d0;
+  border: 1px solid var(--quote-success-border);
   border-radius: 6px;
-  color: #166534;
-  background: #f0fdf4;
+  color: var(--quote-success-text);
+  background: var(--quote-success-bg);
   font-size: 12px;
 }
 .feedback-error {
-  color: #991b1b;
-  border-color: #fecaca;
-  background: #fef2f2;
+  color: var(--quote-error-text);
+  border-color: var(--quote-error-border);
+  background: var(--quote-error-bg);
 }
 
 .loading-state,
@@ -171,8 +250,8 @@ textarea:focus {
   height: 48px;
   place-items: center;
   border-radius: 10px;
-  color: var(--quote-accent);
-  background: #e0f2fe;
+  color: var(--quote-info-text);
+  background: var(--quote-info-bg);
 }
 .empty-icon mat-icon { width: 26px; height: 26px; font-size: 26px; }
 
@@ -193,8 +272,8 @@ textarea:focus {
 .quotes-table th {
   padding: 9px 12px;
   border-bottom: 1px solid var(--quote-border);
-  color: #475569;
-  background: #f8fafc;
+  color: var(--quote-muted);
+  background: var(--quote-surface-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .3px;
@@ -203,21 +282,21 @@ textarea:focus {
 }
 .quotes-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--quote-separator);
   white-space: nowrap;
 }
 .quotes-table tbody tr:last-child td { border-bottom: 0; }
-.quotes-table tbody tr:hover { background: #f8fafc; }
+.quotes-table tbody tr:hover { background: var(--quote-surface-hover); }
 .reference-cell { color: var(--quote-accent); font-weight: 700; }
 .amount-cell {
-  color: #0f172a;
+  color: var(--quote-text);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .route-hint {
   display: block;
-  color: #64748b;
+  color: var(--quote-subtle);
   font-size: 11px;
   font-weight: 400;
 }
@@ -228,11 +307,11 @@ textarea:focus {
   font-size: 10px;
   font-weight: 700;
 }
-.status-draft { color: #475569; background: #e2e8f0; }
-.status-sent { color: #1d4ed8; background: #dbeafe; }
-.status-accepted { color: #15803d; background: #dcfce7; }
-.status-rejected { color: #b91c1c; background: #fee2e2; }
-.status-expired { color: #b45309; background: #fef3c7; }
+.status-draft { color: var(--quote-draft-text); background: var(--quote-draft-bg); }
+.status-sent { color: var(--quote-sent-text); background: var(--quote-sent-bg); }
+.status-accepted { color: var(--quote-accepted-text); background: var(--quote-accepted-bg); }
+.status-rejected { color: var(--quote-rejected-text); background: var(--quote-rejected-bg); }
+.status-expired { color: var(--quote-expired-text); background: var(--quote-expired-bg); }
 
 .row-actions {
   display: flex;
@@ -247,17 +326,17 @@ textarea:focus {
   place-items: center;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #64748b;
+  color: var(--quote-muted);
   background: transparent;
   cursor: pointer;
 }
 .icon-action:hover {
   border-color: var(--quote-border);
   color: var(--quote-accent);
-  background: #f1f5f9;
+  background: var(--quote-surface-hover);
 }
 .icon-action mat-icon { width: 16px; height: 16px; font-size: 16px; }
-.danger-action:hover { color: #dc2626; background: #fef2f2; }
+.danger-action:hover { color: var(--quote-danger); background: var(--quote-error-bg); }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -276,7 +355,7 @@ textarea:focus {
 .quotes-kanban-column {
   border: 1px solid var(--quote-border);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--quote-surface-muted);
   padding: 10px;
 }
 .quotes-kanban-column header {
@@ -288,15 +367,15 @@ textarea:focus {
 .quotes-kanban-column header h2 { font-size: 12px; font-weight: 700; margin: 0; }
 .quotes-kanban-column header span {
   font-size: 11px;
-  color: #64748b;
-  background: #e2e8f0;
+  color: var(--quote-muted);
+  background: var(--quote-surface-hover);
   padding: 1px 6px;
   border-radius: 10px;
 }
 .quote-kanban-card {
   padding: 10px;
   margin-bottom: 8px;
-  background: #fff;
+  background: var(--quote-surface);
   border: 1px solid var(--quote-border);
   border-radius: 5px;
   display: flex;
@@ -320,11 +399,11 @@ textarea:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--quote-separator);
   padding-top: 6px;
   margin-top: 4px;
   font-size: 10px;
-  color: #64748b;
+  color: var(--quote-muted);
 }
 
 /* Templates list */
@@ -340,7 +419,7 @@ textarea:focus {
   padding: 10px;
   border: 1px solid var(--quote-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--quote-surface);
 }
 .template-icon { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 6px; }
 .template-info {
@@ -363,7 +442,7 @@ textarea:focus {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(15, 23, 42, .6);
+  background: var(--quote-backdrop);
   backdrop-filter: blur(2px);
 }
 
@@ -373,10 +452,11 @@ textarea:focus {
   max-height: min(94vh, 960px);
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--quote-border);
   border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, .25);
+  color: var(--quote-text);
+  background: var(--odoo-sheet-bg);
+  box-shadow: var(--quote-shadow);
 }
 
 /* En-tête style document officiel Transimex */
@@ -385,8 +465,8 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 2px solid #0f2c59;
-  background: #f8fafc;
+  border-bottom: 2px solid var(--quote-accent);
+  background: var(--quote-surface-muted);
 }
 
 .transimex-brand-row {
@@ -402,7 +482,7 @@ textarea:focus {
 }
 
 .transimex-logo-title {
-  color: #1e3a8a;
+  color: var(--odoo-header-primary);
   font-family: sans-serif;
   font-size: 20px;
   font-weight: 900;
@@ -410,7 +490,7 @@ textarea:focus {
 }
 
 .transimex-logo-subtitle {
-  color: #dc2626;
+  color: var(--odoo-header-red);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .3px;
@@ -424,14 +504,14 @@ textarea:focus {
 
 .odoo-doc-title {
   margin: 0;
-  color: #0f172a;
+  color: var(--quote-text);
   font-size: 15px;
   font-weight: 800;
   letter-spacing: .3px;
 }
 
 .odoo-doc-subtitle {
-  color: #475569;
+  color: var(--quote-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .4px;
@@ -440,7 +520,7 @@ textarea:focus {
 .odoo-sheet-body {
   overflow-y: auto;
   padding: 16px 20px 24px;
-  background: #ffffff;
+  background: var(--odoo-sheet-bg);
 }
 
 /* Barre de gestion rapide Odoo */
@@ -450,8 +530,8 @@ textarea:focus {
   gap: 12px;
   padding: 10px 14px;
   margin-bottom: 16px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--quote-surface-muted);
+  border: 1px solid var(--quote-border);
   border-radius: 6px;
 }
 
@@ -461,7 +541,7 @@ textarea:focus {
   gap: 4px;
 }
 .strip-field label {
-  color: #475569;
+  color: var(--quote-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -497,7 +577,7 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 16px;
   padding: 12px 14px;
-  background: #ffffff;
+  background: var(--odoo-sheet-bg);
 }
 
 .col-span-2 {
@@ -510,7 +590,7 @@ textarea:focus {
   gap: 4px;
 }
 .odoo-field label {
-  color: #334155;
+  color: var(--quote-text);
   font-size: 11px;
   font-weight: 650;
 }
@@ -531,8 +611,8 @@ textarea:focus {
 
 .new-prospect-panel {
   padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px dashed #94a3b8;
+  background: var(--quote-surface-muted);
+  border: 1px dashed var(--quote-border);
   border-radius: 4px;
   display: flex;
   flex-direction: column;
@@ -551,7 +631,7 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
   padding: 12px 14px;
-  background: #ffffff;
+  background: var(--odoo-sheet-bg);
 }
 
 .odoo-checkbox-pill {
@@ -559,15 +639,15 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--quote-border);
   border-radius: 4px;
-  background: #f8fafc;
+  background: var(--quote-surface-muted);
   cursor: pointer;
   transition: all .15s ease;
 }
 .odoo-checkbox-pill:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--quote-surface-hover);
+  border-color: var(--quote-border);
 }
 .odoo-checkbox-pill input[type="checkbox"] {
   accent-color: var(--quote-accent);
@@ -577,7 +657,7 @@ textarea:focus {
   cursor: pointer;
 }
 .odoo-checkbox-pill .box-label {
-  color: #1e293b;
+  color: var(--quote-text);
   font-size: 11px;
   user-select: none;
 }
@@ -587,9 +667,9 @@ textarea:focus {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--quote-border);
   border-radius: 4px;
-  background: #f8fafc;
+  background: var(--quote-surface-muted);
 }
 .odoo-other-input-row .box-label {
   font-size: 11px;
@@ -620,15 +700,15 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 14px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--quote-surface-muted);
+  border-bottom: 1px solid var(--quote-border);
 }
 .field-label-sm {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #475569;
+  color: var(--quote-muted);
 }
 .field-label-sm input,
 .field-label-sm select {
@@ -650,34 +730,34 @@ textarea:focus {
   border-collapse: collapse;
 }
 .odoo-table th {
-  background: #f1f5f9;
-  border-bottom: 2px solid #cbd5e1;
+  background: var(--quote-surface-muted);
+  border-bottom: 2px solid var(--quote-border);
   padding: 7px 10px;
   font-size: 11px;
-  color: #334155;
+  color: var(--quote-text);
 }
 .odoo-table td {
   padding: 5px 8px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--quote-separator);
 }
 .odoo-table td input:not([type="checkbox"]) {
   min-height: 28px;
   padding: 4px 6px;
   font-size: 12px;
-  border-color: #cbd5e1;
+  border-color: var(--quote-border);
 }
 .odoo-table tfoot th {
   padding: 8px 12px;
   text-align: right;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--quote-surface-muted);
+  color: var(--quote-text);
   font-weight: 750;
   font-size: 11px;
 }
 .odoo-table tfoot td {
   padding: 8px 12px;
-  background: #f8fafc;
-  color: #1e3a8a;
+  background: var(--quote-surface-muted);
+  color: var(--quote-accent);
   font-size: 13px;
   font-weight: 800;
   text-align: right;
@@ -689,7 +769,7 @@ textarea:focus {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #334155;
+  color: var(--quote-text);
   cursor: pointer;
 }
 .checkbox-label-odoo input {
@@ -702,17 +782,17 @@ textarea:focus {
 .transimex-official-footer-note {
   margin-top: 18px;
   padding: 12px 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #1e3a8a;
+  background: var(--quote-surface-muted);
+  border: 1px solid var(--quote-border);
+  border-left: 4px solid var(--quote-accent);
   border-radius: 4px;
   font-size: 11px;
-  color: #334155;
+  color: var(--quote-muted);
   line-height: 1.5;
 }
 .transimex-official-footer-note p { margin: 2px 0; }
 .transimex-official-footer-note a {
-  color: #1e3a8a;
+  color: var(--quote-accent);
   text-decoration: underline;
 }
 
@@ -722,8 +802,8 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-top: 1px solid #cbd5e1;
-  background: #f8fafc;
+  border-top: 1px solid var(--quote-border);
+  background: var(--quote-surface-muted);
 }
 
 .footer-summary-badge {
@@ -731,21 +811,21 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #475569;
+  color: var(--quote-muted);
 }
 .total-display {
   font-size: 16px;
-  color: #1e3a8a;
+  color: var(--quote-accent);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .odoo-btn-save {
-  background: #166534;
-  border-color: #15803d;
+  background: var(--quote-success-action);
+  border-color: var(--quote-success-action-border);
 }
 .odoo-btn-save:hover {
-  background: #14532d;
+  background: var(--quote-success-action-hover);
 }
 
 /* Commandes du panneau de contrôle */
@@ -803,7 +883,7 @@ textarea:focus {
 .quotes-view-switch button.active {
   color: var(--quote-accent);
   background: var(--quote-surface);
-  box-shadow: 0 1px 3px rgba(18, 60, 109, .14);
+  box-shadow: var(--quote-control-shadow);
 }
 .quotes-pagination-label { color: var(--quote-muted); font-size: 11px; font-weight: 500; }
 .quotes-pagination {
@@ -831,14 +911,14 @@ textarea:focus {
   align-items: center;
   gap: 5px;
   padding: 4px 12px;
-  border: 1px solid rgba(255, 255, 255, .15);
+  border: 1px solid var(--quote-border);
   border-radius: 4px;
   color: #fff;
-  background: #1e3a8a;
+  background: var(--quote-action);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
 }
-.cashier-action-primary:hover { background: #172554; }
+.cashier-action-primary:hover { background: var(--quote-action-hover); }
 .cashier-action-primary mat-icon { width: 16px; height: 16px; font-size: 16px; }

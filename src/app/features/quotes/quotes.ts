@@ -328,14 +328,14 @@ export class QuotesComponent {
     this.seaEstimatedDepartureDate.set(null);
     this.seaEstimatedArrivalDate.set(null);
 
-    this.serviceFcl.set(true);
+    this.serviceFcl.set(false);
     this.serviceLcl.set(false);
     this.serviceRoro.set(false);
     this.serviceBreakBulk.set(false);
     this.serviceOther.set('');
 
-    this.docCommercialInvoice.set(true);
-    this.docPackingList.set(true);
+    this.docCommercialInvoice.set(false);
+    this.docPackingList.set(false);
     this.docCertificateOfOrigin.set(false);
     this.docMsdsTechnicalSheet.set(false);
     this.docOther.set('');
@@ -343,8 +343,8 @@ export class QuotesComponent {
     this.addonCustomsClearance.set(false);
     this.addonCargoInsurance.set(false);
     this.addonWarehousing.set(false);
-    this.addonPortHandling.set(true);
-    this.addonTracking.set(true);
+    this.addonPortHandling.set(false);
+    this.addonTracking.set(false);
 
     // Initialisation des colonnes de chiffrage adaptées au maritime
     const colDesignation: QuoteColumn = { id: generateSecureUUID(), label: 'Désignation de la prestation', type: 'text' };

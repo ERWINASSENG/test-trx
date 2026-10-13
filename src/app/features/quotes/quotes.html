@@ -732,7 +732,7 @@
                   @for (column of columns(); track column.id) {
                     <th>
                       <div class="column-heading">
-                        <span>{{ column.label }}<small>{{ columnTypeLabel(column.type) }}</small></span>
+                        <span>{{ column.label }}</span>
                         @if (columns().length > 1) {
                           <button type="button" class="icon-action danger-action mini-btn" [attr.aria-label]="'Supprimer la colonne ' + column.label" (click)="removeColumn(column.id)">
                             <mat-icon>close</mat-icon>

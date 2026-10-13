@@ -55,3 +55,5 @@ Thumbs.db
 # Graphify artifacts
 /graphify-out/
 .graphify*
+.aidesigner/*
+!.aidesigner/.gitkeep
