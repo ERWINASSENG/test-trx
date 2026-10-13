@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS public.sales_quotes (
   currency varchar(3) NOT NULL DEFAULT 'XAF' CHECK (currency ~ '^[A-Z]{3}$'),
   columns jsonb NOT NULL CHECK (jsonb_typeof(columns) = 'array'),
   rows jsonb NOT NULL CHECK (jsonb_typeof(rows) = 'array'),
+  sea_freight jsonb NOT NULL DEFAULT '{}'::jsonb
+    CHECK (jsonb_typeof(sea_freight) = 'object'),
   total_column_id text NOT NULL,
   total_amount numeric(14, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
   status text NOT NULL DEFAULT 'draft'

@@ -20,6 +20,24 @@ const validPayload = () => ({
   totalColumnId: amountId,
   status: 'draft',
   validUntil: '2026-12-31',
+  seaFreight: {
+    contactName: 'Jean Nono',
+    grossWeightKg: 24000,
+    serviceTypes: { fcl: false, lcl: false, roro: false, breakBulk: false },
+    availableDocuments: {
+      commercialInvoice: false,
+      packingList: false,
+      certificateOfOrigin: false,
+      msdsTechnicalSheet: false,
+    },
+    additionalServices: {
+      customsClearance: false,
+      cargoInsurance: false,
+      warehousing: false,
+      portHandling: false,
+      tracking: false,
+    },
+  },
 });
 
 describe('validateQuotePayload', () => {
@@ -34,8 +52,45 @@ describe('validateQuotePayload', () => {
       totalColumnId: amountId,
       status: 'draft',
       validUntil: '2026-12-31',
+      seaFreight: {
+        contactName: 'Jean Nono',
+        grossWeightKg: 24000,
+        serviceTypes: { fcl: false, lcl: false, roro: false, breakBulk: false },
+        availableDocuments: {
+          commercialInvoice: false,
+          packingList: false,
+          certificateOfOrigin: false,
+          msdsTechnicalSheet: false,
+        },
+        additionalServices: {
+          customsClearance: false,
+          cargoInsurance: false,
+          warehousing: false,
+          portHandling: false,
+          tracking: false,
+        },
+      },
     });
     expect(result.data?.rows).toHaveLength(2);
+  });
+
+  it('exige et valide les détails maritimes, y compris les cases décochées', () => {
+    const missingDetails = validPayload();
+    delete (missingDetails as Partial<typeof missingDetails>).seaFreight;
+    expect(validateQuotePayload(missingDetails).error).toContain('détails maritimes');
+
+    const invalidDetails = validPayload();
+    invalidDetails.seaFreight.grossWeightKg = -1;
+    expect(validateQuotePayload(invalidDetails).error).toContain('nombre positif');
+
+    const unsupportedDetails = validPayload();
+    (unsupportedDetails.seaFreight as Record<string, unknown>).unexpected = true;
+    expect(validateQuotePayload(unsupportedDetails).error).toContain('champ non autorisé');
+
+    const accepted = validateQuotePayload(validPayload());
+    expect(accepted.data?.seaFreight?.serviceTypes?.fcl).toBe(false);
+    expect(accepted.data?.seaFreight?.availableDocuments?.commercialInvoice).toBe(false);
+    expect(accepted.data?.seaFreight?.additionalServices?.tracking).toBe(false);
   });
 
   it('exige une colonne montant pour calculer le total', () => {

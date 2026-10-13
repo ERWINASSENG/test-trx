@@ -38,6 +38,7 @@
 --      à l'assignation.
 --  10. Module Cotations commerciales : sales_quotes, sales_quote_templates et la
 --      séquence sales_quote_number_seq (accès service_role uniquement, comme prospects).
+--      Les détails du formulaire maritime sont conservés dans sales_quotes.sea_freight.
 --  11. CRM commercial : prospect_contacts, sales_opportunities, sales_activities,
 --      sales_campaigns, sales_campaign_prospects, colonnes prospects.country/
 --      contact_role/sector, opportunity_id sur sales_quotes et dossiers, fonction
@@ -436,6 +437,8 @@ CREATE TABLE public.sales_quotes (
   currency varchar(3) NOT NULL DEFAULT 'XAF' CHECK (currency ~ '^[A-Z]{3}$'),
   columns jsonb NOT NULL CHECK (jsonb_typeof(columns) = 'array'),
   rows jsonb NOT NULL CHECK (jsonb_typeof(rows) = 'array'),
+  sea_freight jsonb NOT NULL DEFAULT '{}'::jsonb
+    CHECK (jsonb_typeof(sea_freight) = 'object'),
   total_column_id text NOT NULL,
   total_amount numeric(14, 2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
   status text NOT NULL DEFAULT 'draft'

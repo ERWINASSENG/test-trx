@@ -6,6 +6,7 @@ import {
   QuoteStatus,
   QuoteTemplate,
   SalesQuote,
+  SeaFreightDetails,
 } from '../models/quote.model';
 import { Prospect } from '../models/prospect.model';
 import { AuthService } from './auth.service';
@@ -21,7 +22,7 @@ export interface QuoteInput {
   totalColumnId: string;
   status: QuoteStatus;
   validUntil: string | null;
-  seaFreight?: import('../models/quote.model').SeaFreightDetails;
+  seaFreight: SeaFreightDetails;
 }
 
 export interface QuoteApiResult<T> {

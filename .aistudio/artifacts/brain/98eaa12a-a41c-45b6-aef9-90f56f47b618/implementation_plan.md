@@ -53,7 +53,8 @@ Transformation intégrale du formulaire modal de cotation en une **Fiche de dema
 
 ## 3. Product Decisions & Data Mapping
 - **Compatibilité données existantes** :
-  - Les champs spécifiques maritimes (expédition, ports, Incoterm, services) sont structurés soit dans les détails de la cotation, soit pré-remplis dans les colonnes/lignes de chiffrage et les métadonnées de la cotation sans casser la base de données.
+  - Les champs spécifiques maritimes (coordonnées du contact, expédition, itinéraire, services, documents et options) sont enregistrés dans `sales_quotes.sea_freight` en JSONB. La colonne a une valeur par défaut `{}` pour conserver les cotations créées avant son ajout.
+  - Le tableau de chiffrage reste stocké séparément dans `sales_quotes.columns` et `sales_quotes.rows`; le serveur valide et conserve les deux structures à la création et à la modification.
   - Respect strict des types TypeScript et des composants standalone Angular 19.
 
 ## 4. Plan de modification des fichiers

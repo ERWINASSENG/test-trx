@@ -6,6 +6,7 @@ import {
   QuoteColumnType,
   QuoteRow,
   QuoteStatus,
+  SeaFreightDetails,
 } from '../app/core/models/quote.model';
 import { ProspectStatus } from '../app/core/models/prospect.model';
 import { writeAuditLog } from './audit-log';
@@ -30,6 +31,7 @@ interface QuoteMutation {
   totalColumnId?: string;
   status?: QuoteStatus;
   validUntil?: string | null;
+  seaFreight?: SeaFreightDetails;
 }
 
 interface QuoteActor {
@@ -57,6 +59,173 @@ const isValidDate = (value: string): boolean => {
   if (!DATE_PATTERN.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+const readOptionalText = (
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  maxLength = 5000
+): { value?: string; error?: string } => {
+  const value = record[key];
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'string' || value.length > maxLength) {
+    return { error: `Le champ « ${label} » est invalide.` };
+  }
+  return { value: value.trim() || undefined };
+};
+
+const validateOptionGroup = <T extends string>(
+  value: unknown,
+  label: string,
+  fields: readonly T[],
+  includesOther = false
+): { flags?: Partial<Record<T, boolean>>; other?: string; error?: string } => {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return { error: `Le groupe « ${label} » est invalide.` };
+
+  const allowed = new Set<string>(includesOther ? [...fields, 'other'] : fields);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    return { error: `Le groupe « ${label} » contient un champ non autorisé.` };
+  }
+
+  const flags: Partial<Record<T, boolean>> = {};
+  for (const field of fields) {
+    if (!Object.hasOwn(value, field)) continue;
+    if (typeof value[field] !== 'boolean') {
+      return { error: `La valeur de « ${label} » est invalide.` };
+    }
+    flags[field] = value[field];
+  }
+
+  let other: string | undefined;
+  if (includesOther && Object.hasOwn(value, 'other')) {
+    const parsed = readOptionalText(value, 'other', `${label} - autre`, 1000);
+    if (parsed.error) return { error: parsed.error };
+    other = parsed.value;
+  }
+  return { flags, other };
+};
+
+const validateSeaFreight = (
+  value: unknown
+): { data?: SeaFreightDetails; error?: string } => {
+  if (!isRecord(value)) return { error: 'Les détails maritimes de la cotation sont invalides.' };
+
+  const allowed = new Set([
+    'contactName', 'phone', 'email', 'address', 'goodsType', 'goodsDescription',
+    'grossWeightKg', 'totalVolumeM3', 'packagesCount', 'packagingType',
+    'portOfLoading', 'portOfDischarge', 'incoterm', 'estimatedDepartureDate',
+    'estimatedArrivalDate', 'needInlandTransport', 'serviceTypes',
+    'availableDocuments', 'additionalServices',
+  ]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    return { error: 'Les détails maritimes contiennent un champ non autorisé.' };
+  }
+
+  const details: SeaFreightDetails = {};
+  const textFields = [
+    ['contactName', 'nom du contact'],
+    ['phone', 'téléphone'],
+    ['email', 'e-mail'],
+    ['address', 'adresse'],
+    ['goodsType', 'type de marchandise'],
+    ['goodsDescription', 'description de la marchandise'],
+    ['packagingType', 'type d’emballage'],
+    ['portOfLoading', 'port de chargement'],
+    ['portOfDischarge', 'port de déchargement'],
+    ['incoterm', 'Incoterm'],
+  ] as const;
+
+  for (const [key, label] of textFields) {
+    if (!Object.hasOwn(value, key)) continue;
+    const parsed = readOptionalText(value, key, label);
+    if (parsed.error) return { error: parsed.error };
+    details[key] = parsed.value;
+  }
+
+  for (const key of ['grossWeightKg', 'totalVolumeM3', 'packagesCount'] as const) {
+    if (!Object.hasOwn(value, key)) continue;
+    const number = value[key];
+    if (number === null) {
+      details[key] = null;
+    } else if (typeof number === 'number' && Number.isFinite(number) && number >= 0
+      && number <= 999999999999.99) {
+      details[key] = number;
+    } else {
+      return { error: `La valeur de « ${key} » doit être un nombre positif valide.` };
+    }
+  }
+
+  for (const key of ['estimatedDepartureDate', 'estimatedArrivalDate'] as const) {
+    if (!Object.hasOwn(value, key)) continue;
+    const date = value[key];
+    if (date === null || date === '') {
+      details[key] = null;
+    } else if (typeof date === 'string' && isValidDate(date)) {
+      details[key] = date;
+    } else {
+      return { error: `La date « ${key} » est invalide.` };
+    }
+  }
+
+  if (Object.hasOwn(value, 'needInlandTransport')) {
+    if (typeof value['needInlandTransport'] !== 'boolean') {
+      return { error: 'La valeur du transport intérieur est invalide.' };
+    }
+    details.needInlandTransport = value['needInlandTransport'];
+  }
+
+  const serviceTypes = validateOptionGroup(
+    value['serviceTypes'],
+    'types de service',
+    ['fcl', 'lcl', 'roro', 'breakBulk'] as const,
+    true
+  );
+  if (serviceTypes.error) return { error: serviceTypes.error };
+  if (value['serviceTypes'] !== undefined) {
+    const group: NonNullable<SeaFreightDetails['serviceTypes']> = {};
+    for (const field of ['fcl', 'lcl', 'roro', 'breakBulk'] as const) {
+      const flag = serviceTypes.flags?.[field];
+      if (flag !== undefined) group[field] = flag;
+    }
+    if (serviceTypes.other !== undefined) group.other = serviceTypes.other;
+    details.serviceTypes = group;
+  }
+
+  const availableDocuments = validateOptionGroup(
+    value['availableDocuments'],
+    'documents disponibles',
+    ['commercialInvoice', 'packingList', 'certificateOfOrigin', 'msdsTechnicalSheet'] as const,
+    true
+  );
+  if (availableDocuments.error) return { error: availableDocuments.error };
+  if (value['availableDocuments'] !== undefined) {
+    const group: NonNullable<SeaFreightDetails['availableDocuments']> = {};
+    for (const field of ['commercialInvoice', 'packingList', 'certificateOfOrigin', 'msdsTechnicalSheet'] as const) {
+      const flag = availableDocuments.flags?.[field];
+      if (flag !== undefined) group[field] = flag;
+    }
+    if (availableDocuments.other !== undefined) group.other = availableDocuments.other;
+    details.availableDocuments = group;
+  }
+
+  const additionalServices = validateOptionGroup(
+    value['additionalServices'],
+    'services additionnels',
+    ['customsClearance', 'cargoInsurance', 'warehousing', 'portHandling', 'tracking'] as const
+  );
+  if (additionalServices.error) return { error: additionalServices.error };
+  if (value['additionalServices'] !== undefined) {
+    const group: NonNullable<SeaFreightDetails['additionalServices']> = {};
+    for (const field of ['customsClearance', 'cargoInsurance', 'warehousing', 'portHandling', 'tracking'] as const) {
+      const flag = additionalServices.flags?.[field];
+      if (flag !== undefined) group[field] = flag;
+    }
+    details.additionalServices = group;
+  }
+
+  return { data: details };
 };
 
 const validateColumns = (
@@ -138,7 +307,7 @@ export function validateQuotePayload(
   if (!isRecord(value)) return { error: 'Le corps de la demande est invalide.' };
   const allowed = new Set([
     'prospectId', 'opportunityId', 'assignedTo', 'title', 'currency', 'columns', 'rows',
-    'totalColumnId', 'status', 'validUntil',
+    'totalColumnId', 'status', 'validUntil', 'seaFreight',
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     return { error: 'La demande contient un champ non autorisé.' };
@@ -222,6 +391,16 @@ export function validateQuotePayload(
     } else return { error: 'La date de validité est invalide.' };
   } else if (!partial) data.validUntil = null;
 
+  if (Object.hasOwn(value, 'seaFreight')) {
+    const seaFreight = validateSeaFreight(value['seaFreight']);
+    if (seaFreight.error || !seaFreight.data) {
+      return { error: seaFreight.error || 'Les détails maritimes de la cotation sont invalides.' };
+    }
+    data.seaFreight = seaFreight.data;
+  } else if (!partial) {
+    return { error: 'Les détails maritimes de la cotation sont obligatoires.' };
+  }
+
   if (Object.keys(data).length === 0) return { error: 'Aucun champ valide à enregistrer.' };
   return { data };
 }
@@ -238,6 +417,7 @@ const mapQuoteToDatabase = (data: QuoteMutation): Record<string, unknown> => {
   if (data.totalColumnId !== undefined) result['total_column_id'] = data.totalColumnId;
   if (data.status !== undefined) result['status'] = data.status;
   if (data.validUntil !== undefined) result['valid_until'] = data.validUntil;
+  if (data.seaFreight !== undefined) result['sea_freight'] = data.seaFreight;
   if (data.columns && data.rows && data.totalColumnId) {
     const amountColumn = data.columns.find((column) => column.id === data.totalColumnId);
     if (amountColumn) {
@@ -316,6 +496,7 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   totalAmount: row['total_amount'],
   status: row['status'],
   validUntil: row['valid_until'],
+  seaFreight: row['sea_freight'] ?? {},
   createdAt: row['created_at'],
   updatedAt: row['updated_at'],
 });
