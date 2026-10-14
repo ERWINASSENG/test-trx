@@ -33,7 +33,7 @@ const prospect = {
 
 describe('ProspectsComponent', () => {
   const mockProspectService = {
-    prospects: signal<typeof prospect[]>([]),
+    prospects: signal<import('../../core/models/prospect.model').Prospect[]>([]),
     assignees: signal([mockAssignee]),
     total: signal(0),
     isLoading: signal(false),
