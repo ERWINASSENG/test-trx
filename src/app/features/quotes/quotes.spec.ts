@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
 import { QuoteService } from '../../core/services/quote.service';
-import { SalesQuote } from '../../core/models/quote.model';
+import { QuoteAssignee, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
 import { Prospect } from '../../core/models/prospect.model';
+import { ActivatedRoute } from '@angular/router';
 import { QuotesComponent } from './quotes';
 
 describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
@@ -14,10 +15,11 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
 
   const mockQuotes = signal<SalesQuote[]>([]);
   const mockProspects = signal<Prospect[]>([]);
-  const mockAssignees = signal<any[]>([]);
-  const mockTemplates = signal<any[]>([]);
+  const mockAssignees = signal<QuoteAssignee[]>([]);
+  const mockTemplates = signal<QuoteTemplate[]>([]);
   const mockLoading = signal<boolean>(false);
   const mockError = signal<string | null>(null);
+  const mockRoute = { snapshot: { queryParamMap: { get: vi.fn().mockReturnValue(null) } } };
 
   const mockQuoteService = {
     quotes: mockQuotes,
@@ -46,7 +48,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   };
 
   const mockAccessControl = {
-    hasPermission: vi.fn((key: string) => {
+    hasPermission: vi.fn(() => {
       // Toutes les permissions cotation autorisées pour les tests
       return true;
     }),
@@ -63,6 +65,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   };
 
   beforeEach(async () => {
+    mockRoute.snapshot.queryParamMap.get.mockReturnValue(null);
     mockQuotes.set([]);
     mockProspects.set([
       {
@@ -94,6 +97,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
         { provide: QuoteService, useValue: mockQuoteService },
         { provide: AccessControlService, useValue: mockAccessControl },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: ActivatedRoute, useValue: mockRoute },
       ],
     }).compileComponents();
 
@@ -110,6 +114,17 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component).toBeTruthy();
     expect(component.view()).toBe('list');
     expect(component.isEditorOpen()).toBe(false);
+  });
+
+  it('filtre la liste sur la référence transmise par le CRM', async () => {
+    fixture.destroy();
+    mockRoute.snapshot.queryParamMap.get.mockReturnValue('COT-2026-000001');
+    fixture = TestBed.createComponent(QuotesComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.quoteSearch()).toBe('COT-2026-000001');
   });
 
   it('devrait ouvrir une fiche vierge avec toutes les cases décochées par défaut', () => {

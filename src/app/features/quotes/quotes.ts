@@ -7,6 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -69,6 +70,7 @@ export class QuotesComponent {
   public readonly quoteService = inject(QuoteService);
   private readonly accessControl = inject(AccessControlService);
   private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   public readonly statuses = QUOTE_STATUSES;
   public readonly columnTypes = QUOTE_COLUMN_TYPES;
@@ -214,6 +216,8 @@ export class QuotesComponent {
 
   public constructor() {
     void this.load().then(() => {
+      const search = this.route.snapshot.queryParamMap.get('search');
+      if (search) this.searchQuotes(search);
       const prospectId = this.linkedProspectId;
       if (!prospectId || !this.linkedOpportunityId || !this.canCreate()) return;
       const prospect = this.quoteService.prospects().find((item) => item.id === prospectId);
