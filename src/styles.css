@@ -41,6 +41,7 @@
   --app-surface: #ffffff;
   --app-surface-hover: #e8ecf2;
   --app-surface-active: #dde3ec;
+  --app-surface-muted: #f1f4f8;
   --app-border: #d5dce5;
   --app-border-subtle: #e4e9f0;
   --app-text: #1e293b;
@@ -73,6 +74,7 @@ html.dark, :root[data-theme="dark"], .dark {
   --app-surface: #2b2f33;
   --app-surface-hover: #343a40;
   --app-surface-active: #3e444a;
+  --app-surface-muted: #24282d;
   --app-border: #383f45;
   --app-border-subtle: #2b2f33;
   --app-text: #f8fafc;
@@ -117,11 +119,21 @@ html.dark .bg-white,
 }
 
 html.dark .bg-slate-50,
+html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/75,
 html.dark .bg-slate-100,
 html.dark .bg-slate-100\/80,
+html.dark .bg-slate-200,
+html.dark .bg-slate-200\/80,
+html.dark .bg-slate-300,
 :root[data-theme="dark"] .bg-slate-50,
+:root[data-theme="dark"] .bg-slate-50\/50,
+:root[data-theme="dark"] .bg-slate-50\/75,
 :root[data-theme="dark"] .bg-slate-100,
-:root[data-theme="dark"] .bg-slate-100\/80 {
+:root[data-theme="dark"] .bg-slate-100\/80,
+:root[data-theme="dark"] .bg-slate-200,
+:root[data-theme="dark"] .bg-slate-200\/80,
+:root[data-theme="dark"] .bg-slate-300 {
   background-color: var(--app-surface-hover) !important;
   border-color: var(--app-border) !important;
 }
