@@ -256,38 +256,131 @@ textarea:focus {
 .empty-icon mat-icon { width: 26px; height: 26px; font-size: 26px; }
 
 /* Table cotations page principale */
-.table-scroll {
-  overflow-x: auto;
-  margin: 0 16px;
-  border: 1px solid var(--quote-border);
-  border-radius: 6px;
-  background: var(--quote-surface);
-}
-.quotes-table {
+/* Tableau Cotations style Odoo Tree View (harmonisé avec le module Caisse) */
+.quotes-table-container {
+  padding: 0;
+  margin: 0;
   width: 100%;
+}
+
+.reference-link {
+  color: var(--quote-accent);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  &:hover {
+    color: var(--quote-accent-dark);
+    text-decoration: underline;
+  }
+}
+
+.odoo-table {
   border-collapse: collapse;
-  font-size: 12px;
-  text-align: left;
+  width: 100%;
+  margin: 0;
+  border: none;
+  background: var(--quote-surface);
+
+  .odoo-head-row {
+    border-bottom: 2px solid var(--quote-border);
+    background-color: var(--quote-surface-muted);
+
+    th {
+      color: var(--quote-text);
+      font-weight: 700;
+      font-size: 0.8125rem;
+      letter-spacing: 0;
+      padding: 0.625rem 0.75rem;
+      white-space: nowrap;
+
+      button, span {
+        color: inherit;
+      }
+    }
+  }
+
+  tbody {
+    .odoo-data-row {
+      border-bottom: 1px solid var(--quote-border);
+      transition: background-color 0.12s ease;
+      background-color: var(--quote-surface);
+
+      &:hover {
+        background-color: var(--quote-surface-hover, #f2f7ff);
+      }
+
+      &.odoo-row-selected {
+        background-color: #e8f1ff;
+      }
+
+      td {
+        vertical-align: middle;
+        padding: 0.625rem 0.75rem;
+        font-size: 0.8125rem;
+        color: var(--quote-text);
+        border: none;
+      }
+    }
+  }
 }
-.quotes-table th {
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--quote-border);
-  color: var(--quote-muted);
-  background: var(--quote-surface-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .3px;
-  text-transform: uppercase;
-  white-space: nowrap;
+
+:host-context(html.dark),
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  .odoo-table {
+    tbody {
+      .odoo-data-row {
+        &:hover {
+          background-color: rgba(124, 179, 255, 0.12);
+        }
+
+        &.odoo-row-selected {
+          background-color: rgba(124, 179, 255, 0.22);
+        }
+      }
+    }
+  }
 }
-.quotes-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--quote-separator);
-  white-space: nowrap;
+
+/* Checkbox fine Odoo identique au module Caisse */
+.odoo-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--quote-border, #cbd5e1);
+  border-radius: 3px;
+  background-color: var(--quote-surface, #ffffff);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  margin: 0 auto;
+  transition: all 0.12s ease;
+
+  &:hover {
+    border-color: var(--quote-accent, #0b5ed7);
+  }
+
+  &:checked {
+    background-color: var(--quote-accent, #0b5ed7);
+    border-color: var(--quote-accent, #0b5ed7);
+    &::after {
+      content: '';
+      width: 4px;
+      height: 8px;
+      border: solid #ffffff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg) translate(-0.5px, -1px);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--quote-focus, #0b5ed7);
+    outline-offset: 1px;
+  }
 }
 .quotes-table tbody tr:last-child td { border-bottom: 0; }
 .quotes-table tbody tr:hover { background: var(--quote-surface-hover); }
-.reference-cell { color: var(--quote-accent); font-weight: 700; }
 .quote-related-link {
   display: inline-block;
   color: var(--quote-accent);
@@ -319,6 +412,128 @@ textarea:focus {
 .status-accepted { color: var(--quote-accepted-text); background: var(--quote-accepted-bg); }
 .status-rejected { color: var(--quote-rejected-text); background: var(--quote-rejected-bg); }
 .status-expired { color: var(--quote-expired-text); background: var(--quote-expired-bg); }
+
+/* Boutons d'action du bandeau de contrôle (identiques à la Caisse) */
+.cashier-action-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--quote-accent, #0b5ed7);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: var(--quote-accent-dark, #084db1);
+  }
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.cashier-action-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #dc2626;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: #b91c1c;
+  }
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Badges de statut Odoo (identiques à la Caisse) */
+.odoo-badge-posted {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.odoo-badge-sent {
+  background-color: #dbeafe;
+  color: #123c6d;
+  border: 1px solid #93c5fd;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.odoo-badge-draft {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.odoo-badge-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.odoo-badge-expired {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
 
 .row-actions {
   display: flex;

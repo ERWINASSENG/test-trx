@@ -223,7 +223,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     const cols = component.columns();
     const designationCol = cols[0];
     const unitCol = cols[1];
-    const amountCol = cols.find((c) => c.type === 'amount')!;
+    const amountCol = cols.find((c) => c.id === totalColId)!;
 
     component.rows.set([
       { [designationCol.id]: 'Fret maritime 40ft', [unitCol.id]: '1 conteneur', [amountCol.id]: 2500000 },
@@ -290,7 +290,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     await component.saveQuote();
 
     expect(mockQuoteService.createQuote).not.toHaveBeenCalled();
-    expect(component.error()).toContain('nom de la société cliente');
+    expect(component.error()).toContain('sélectionner un prospect/client destinataire');
     expect(component.isEditorOpen()).toBe(true);
   });
 });

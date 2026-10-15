@@ -1,6 +1,6 @@
 {
-  "summary":  "Plan d'implémentation pour transformer le formulaire de cotation en Fiche de demande de cotation maritime conforme au document Transimex (Style Odoo épuré et compact).",
-  "updatedAt":  "2026-10-12T10:53:02.688633753Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Plan d'alignement des marges du tableau des cotations sur le module Caisse pour une pleine largeur à 100% sans marge latérale.",
+  "updatedAt": "2026-10-14T13:57:11.270778278Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

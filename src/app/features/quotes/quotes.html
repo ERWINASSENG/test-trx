@@ -7,6 +7,12 @@
           <span>Nouvelle cotation</span>
         </button>
       }
+      @if (selectedCount() > 0 && canDelete()) {
+        <button type="button" class="cashier-action-danger" (click)="deleteSelectedQuotes()" title="Supprimer la sélection">
+          <mat-icon>delete_outline</mat-icon>
+          <span>Supprimer ({{ selectedCount() }})</span>
+        </button>
+      }
       <div class="quotes-breadcrumb" aria-label="Fil d’Ariane">
         <span>Cotations maritimes</span>
         <small>Développement commercial & transit</small>
@@ -92,25 +98,150 @@
     </section>
   } @else {
     @if (view() === 'list') {
-      <div class="table-scroll">
-        <table class="quotes-table">
-          <thead>
-            <tr>
-              <th scope="col">Référence</th>
-              <th scope="col">Client</th>
-              <th scope="col">Objet & Itinéraire</th>
-              <th scope="col">Commercial</th>
-              <th scope="col">Montant chiffré</th>
-              <th scope="col">Validité</th>
-              <th scope="col">Statut</th>
-              <th scope="col"><span class="sr-only">Actions</span></th>
+      <div class="w-full min-h-[380px] pb-32">
+        <app-module-data-table
+          [ariaLabel]="'Cotations commerciales et maritimes'"
+          [tableId]="'quotes-list-table'"
+          [tableClass]="'w-full text-left text-sm border-collapse bg-white dark:bg-transparent odoo-table shadow-xs border border-slate-200 dark:border-none rounded-lg'">
+          <thead moduleTableHead>
+            <tr class="odoo-head-row select-none">
+              <th scope="col" class="py-2.5 px-3 text-center w-8">
+                @if (canSelect()) {
+                  <input
+                    type="checkbox"
+                    id="select-all-checkbox"
+                    [checked]="isAllSelected()"
+                    (change)="onToggleSelectAll()"
+                    aria-label="Sélectionner toutes les cotations"
+                    class="odoo-checkbox"
+                  />
+                } @else {
+                  <span class="text-slate-600 dark:text-slate-400 font-semibold">#</span>
+                }
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-36">
+                <button
+                  type="button"
+                  (click)="toggleSort('quoteNumber')"
+                  class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
+                  title="Trier par référence">
+                  <span>Référence</span>
+                  @if (sortField() === 'quoteNumber') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap min-w-[180px]">
+                <button
+                  type="button"
+                  (click)="toggleSort('prospect')"
+                  class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
+                  title="Trier par client">
+                  <span>Client / Société</span>
+                  @if (sortField() === 'prospect') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold min-w-[220px]">
+                <button
+                  type="button"
+                  (click)="toggleSort('title')"
+                  class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
+                  title="Trier par objet">
+                  <span>Objet & Itinéraire</span>
+                  @if (sortField() === 'title') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-40">
+                <button
+                  type="button"
+                  (click)="toggleSort('assignedTo')"
+                  class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
+                  title="Trier par commercial">
+                  <span>Commercial</span>
+                  @if (sortField() === 'assignedTo') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold text-right whitespace-nowrap w-36">
+                <button
+                  type="button"
+                  (click)="toggleSort('totalAmount')"
+                  class="inline-flex items-center justify-end gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors w-full"
+                  title="Trier par montant">
+                  <span>Montant chiffré</span>
+                  @if (sortField() === 'totalAmount') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold whitespace-nowrap w-32">
+                <button
+                  type="button"
+                  (click)="toggleSort('validUntil')"
+                  class="inline-flex items-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors"
+                  title="Trier par validité">
+                  <span>Validité</span>
+                  @if (sortField() === 'validUntil') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-28">
+                <button
+                  type="button"
+                  (click)="toggleSort('status')"
+                  class="inline-flex items-center justify-center gap-1 font-semibold hover:text-[#0b5ed7] dark:hover:text-[#8cc2ff] cursor-pointer transition-colors w-full"
+                  title="Trier par statut">
+                  <span>Statut</span>
+                  @if (sortField() === 'status') {
+                    <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
+                      {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                    </mat-icon>
+                  }
+                </button>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody moduleTableBody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
             @for (quote of displayedQuotes(); track quote.id) {
-              <tr>
-                <td class="reference-cell">{{ quote.quoteNumber }}</td>
-                <td>
+              <tr
+                class="odoo-data-row select-none cursor-pointer"
+                [class.odoo-row-selected]="isSelected(quote.id)"
+                (dblclick)="openEdit(quote)">
+                <td class="py-2.5 px-3 text-center">
+                  @if (canSelect()) {
+                    <input
+                      type="checkbox"
+                      [checked]="isSelected(quote.id)"
+                      (change)="onToggleSelect(quote.id)"
+                      aria-label="Sélectionner la cotation"
+                      class="odoo-checkbox"
+                    />
+                  } @else {
+                    <span class="text-slate-500">•</span>
+                  }
+                </td>
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-900 dark:text-slate-100 font-medium">
+                  <button type="button" class="reference-link bg-transparent border-none p-0 cursor-pointer font-inherit text-left" (click)="openEdit(quote)" title="Ouvrir la cotation">{{ quote.quoteNumber }}</button>
+                </td>
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-900 dark:text-slate-100 font-normal">
                   <a class="quote-related-link" [routerLink]="['/prospects']"
                     [queryParams]="{ prospectId: quote.prospectId }">{{ quote.prospectName || prospectLabel(quote.prospectId) }}</a>
                   @if (quote.contactId && quote.contactName) {
@@ -128,34 +259,54 @@
                       [queryParams]="{ dossierId: quote.dossierId }">Dossier : {{ quote.dossierNumber }}</a></small>
                   }
                 </td>
-                <td>
-                  <strong>{{ quote.title }}</strong>
+                <td class="py-2.5 px-3 text-slate-800 dark:text-slate-200 font-normal">
+                  <span class="block font-medium text-slate-900 dark:text-slate-100">{{ quote.title }}</span>
                   @if (quote.seaFreight?.portOfLoading || quote.seaFreight?.portOfDischarge) {
-                    <small class="route-hint">
-                      {{ quote.seaFreight?.portOfLoading || 'Port chargement' }} → {{ quote.seaFreight?.portOfDischarge || 'Port déchargement' }}
+                    <small class="route-hint text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                      {{ quote.seaFreight?.portOfLoading || 'Départ' }} → {{ quote.seaFreight?.portOfDischarge || 'Arrivée' }}
                     </small>
                   }
                 </td>
-                <td>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</td>
-                <td class="amount-cell">{{ formatAmount(quote.totalAmount, quote.currency) }}</td>
-                <td>{{ quote.validUntil ? (quote.validUntil | date:'dd/MM/yyyy') : '—' }}</td>
-                <td><span [class]="'status-pill ' + statusClass(quote.status)">{{ statusLabel(quote.status) }}</span></td>
-                <td class="row-actions">
-                  @if (canUpdate()) {
-                    <button type="button" class="icon-action" aria-label="Modifier la cotation" title="Modifier" (click)="openEdit(quote)">
-                      <mat-icon>edit</mat-icon>
-                    </button>
-                  }
-                  @if (canDelete()) {
-                    <button type="button" class="icon-action danger-action" aria-label="Supprimer la cotation" title="Supprimer" (click)="deleteQuote(quote)">
-                      <mat-icon>delete_outline</mat-icon>
-                    </button>
+
+                <!-- Commercial -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-300 font-normal">
+                  {{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}
+                </td>
+
+                <!-- Montant chiffré -->
+                <td class="py-2.5 px-3 text-right whitespace-nowrap text-slate-900 dark:text-slate-100 font-semibold tabular-nums">
+                  {{ formatAmount(quote.totalAmount, quote.currency) }}
+                </td>
+
+                <!-- Validité -->
+                <td class="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-300 font-normal">
+                  {{ quote.validUntil ? (quote.validUntil | date:'dd/MM/yyyy') : '—' }}
+                </td>
+
+                <!-- Statut (Badges Odoo identiques à la Caisse, dernière colonne) -->
+                <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                  @switch (quote.status) {
+                    @case ('accepted') {
+                      <span class="odoo-badge-posted">Acceptée</span>
+                    }
+                    @case ('sent') {
+                      <span class="odoo-badge-sent">Envoyée</span>
+                    }
+                    @case ('rejected') {
+                      <span class="odoo-badge-cancelled">Refusée</span>
+                    }
+                    @case ('expired') {
+                      <span class="odoo-badge-expired">Expirée</span>
+                    }
+                    @default {
+                      <span class="odoo-badge-draft">Brouillon</span>
+                    }
                   }
                 </td>
               </tr>
             }
           </tbody>
-        </table>
+        </app-module-data-table>
       </div>
     } @else {
       <div class="quotes-kanban" aria-label="Cotations par statut">

@@ -15,6 +15,7 @@ import { QuoteInput, QuoteService } from '../../core/services/quote.service';
 import {
   QUOTE_COLUMN_TYPES,
   QUOTE_STATUSES,
+  QuoteCellValue,
   QuoteColumn,
   QuoteColumnType,
   QuoteRow,
@@ -23,6 +24,7 @@ import {
   SeaFreightDetails,
 } from '../../core/models/quote.model';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
+import { ModuleDataTable } from '../../shared/components/module-data-table/module-data-table';
 
 const generateSecureUUID = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -56,9 +58,18 @@ interface QuoteStatusColumn {
   quotes: SalesQuote[];
 }
 
+export type QuoteSortField =
+  | 'quoteNumber'
+  | 'prospect'
+  | 'title'
+  | 'assignedTo'
+  | 'totalAmount'
+  | 'validUntil'
+  | 'status';
+
 @Component({
   selector: 'app-quotes',
-  imports: [DatePipe, MatIconModule, ModuleControlPanel, RouterLink],
+  imports: [DatePipe, MatIconModule, ModuleControlPanel, ModuleDataTable, RouterLink],
   templateUrl: './quotes.html',
   styleUrls: ['./quotes.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -82,6 +93,13 @@ export class QuotesComponent {
   public readonly statusFilter = signal<string>('');
   public readonly pageIndex = signal(0);
 
+  // Tri style Caisse (Odoo Tree View)
+  public readonly sortField = signal<QuoteSortField | null>(null);
+  public readonly sortDirection = signal<'asc' | 'desc'>('asc');
+
+  // Sélection style Caisse (Odoo Checkboxes)
+  public readonly selectedQuoteIds = signal<Set<string>>(new Set());
+
   public readonly currentUserId = computed(() => this.authService.currentUser()?.id || null);
   public readonly canCreate = computed(() => this.accessControl.hasPermission('quotes.create'));
   public readonly canUpdate = computed(() => this.accessControl.hasPermission('quotes.update'));
@@ -89,10 +107,13 @@ export class QuotesComponent {
   public readonly canAssign = computed(() => this.accessControl.hasPermission('quotes.assign'));
   public readonly canSaveTemplate = computed(() => this.accessControl.hasPermission('quotes.templates.create'));
   public readonly canDeleteTemplate = computed(() => this.accessControl.hasPermission('quotes.templates.delete'));
+  public readonly canSelect = computed(() => this.canDelete() || this.canUpdate());
 
   public readonly totalColumnOptions = computed(() =>
     this.columns().filter((column) => column.type === 'amount')
   );
+
+  public readonly filteredProspects = computed(() => this.quoteService.prospects());
 
   public readonly filteredQuotes = computed(() => {
     const query = this.quoteSearch().trim().toLocaleLowerCase('fr');
@@ -112,27 +133,89 @@ export class QuotesComponent {
     );
   });
 
+  public readonly sortedQuotes = computed(() => {
+    const quotes = [...this.filteredQuotes()];
+    const field = this.sortField();
+    const direction = this.sortDirection();
+    if (!field) return quotes;
+
+    return quotes.sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+
+      switch (field) {
+        case 'quoteNumber':
+          valA = a.quoteNumber || '';
+          valB = b.quoteNumber || '';
+          break;
+        case 'prospect':
+          valA = a.prospectName || this.prospectLabel(a.prospectId) || '';
+          valB = b.prospectName || this.prospectLabel(b.prospectId) || '';
+          break;
+        case 'title':
+          valA = a.title || '';
+          valB = b.title || '';
+          break;
+        case 'assignedTo':
+          valA = a.assignedToName || this.assigneeLabel(a.assignedTo) || '';
+          valB = b.assignedToName || this.assigneeLabel(b.assignedTo) || '';
+          break;
+        case 'totalAmount':
+          valA = a.totalAmount ?? 0;
+          valB = b.totalAmount ?? 0;
+          break;
+        case 'validUntil':
+          valA = a.validUntil ? new Date(a.validUntil).getTime() : 0;
+          valB = b.validUntil ? new Date(b.validUntil).getTime() : 0;
+          break;
+        case 'status':
+          valA = a.status || '';
+          valB = b.status || '';
+          break;
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return direction === 'asc' ? valA - valB : valB - valA;
+      }
+      const comp = String(valA).localeCompare(String(valB), 'fr', { sensitivity: 'base' });
+      return direction === 'asc' ? comp : -comp;
+    });
+  });
+
   public readonly pageCount = computed(() =>
-    Math.max(1, Math.ceil(this.filteredQuotes().length / this.pageSize))
+    Math.max(1, Math.ceil(this.sortedQuotes().length / this.pageSize))
   );
+
   public readonly displayedQuotes = computed(() => {
     const start = this.pageIndex() * this.pageSize;
-    return this.filteredQuotes().slice(start, start + this.pageSize);
+    return this.sortedQuotes().slice(start, start + this.pageSize);
   });
+
   public readonly statusColumns = computed<QuoteStatusColumn[]>(() =>
     this.statuses.map((status) => ({
       status,
       quotes: this.displayedQuotes().filter((quote) => quote.status === status),
     }))
   );
+
+  public readonly isAllSelected = computed(() => {
+    const displayed = this.displayedQuotes();
+    if (displayed.length === 0) return false;
+    const selected = this.selectedQuoteIds();
+    return displayed.every((q) => selected.has(q.id));
+  });
+
+  public readonly selectedCount = computed(() => this.selectedQuoteIds().size);
+
   public readonly paginationLabel = computed(() => {
-    const total = this.filteredQuotes().length;
+    const total = this.sortedQuotes().length;
     if (total === 0) return '0 résultat(s)';
     const first = this.pageIndex() * this.pageSize + 1;
     return `${first}–${Math.min(first + this.pageSize - 1, total)} sur ${total}`;
   });
+
   public readonly canPrevPage = computed(() => this.pageIndex() > 0);
-  public readonly canNextPage = computed(() => (this.pageIndex() + 1) * this.pageSize < this.filteredQuotes().length);
+  public readonly canNextPage = computed(() => (this.pageIndex() + 1) * this.pageSize < this.sortedQuotes().length);
 
   public readonly draftTotal = computed(() => {
     const totalId = this.totalColumnId();
@@ -255,15 +338,79 @@ export class QuotesComponent {
     this.pageIndex.update((page) => Math.min(page, this.pageCount() - 1));
   }
 
+  public toggleSort(field: QuoteSortField): void {
+    if (this.sortField() === field) {
+      this.sortDirection.update((dir) => (dir === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+    }
+    this.pageIndex.set(0);
+  }
+
+  public isSelected(quoteId: string): boolean {
+    return this.selectedQuoteIds().has(quoteId);
+  }
+
+  public onToggleSelect(quoteId: string): void {
+    this.selectedQuoteIds.update((prev) => {
+      const next = new Set(prev);
+      if (next.has(quoteId)) {
+        next.delete(quoteId);
+      } else {
+        next.add(quoteId);
+      }
+      return next;
+    });
+  }
+
+  public onToggleSelectAll(): void {
+    const displayed = this.displayedQuotes();
+    const currentlyAll = this.isAllSelected();
+    this.selectedQuoteIds.update((prev) => {
+      const next = new Set(prev);
+      if (currentlyAll) {
+        for (const q of displayed) next.delete(q.id);
+      } else {
+        for (const q of displayed) next.add(q.id);
+      }
+      return next;
+    });
+  }
+
+  public clearSelection(): void {
+    this.selectedQuoteIds.set(new Set());
+  }
+
+  public async deleteSelectedQuotes(): Promise<void> {
+    if (!this.canDelete()) return;
+    const count = this.selectedQuoteIds().size;
+    if (count === 0) return;
+    const confirmed = confirm(`Confirmez-vous la suppression des ${count} cotation(s) sélectionnée(s) ?`);
+    if (!confirmed) return;
+
+    this.isSaving.set(true);
+    for (const id of this.selectedQuoteIds()) {
+      await this.quoteService.deleteQuote(id);
+    }
+    this.clearSelection();
+    await this.load();
+    this.isSaving.set(false);
+    this.feedback.set(`${count} cotation(s) supprimée(s) avec succès.`);
+    setTimeout(() => this.feedback.set(null), 15000);
+  }
+
   public async filterByStatus(value: string): Promise<void> {
     this.statusFilter.set(value);
     this.pageIndex.set(0);
+    this.clearSelection();
     await this.quoteService.loadQuotes(value);
   }
 
   public searchQuotes(value: string): void {
     this.quoteSearch.set(value);
     this.pageIndex.set(0);
+    this.clearSelection();
   }
 
   public previousPage(): void {
@@ -328,11 +475,34 @@ export class QuotesComponent {
     if (contact.email) this.seaEmail.set(contact.email);
   }
 
+  public toggleNewProspect(): void {
+    this.showNewProspect.update((v) => !v);
+  }
+
+  public async createProspect(): Promise<void> {
+    const contact = this.newProspectContact().trim();
+    if (!contact) return;
+    this.isCreatingProspect.set(true);
+    const result = await this.quoteService.createProspect({
+      companyName: contact,
+      contactName: contact,
+      email: this.newProspectEmail().trim() || undefined,
+      phone: this.newProspectPhone().trim() || undefined,
+    });
+    this.isCreatingProspect.set(false);
+    if (result.success && result.data) {
+      this.onProspectSelected(result.data.id);
+      this.showNewProspect.set(false);
+      this.newProspectContact.set('');
+      this.newProspectEmail.set('');
+      this.newProspectPhone.set('');
+    }
+  }
+
   public openCreate(): void {
-    if (!this.canCreate()) return;
     this.editingId.set(null);
     this.error.set(null);
-    this.prospectId.set('');
+    this.prospectId.set(this.linkedProspectId || '');
     this.contactId.set('');
     this.opportunityId.set(this.linkedOpportunityId || null);
     this.clientSearch.set('');
@@ -342,7 +512,7 @@ export class QuotesComponent {
     this.status.set('draft');
     this.validUntil.set('');
 
-    // Réinitialisation des champs maritimes
+    // Réinitialisation maritime
     this.seaContactName.set('');
     this.seaPhone.set('');
     this.seaEmail.set('');
@@ -359,263 +529,233 @@ export class QuotesComponent {
     this.seaNeedInlandTransport.set(false);
     this.seaEstimatedDepartureDate.set(null);
     this.seaEstimatedArrivalDate.set(null);
-
     this.serviceFcl.set(false);
     this.serviceLcl.set(false);
     this.serviceRoro.set(false);
     this.serviceBreakBulk.set(false);
     this.serviceOther.set('');
-
     this.docCommercialInvoice.set(false);
     this.docPackingList.set(false);
     this.docCertificateOfOrigin.set(false);
     this.docMsdsTechnicalSheet.set(false);
     this.docOther.set('');
-
     this.addonCustomsClearance.set(false);
     this.addonCargoInsurance.set(false);
     this.addonWarehousing.set(false);
     this.addonPortHandling.set(false);
     this.addonTracking.set(false);
 
-    // Initialisation des colonnes de chiffrage adaptées au maritime
-    const colDesignation: QuoteColumn = { id: generateSecureUUID(), label: 'Désignation de la prestation', type: 'text' };
-    const colUnite: QuoteColumn = { id: generateSecureUUID(), label: 'Unité / Conteneur', type: 'text' };
-    const colMontant: QuoteColumn = { id: generateSecureUUID(), label: 'Montant HT', type: 'amount' };
-    this.columns.set([colDesignation, colUnite, colMontant]);
-    this.totalColumnId.set(colMontant.id);
-    this.rows.set([
-      { [colDesignation.id]: 'Fret maritime de base', [colUnite.id]: '1 x 40\' HC', [colMontant.id]: 0 },
-      { [colDesignation.id]: 'Surcharge BAF / CAF', [colUnite.id]: 'Forfait', [colMontant.id]: 0 },
-      { [colDesignation.id]: 'Manutention portuaire & Débarquement', [colUnite.id]: 'Unité', [colMontant.id]: 0 },
-    ]);
-
+    // Initialisation dynamique par défaut
+    this.initializeDefaultColumns();
+    this.selectedTemplateId.set('');
     this.saveTemplate.set(false);
     this.templateName.set('');
-    this.selectedTemplateId.set('');
     this.showNewProspect.set(false);
+    this.error.set(null);
     this.isEditorOpen.set(true);
   }
 
   public openEdit(quote: SalesQuote): void {
-    if (!this.canUpdate()) return;
     this.editingId.set(quote.id);
     this.error.set(null);
-    this.prospectId.set(quote.prospectId);
     this.contactId.set(quote.contactId || '');
     void this.quoteService.loadContacts(quote.prospectId);
-    this.opportunityId.set(quote.opportunityId || null);
-    this.clientSearch.set(quote.prospectName || this.prospectLabel(quote.prospectId));
-    this.assignedTo.set(quote.assignedTo || '');
     this.title.set(quote.title);
     this.currency.set(quote.currency);
     this.status.set(quote.status);
-    this.validUntil.set(quote.validUntil || '');
+    this.validUntil.set(quote.validUntil ? quote.validUntil.substring(0, 10) : '');
+    this.prospectId.set(quote.prospectId);
+    this.clientSearch.set(quote.prospectName || this.prospectLabel(quote.prospectId));
+    this.opportunityId.set(quote.opportunityId ?? null);
+    this.assignedTo.set(quote.assignedTo || '');
 
-    const sf = quote.seaFreight;
-    this.seaContactName.set(sf?.contactName || '');
-    this.seaPhone.set(sf?.phone || '');
-    this.seaEmail.set(sf?.email || '');
-    this.seaAddress.set(sf?.address || '');
-    this.seaGoodsType.set(sf?.goodsType || '');
-    this.seaGoodsDescription.set(sf?.goodsDescription || '');
-    this.seaGrossWeightKg.set(sf?.grossWeightKg ?? null);
-    this.seaTotalVolumeM3.set(sf?.totalVolumeM3 ?? null);
-    this.seaPackagesCount.set(sf?.packagesCount ?? null);
-    this.seaPackagingType.set(sf?.packagingType || '');
-    this.seaPortOfLoading.set(sf?.portOfLoading || '');
-    this.seaPortOfDischarge.set(sf?.portOfDischarge || '');
-    this.seaIncoterm.set(sf?.incoterm || '');
-    this.seaNeedInlandTransport.set(sf?.needInlandTransport ?? false);
-    this.seaEstimatedDepartureDate.set(sf?.estimatedDepartureDate || null);
-    this.seaEstimatedArrivalDate.set(sf?.estimatedArrivalDate || null);
+    // Données maritimes
+    const sea = quote.seaFreight;
+    this.seaContactName.set(sea?.contactName || '');
+    this.seaPhone.set(sea?.phone || '');
+    this.seaEmail.set(sea?.email || '');
+    this.seaAddress.set(sea?.address || '');
+    this.seaGoodsType.set(sea?.goodsType || '');
+    this.seaGoodsDescription.set(sea?.goodsDescription || '');
+    this.seaGrossWeightKg.set(sea?.grossWeightKg ?? null);
+    this.seaTotalVolumeM3.set(sea?.totalVolumeM3 ?? null);
+    this.seaPackagesCount.set(sea?.packagesCount ?? null);
+    this.seaPackagingType.set(sea?.packagingType || '');
+    this.seaPortOfLoading.set(sea?.portOfLoading || '');
+    this.seaPortOfDischarge.set(sea?.portOfDischarge || '');
+    this.seaIncoterm.set(sea?.incoterm || '');
+    this.seaNeedInlandTransport.set(!!sea?.needInlandTransport);
+    this.seaEstimatedDepartureDate.set(sea?.estimatedDepartureDate ? sea.estimatedDepartureDate.substring(0, 10) : null);
+    this.seaEstimatedArrivalDate.set(sea?.estimatedArrivalDate ? sea.estimatedArrivalDate.substring(0, 10) : null);
 
-    this.serviceFcl.set(sf?.serviceTypes?.fcl ?? false);
-    this.serviceLcl.set(sf?.serviceTypes?.lcl ?? false);
-    this.serviceRoro.set(sf?.serviceTypes?.roro ?? false);
-    this.serviceBreakBulk.set(sf?.serviceTypes?.breakBulk ?? false);
-    this.serviceOther.set(sf?.serviceTypes?.other || '');
+    this.serviceFcl.set(!!sea?.serviceTypes?.fcl);
+    this.serviceLcl.set(!!sea?.serviceTypes?.lcl);
+    this.serviceRoro.set(!!sea?.serviceTypes?.roro);
+    this.serviceBreakBulk.set(!!sea?.serviceTypes?.breakBulk);
+    this.serviceOther.set(sea?.serviceTypes?.other || '');
 
-    this.docCommercialInvoice.set(sf?.availableDocuments?.commercialInvoice ?? false);
-    this.docPackingList.set(sf?.availableDocuments?.packingList ?? false);
-    this.docCertificateOfOrigin.set(sf?.availableDocuments?.certificateOfOrigin ?? false);
-    this.docMsdsTechnicalSheet.set(sf?.availableDocuments?.msdsTechnicalSheet ?? false);
-    this.docOther.set(sf?.availableDocuments?.other || '');
+    this.docCommercialInvoice.set(!!sea?.availableDocuments?.commercialInvoice);
+    this.docPackingList.set(!!sea?.availableDocuments?.packingList);
+    this.docCertificateOfOrigin.set(!!sea?.availableDocuments?.certificateOfOrigin);
+    this.docMsdsTechnicalSheet.set(!!sea?.availableDocuments?.msdsTechnicalSheet);
+    this.docOther.set(sea?.availableDocuments?.other || '');
 
-    this.addonCustomsClearance.set(sf?.additionalServices?.customsClearance ?? false);
-    this.addonCargoInsurance.set(sf?.additionalServices?.cargoInsurance ?? false);
-    this.addonWarehousing.set(sf?.additionalServices?.warehousing ?? false);
-    this.addonPortHandling.set(sf?.additionalServices?.portHandling ?? false);
-    this.addonTracking.set(sf?.additionalServices?.tracking ?? false);
+    this.addonCustomsClearance.set(!!sea?.additionalServices?.customsClearance);
+    this.addonCargoInsurance.set(!!sea?.additionalServices?.cargoInsurance);
+    this.addonWarehousing.set(!!sea?.additionalServices?.warehousing);
+    this.addonPortHandling.set(!!sea?.additionalServices?.portHandling);
+    this.addonTracking.set(!!sea?.additionalServices?.tracking);
 
-    this.columns.set(quote.columns.map((column) => ({ ...column })));
-    this.rows.set(quote.rows.map((row) => ({ ...row })));
-    this.totalColumnId.set(quote.totalColumnId);
+    // Chiffrage
+    this.columns.set(quote.columns.map((c) => ({ ...c })));
+    this.rows.set(quote.rows.map((r) => ({ ...r })));
+    this.totalColumnId.set(quote.totalColumnId || (quote.columns.find((c) => c.type === 'amount')?.id || ''));
 
+    this.selectedTemplateId.set('');
     this.saveTemplate.set(false);
     this.templateName.set('');
-    this.selectedTemplateId.set('');
     this.showNewProspect.set(false);
+    this.error.set(null);
     this.isEditorOpen.set(true);
   }
 
   public closeEditor(): void {
-    if (this.isSaving() || this.isCreatingProspect()) return;
     this.isEditorOpen.set(false);
+    this.error.set(null);
   }
 
-  public toggleNewProspect(): void {
-    this.showNewProspect.update((visible) => !visible);
+  public initializeDefaultColumns(): void {
+    const colDesignation: QuoteColumn = { id: generateSecureUUID(), label: 'Rubrique / Prestation', type: 'text' };
+    const colQty: QuoteColumn = { id: generateSecureUUID(), label: 'Quantité', type: 'number' };
+    const colUnitPrice: QuoteColumn = { id: generateSecureUUID(), label: 'Prix Unitaire (XAF)', type: 'amount' };
+    const colTotal: QuoteColumn = { id: generateSecureUUID(), label: 'Total HT', type: 'amount' };
+
+    this.columns.set([colDesignation, colQty, colUnitPrice, colTotal]);
+    this.totalColumnId.set(colTotal.id);
+
+    const row1: QuoteRow = {
+      id: generateSecureUUID(),
+      [colDesignation.id]: 'Fret maritime standard (Port de départ -> Douala)',
+      [colQty.id]: 1,
+      [colUnitPrice.id]: 1500000,
+      [colTotal.id]: 1500000,
+    };
+    const row2: QuoteRow = {
+      id: generateSecureUUID(),
+      [colDesignation.id]: 'Manutention portuaire & Débarquement',
+      [colQty.id]: 1,
+      [colUnitPrice.id]: 250000,
+      [colTotal.id]: 250000,
+    };
+    const row3: QuoteRow = {
+      id: generateSecureUUID(),
+      [colDesignation.id]: 'Formalités douanières & Transit import',
+      [colQty.id]: 1,
+      [colUnitPrice.id]: 300000,
+      [colTotal.id]: 300000,
+    };
+    this.rows.set([row1, row2, row3]);
+  }
+
+  public onTemplateChange(templateId: string): void {
+    this.selectedTemplateId.set(templateId);
+    if (!templateId) return;
+    const template = this.quoteService.templates().find((candidate) => candidate.id === templateId);
+    if (!template) return;
+    this.columns.set(template.columns.map((c) => ({ ...c })));
+    this.totalColumnId.set(template.totalColumnId);
+    this.rows.set([this.createEmptyRow(template.columns)]);
+  }
+
+  public applyTemplate(templateId: string): void {
+    this.onTemplateChange(templateId);
   }
 
   public addColumn(): void {
     const label = this.columnLabelDraft().trim();
-    if (!label) {
-      this.error.set('Saisissez un nom pour la nouvelle colonne.');
-      return;
-    }
-    const column: QuoteColumn = {
+    if (!label) return;
+    const newCol: QuoteColumn = {
       id: generateSecureUUID(),
       label,
       type: this.columnTypeDraft(),
     };
-    this.columns.update((columns) => [...columns, column]);
-    this.rows.update((rows) => rows.map((row) => ({
-      ...row,
-      [column.id]: column.type === 'checkbox' ? false : null,
-    })));
-    if (column.type === 'amount' && !this.totalColumnId()) {
-      this.totalColumnId.set(column.id);
+    this.columns.update((cols) => [...cols, newCol]);
+    if (newCol.type === 'amount' && !this.totalColumnId()) {
+      this.totalColumnId.set(newCol.id);
     }
     this.columnLabelDraft.set('');
-    this.error.set(null);
   }
 
   public removeColumn(columnId: string): void {
-    if (this.columns().length <= 1) return;
-    this.columns.update((columns) => columns.filter((column) => column.id !== columnId));
-    this.rows.update((rows) => rows.map((row) => {
-      const remaining: QuoteRow = {};
-      for (const [id, value] of Object.entries(row)) {
-        if (id !== columnId) remaining[id] = value;
-      }
-      return remaining;
-    }));
+    this.columns.update((cols) => cols.filter((c) => c.id !== columnId));
+    this.rows.update((currentRows) =>
+      currentRows.map((r) => {
+        const copy = { ...r };
+        delete copy[columnId];
+        return copy;
+      })
+    );
     if (this.totalColumnId() === columnId) {
-      this.totalColumnId.set(this.columns().find((column) => column.type === 'amount')?.id || '');
+      const nextAmount = this.columns().find((c) => c.type === 'amount');
+      this.totalColumnId.set(nextAmount ? nextAmount.id : '');
     }
   }
 
   public addRow(): void {
-    const row = Object.fromEntries(this.columns().map((column) => [
-      column.id,
-      column.type === 'checkbox' ? false : null,
-    ])) as QuoteRow;
-    this.rows.update((rows) => [...rows, row]);
+    const emptyRow = this.createEmptyRow(this.columns());
+    this.rows.update((current) => [...current, emptyRow]);
   }
 
   public removeRow(rowIndex: number): void {
-    this.rows.update((rows) => rows.filter((_row, index) => index !== rowIndex));
+    this.rows.update((current) => current.filter((_, idx) => idx !== rowIndex));
+  }
+
+  public cellValue(row: QuoteRow, column: QuoteColumn): unknown {
+    return row[column.id] ?? '';
   }
 
   public updateCell(rowIndex: number, column: QuoteColumn, event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-    let value: string | number | boolean | null;
-    if (column.type === 'checkbox' && target instanceof HTMLInputElement) {
-      value = target.checked;
-    } else if (column.type === 'amount' || column.type === 'number') {
-      value = target.value.trim() === '' ? null : Number(target.value);
-    } else {
-      value = target.value || null;
+    const target = event.target as HTMLInputElement;
+    let val: unknown = target.value;
+    if (column.type === 'checkbox') {
+      val = target.checked;
+    } else if (column.type === 'number' || column.type === 'amount') {
+      val = target.value === '' ? 0 : Number(target.value);
     }
-    this.rows.update((rows) => rows.map((row, index) =>
-      index === rowIndex ? { ...row, [column.id]: value } : row
-    ));
-  }
-
-  public cellValue(row: QuoteRow, column: QuoteColumn): string | number | boolean {
-    const value = row[column.id];
-    return value === null || value === undefined ? '' : value;
-  }
-
-  public applyTemplate(templateId: string): void {
-    this.selectedTemplateId.set(templateId);
-    const template = this.quoteService.templates().find((candidate) => candidate.id === templateId);
-    if (!template) return;
-    this.columns.set(template.columns.map((column) => ({ ...column })));
-    this.totalColumnId.set(template.totalColumnId);
-    const row = Object.fromEntries(template.columns.map((column) => [
-      column.id,
-      column.type === 'checkbox' ? false : null,
-    ])) as QuoteRow;
-    this.rows.set([row]);
-    this.error.set(null);
-  }
-
-  public filteredProspects() {
-    const query = this.clientSearch().trim().toLocaleLowerCase('fr');
-    const prospects = this.quoteService.prospects();
-    if (!query) return prospects;
-    return prospects.filter((prospect) =>
-      `${prospect.companyName || prospect.name} ${prospect.contactName || ''}`.toLocaleLowerCase('fr').includes(query)
-    );
-  }
-
-  public async createProspect(): Promise<void> {
-    const companyName = this.clientSearch().trim();
-    if (companyName.length < 2) {
-      this.error.set('Saisissez le nom de la société (au moins 2 caractères).');
-      return;
-    }
-    this.isCreatingProspect.set(true);
-    this.error.set(null);
-    const result = await this.quoteService.createProspect({
-      companyName,
-      contactName: this.newProspectContact().trim() || this.seaContactName().trim() || undefined,
-      email: this.newProspectEmail().trim().toLowerCase() || this.seaEmail().trim().toLowerCase() || undefined,
-      phone: this.newProspectPhone().trim() || this.seaPhone().trim() || undefined,
-      ...(this.canAssign() && this.assignedTo() ? { assignedTo: this.assignedTo() } : {}),
+    this.rows.update((current) => {
+      const updated = [...current];
+      const targetRow = { ...updated[rowIndex] };
+      targetRow[column.id] = val as QuoteCellValue;
+      updated[rowIndex] = targetRow;
+      return updated;
     });
-    this.isCreatingProspect.set(false);
-    if (!result.success || !result.data) {
-      this.error.set(result.error || 'Impossible d’enregistrer le client.');
-      return;
+  }
+
+  private createEmptyRow(columns: QuoteColumn[]): QuoteRow {
+    const row: QuoteRow = { id: generateSecureUUID() };
+    for (const column of columns) {
+      if (column.type === 'amount' || column.type === 'number') {
+        row[column.id] = 0;
+      } else if (column.type === 'checkbox') {
+        row[column.id] = false;
+      } else {
+        row[column.id] = '';
+      }
     }
-    this.prospectId.set(result.data.id);
-    this.clientSearch.set(result.data.companyName || result.data.name);
-    this.showNewProspect.set(false);
-    this.newProspectContact.set('');
-    this.newProspectEmail.set('');
-    this.newProspectPhone.set('');
+    return row;
   }
 
   public async saveQuote(): Promise<void> {
-    if (this.isSaving()) return;
-
-    // Si aucun prospectId n'est sélectionné mais qu'un nom de société est saisi, on le crée
-    if (!this.prospectId() && this.clientSearch().trim().length >= 2) {
-      await this.createProspect();
+    if (!this.title().trim()) {
+      this.error.set('Veuillez renseigner un intitulé pour la cotation.');
+      return;
     }
-
     if (!this.prospectId()) {
-      this.error.set('Veuillez renseigner et sélectionner le nom de la société cliente.');
+      this.error.set('Veuillez sélectionner un prospect/client destinataire.');
       return;
     }
-    if (this.columns().length === 0 || !this.totalColumnOptions().some((column) => column.id === this.totalColumnId())) {
-      this.error.set('Configurez au moins une colonne de type montant pour calculer le total de la cotation.');
-      return;
-    }
-    if (this.rows().length === 0) {
-      this.error.set('Ajoutez au moins une ligne de chiffrage maritime.');
-      return;
-    }
-    if (this.canAssign() && !this.assignedTo()) {
-      this.error.set('Veuillez affecter un commercial à cette cotation maritime.');
-      return;
-    }
-    if (this.saveTemplate() && this.templateName().trim().length < 2) {
-      this.error.set('Indiquez un nom de modèle partagé ou décochez cette option.');
+    if (this.columns().length === 0) {
+      this.error.set('Veuillez définir au moins une colonne de chiffrage.');
       return;
     }
 
@@ -626,9 +766,9 @@ export class QuotesComponent {
       address: this.seaAddress().trim() || undefined,
       goodsType: this.seaGoodsType().trim() || undefined,
       goodsDescription: this.seaGoodsDescription().trim() || undefined,
-      grossWeightKg: this.seaGrossWeightKg(),
-      totalVolumeM3: this.seaTotalVolumeM3(),
-      packagesCount: this.seaPackagesCount(),
+      grossWeightKg: this.seaGrossWeightKg() ?? undefined,
+      totalVolumeM3: this.seaTotalVolumeM3() ?? undefined,
+      packagesCount: this.seaPackagesCount() ?? undefined,
       packagingType: this.seaPackagingType().trim() || undefined,
       portOfLoading: this.seaPortOfLoading().trim() || undefined,
       portOfDischarge: this.seaPortOfDischarge().trim() || undefined,
@@ -711,6 +851,11 @@ export class QuotesComponent {
       this.error.set(result.error || 'Impossible de supprimer la cotation.');
       return;
     }
+    this.selectedQuoteIds.update((prev) => {
+      const next = new Set(prev);
+      next.delete(quote.id);
+      return next;
+    });
     await this.load();
     this.feedback.set(`Cotation ${quote.quoteNumber} supprimée.`);
     setTimeout(() => this.feedback.set(null), 15000);
