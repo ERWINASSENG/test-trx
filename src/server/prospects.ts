@@ -199,9 +199,15 @@ export const listProspectsHandler = async (req: express.Request, res: express.Re
   const rawOffset = Number(req.query['offset']);
   const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? Math.min(rawOffset, 100000) : 0;
   const rawStatus = req.query['status'];
+  const rawProspectId = req.query['prospectId'];
   const search = typeof req.query['search'] === 'string'
     ? req.query['search'].replace(SEARCH_PATTERN, ' ').replace(/\s+/g, ' ').trim().slice(0, 100)
     : '';
+  if (rawProspectId !== undefined
+    && (typeof rawProspectId !== 'string' || !UUID_PATTERN.test(rawProspectId))) {
+    res.status(400).json({ error: 'La fiche prospect sélectionnée est invalide.' });
+    return;
+  }
 
   let query = adminClient
     .from('prospects')
@@ -209,6 +215,7 @@ export const listProspectsHandler = async (req: express.Request, res: express.Re
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
+  if (typeof rawProspectId === 'string') query = query.eq('id', rawProspectId);
   if (typeof rawStatus === 'string' && rawStatus) {
     if (!PROSPECT_STATUSES.includes(rawStatus as ProspectStatus)) {
       res.status(400).json({ error: 'Le filtre de statut est invalide.' });

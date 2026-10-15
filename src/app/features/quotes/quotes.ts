@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -58,7 +58,7 @@ interface QuoteStatusColumn {
 
 @Component({
   selector: 'app-quotes',
-  imports: [DatePipe, MatIconModule, ModuleControlPanel],
+  imports: [DatePipe, MatIconModule, ModuleControlPanel, RouterLink],
   templateUrl: './quotes.html',
   styleUrls: ['./quotes.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -78,6 +78,7 @@ export class QuotesComponent {
 
   public readonly view = signal<'list' | 'kanban'>('list');
   public readonly quoteSearch = signal('');
+  public readonly focusedQuoteId = signal<string | null>(null);
   public readonly statusFilter = signal<string>('');
   public readonly pageIndex = signal(0);
 
@@ -96,11 +97,15 @@ export class QuotesComponent {
   public readonly filteredQuotes = computed(() => {
     const query = this.quoteSearch().trim().toLocaleLowerCase('fr');
     const quotes = this.quoteService.quotes();
+    const quoteId = this.focusedQuoteId();
+    if (quoteId) return quotes.filter((quote) => quote.id === quoteId);
     if (!query) return quotes;
     return quotes.filter((quote) =>
       quote.quoteNumber.toLocaleLowerCase('fr').includes(query) ||
       quote.title.toLocaleLowerCase('fr').includes(query) ||
       (quote.prospectName && quote.prospectName.toLocaleLowerCase('fr').includes(query)) ||
+      (quote.contactName && quote.contactName.toLocaleLowerCase('fr').includes(query)) ||
+      (quote.dossierNumber && quote.dossierNumber.toLocaleLowerCase('fr').includes(query)) ||
       (quote.assignedToName && quote.assignedToName.toLocaleLowerCase('fr').includes(query)) ||
       (quote.seaFreight?.portOfLoading && quote.seaFreight.portOfLoading.toLocaleLowerCase('fr').includes(query)) ||
       (quote.seaFreight?.portOfDischarge && quote.seaFreight.portOfDischarge.toLocaleLowerCase('fr').includes(query))
@@ -147,6 +152,7 @@ export class QuotesComponent {
   // Informations générales
   public readonly clientSearch = signal('');
   public readonly prospectId = signal('');
+  public readonly contactId = signal('');
   public readonly opportunityId = signal<string | null>(null);
   public readonly assignedTo = signal('');
   public readonly title = signal('Cotation Fret Maritime Transimex');
@@ -215,16 +221,26 @@ export class QuotesComponent {
   public readonly isCreatingProspect = signal(false);
 
   public constructor() {
-    void this.load().then(() => {
-      const search = this.route.snapshot.queryParamMap.get('search');
-      if (search) this.searchQuotes(search);
-      const prospectId = this.linkedProspectId;
-      if (!prospectId || !this.linkedOpportunityId || !this.canCreate()) return;
+    this.focusedQuoteId.set(this.route.snapshot.queryParamMap.get('quoteId'));
+    const search = this.route.snapshot.queryParamMap.get('search');
+    if (search) this.searchQuotes(search);
+    void this.load().then(async () => {
+      const prospectId = this.route.snapshot.queryParamMap.get('prospectId') || this.linkedProspectId;
+      const opportunityId = this.route.snapshot.queryParamMap.get('opportunityId') || this.linkedOpportunityId;
+      const contactId = this.route.snapshot.queryParamMap.get('contactId');
+      if (!prospectId || !this.canCreate()) return;
       const prospect = this.quoteService.prospects().find((item) => item.id === prospectId);
-      if (!prospect) return;
+      if (!prospect) {
+        this.error.set('La société liée à la demande CRM est introuvable ou inaccessible.');
+        return;
+      }
       this.openCreate();
-      this.onProspectSelected(prospect.id);
-      this.opportunityId.set(this.linkedOpportunityId);
+      await this.onProspectSelected(prospect.id);
+      this.opportunityId.set(opportunityId || null);
+      if (contactId) {
+        if (this.quoteService.contacts().some((contact) => contact.id === contactId)) this.onContactSelected(contactId);
+        else this.error.set('Le contact demandé ne correspond pas à la société sélectionnée.');
+      }
     });
   }
 
@@ -289,8 +305,10 @@ export class QuotesComponent {
     this.clientSearch.set(val);
   }
 
-  public onProspectSelected(selectedId: string): void {
+  public async onProspectSelected(selectedId: string): Promise<void> {
     this.prospectId.set(selectedId);
+    this.contactId.set('');
+    await this.quoteService.loadContacts(selectedId);
     if (!selectedId) return;
     const prospect = this.quoteService.prospects().find((candidate) => candidate.id === selectedId);
     if (prospect) {
@@ -301,11 +319,21 @@ export class QuotesComponent {
     }
   }
 
+  public onContactSelected(selectedId: string): void {
+    this.contactId.set(selectedId);
+    const contact = this.quoteService.contacts().find((candidate) => candidate.id === selectedId);
+    if (!contact) return;
+    this.seaContactName.set(contact.fullName);
+    if (contact.phone) this.seaPhone.set(contact.phone);
+    if (contact.email) this.seaEmail.set(contact.email);
+  }
+
   public openCreate(): void {
     if (!this.canCreate()) return;
     this.editingId.set(null);
     this.error.set(null);
     this.prospectId.set('');
+    this.contactId.set('');
     this.opportunityId.set(this.linkedOpportunityId || null);
     this.clientSearch.set('');
     this.assignedTo.set(this.canAssign() ? '' : (this.currentUserId() || ''));
@@ -374,6 +402,8 @@ export class QuotesComponent {
     this.editingId.set(quote.id);
     this.error.set(null);
     this.prospectId.set(quote.prospectId);
+    this.contactId.set(quote.contactId || '');
+    void this.quoteService.loadContacts(quote.prospectId);
     this.opportunityId.set(quote.opportunityId || null);
     this.clientSearch.set(quote.prospectName || this.prospectLabel(quote.prospectId));
     this.assignedTo.set(quote.assignedTo || '');
@@ -632,6 +662,7 @@ export class QuotesComponent {
     const input: QuoteInput = {
       prospectId: this.prospectId(),
       ...(this.opportunityId() ? { opportunityId: this.opportunityId() } : {}),
+      contactId: this.contactId() || null,
       ...(this.assignedTo() ? { assignedTo: this.assignedTo() } : {}),
       title: this.title().trim(),
       currency: this.currency().trim().toUpperCase(),

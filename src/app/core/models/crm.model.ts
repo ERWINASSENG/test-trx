@@ -1,3 +1,5 @@
+import type { QuoteStatus } from './quote.model';
+
 export const CRM_OPPORTUNITY_STAGES = [
   'new',
   'qualified',
@@ -59,8 +61,11 @@ export interface CrmOpportunity {
   notes: string | null;
   client: CrmClient;
   contacts: CrmContact[];
+  quoteId: string | null;
   quoteNumber: string | null;
+  quoteStatus: QuoteStatus | null;
   dossierNumber: string | null;
+  dossierId: string | null;
 }
 
 export interface CrmOpportunityInput {
@@ -83,6 +88,7 @@ export interface CrmOpportunityInput {
 export interface CrmActivityInput {
   prospectId: string;
   opportunityId?: string;
+  contactId?: string;
   activityType: CrmActivityType;
   title: string;
   dueAt: string | null;
@@ -105,6 +111,7 @@ export interface CrmActivity {
   id: string;
   prospectId: string;
   opportunityId: string | null;
+  contactId: string | null;
   assignedTo: string | null;
   activityType: CrmActivityType;
   title: string;
@@ -112,6 +119,7 @@ export interface CrmActivity {
   status: 'pending' | 'completed' | 'cancelled';
   notes: string | null;
   clientName: string;
+  contactName: string | null;
 }
 
 export interface CrmCampaignFilters {

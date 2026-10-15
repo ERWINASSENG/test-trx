@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signa
 import { A11yModule } from '@angular/cdk/a11y';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
+import { ActivatedRoute } from '@angular/router';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { ProspectService } from '../../core/services/prospect.service';
 import { CreateProspectInput, Prospect, ProspectStatus } from '../../core/models/prospect.model';
@@ -22,6 +23,7 @@ export type SortDirection = 'asc' | 'desc';
 export class ProspectsComponent {
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -161,7 +163,12 @@ export class ProspectsComponent {
         this.feedbackTimeout = null;
       }
     });
-    void this.loadPage();
+    const prospectId = this.route.snapshot.queryParamMap.get('prospectId') || '';
+    if (prospectId) {
+      void this.prospectService.loadProspects({ limit: 1, offset: 0, prospectId });
+    } else {
+      void this.loadPage();
+    }
     void this.prospectService.loadAssignees();
   }
 

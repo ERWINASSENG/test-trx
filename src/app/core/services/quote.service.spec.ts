@@ -60,4 +60,36 @@ describe('QuoteService', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('loads shared contacts for the selected prospect', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        contacts: [{
+          id: 'contact-1',
+          prospect_id: 'prospect-1',
+          full_name: 'Amina Client',
+          job_title: 'Achats',
+          email: 'amina@example.com',
+          phone: '+237600000000',
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(service.loadContacts('prospect-1')).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/quotes/contacts?prospectId=prospect-1',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(service.contacts()).toEqual([{
+      id: 'contact-1',
+      prospectId: 'prospect-1',
+      fullName: 'Amina Client',
+      jobTitle: 'Achats',
+      email: 'amina@example.com',
+      phone: '+237600000000',
+    }]);
+  });
 });

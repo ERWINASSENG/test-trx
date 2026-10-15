@@ -37,6 +37,7 @@ import {
   deleteQuoteTemplateHandler,
   listQuoteAssigneesHandler,
   listQuoteProspectsHandler,
+  listQuoteContactsHandler,
   listQuoteTemplatesHandler,
   listQuotesHandler,
   resolveQuoteCollectionContext,
@@ -1205,6 +1206,7 @@ app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermissio
 // Module Cotations : l'API applique en plus les règles de propriété des commerciaux.
 app.get('/api/quotes/assignees', requireAuth, requirePermission('quotes.assign'), listQuoteAssigneesHandler);
 app.get('/api/quotes/prospects', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteProspectsHandler);
+app.get('/api/quotes/contacts', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteContactsHandler);
 app.post('/api/quotes/prospects', requireAuth, requirePermission('quotes.create', resolveQuoteCollectionContext), createQuoteProspectHandler);
 app.get('/api/quotes/templates', requireAuth, requirePermission('quotes.templates.read'), listQuoteTemplatesHandler);
 app.post('/api/quotes/templates', requireAuth, requirePermission('quotes.templates.create'), createQuoteTemplateHandler);

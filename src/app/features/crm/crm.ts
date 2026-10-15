@@ -14,6 +14,7 @@ import {
   CrmOpportunityStage,
   CrmTransportMode,
 } from '../../core/models/crm.model';
+import type { QuoteStatus } from '../../core/models/quote.model';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { CrmService } from '../../core/services/crm.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
@@ -45,6 +46,14 @@ const STAGE_LABELS: Record<CrmOpportunityStage, string> = {
   negotiation: 'Négociation',
   won: 'Gagné',
   lost: 'Perdu',
+};
+
+const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  draft: 'Brouillon',
+  sent: 'Envoyée',
+  accepted: 'Acceptée',
+  rejected: 'Refusée',
+  expired: 'Expirée',
 };
 
 const CLIENT_STATUS_LABELS: Record<string, string> = {
@@ -109,6 +118,8 @@ export class CrmComponent {
   public readonly formError = signal<string | null>(null);
   public readonly isSaving = signal(false);
   public readonly selectedClientId = signal<string | null>(null);
+  public readonly focusedContactId = signal<string | null>(null);
+  public readonly focusedOpportunityId = signal<string | null>(null);
   public readonly dialogOpportunityId = signal<string | null>(null);
   public readonly opportunityDraft = signal<OpportunityDraft>({ ...EMPTY_OPPORTUNITY });
   public readonly clientDraft = signal({
@@ -124,6 +135,7 @@ export class CrmComponent {
   public readonly activityDraft = signal({
     prospectId: '',
     opportunityId: '',
+    contactId: '',
     activityType: 'call' as CrmActivityType,
     title: '',
     dueAt: '',
@@ -146,6 +158,8 @@ export class CrmComponent {
   public readonly filteredOpportunities = computed(() => {
     const query = this.search().trim().toLocaleLowerCase('fr');
     const rows = this.crmService.opportunities();
+    const opportunityId = this.focusedOpportunityId();
+    if (opportunityId) return rows.filter((row) => row.id === opportunityId);
     if (!query) return rows;
     return rows.filter((row) => [
       row.title,
@@ -175,7 +189,7 @@ export class CrmComponent {
     const activities = this.crmService.activities();
     if (!query) return activities;
     return activities.filter((activity) =>
-      `${activity.title} ${activity.clientName} ${this.activityLabel(activity.activityType)}`
+      `${activity.title} ${activity.clientName} ${activity.contactName || ''} ${this.activityLabel(activity.activityType)}`
         .toLocaleLowerCase('fr').includes(query)
     );
   });
@@ -238,6 +252,9 @@ export class CrmComponent {
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const requestedTab = params.get('view');
       const nextTab = this.tabs.find((item) => item.id === requestedTab)?.id ?? 'pipeline';
+      this.focusedOpportunityId.set(params.get('opportunityId'));
+      this.selectedClientId.set(params.get('prospectId'));
+      this.focusedContactId.set(params.get('contactId'));
       if (this.tab() !== nextTab) {
         this.tab.set(nextTab);
         this.search.set('');
@@ -274,7 +291,9 @@ export class CrmComponent {
   }
 
   public setActivityField(key: keyof ReturnType<typeof this.activityDraft>, value: string): void {
-    this.activityDraft.update((draft) => ({ ...draft, [key]: value }));
+    this.activityDraft.update((draft) => key === 'prospectId'
+      ? { ...draft, prospectId: value, opportunityId: '', contactId: '' }
+      : { ...draft, [key]: value });
   }
 
   public setCampaignField(key: 'name' | 'startsAt' | 'endsAt' | 'countries' | 'notes', value: string): void {
@@ -291,6 +310,10 @@ export class CrmComponent {
 
   public stageLabel(stage: CrmOpportunityStage): string {
     return STAGE_LABELS[stage];
+  }
+
+  public quoteStatusLabel(status: QuoteStatus): string {
+    return QUOTE_STATUS_LABELS[status];
   }
 
   public stageClass(stage: CrmOpportunityStage): string {
@@ -355,6 +378,7 @@ export class CrmComponent {
     this.activityDraft.set({
       prospectId: opportunity?.prospectId || this.crmService.clients()[0].id,
       opportunityId: opportunity?.id || '',
+      contactId: '',
       activityType: 'call',
       title: '',
       dueAt: '',
@@ -480,6 +504,7 @@ export class CrmComponent {
     const result = await this.save(() => this.crmService.createActivity({
       prospectId: draft.prospectId,
       ...(draft.opportunityId ? { opportunityId: draft.opportunityId } : {}),
+      ...(draft.contactId ? { contactId: draft.contactId } : {}),
       activityType: draft.activityType,
       title: draft.title,
       dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,

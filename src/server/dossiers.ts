@@ -29,14 +29,21 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
   const search = typeof req.query['search'] === 'string'
     ? req.query['search'].trim().slice(0, MAX_DOSSIER_NUMBER_LENGTH)
     : '';
+  const rawDossierId = req.query['dossierId'];
+  if (rawDossierId !== undefined
+    && (typeof rawDossierId !== 'string' || !UUID_PATTERN.test(rawDossierId))) {
+    res.status(400).json({ error: 'Le dossier sélectionné est invalide.' });
+    return;
+  }
 
   let query = adminClient
     .from('dossiers')
-    .select('id, no_dossier, prospect_id, client, statut, description, created_by, created_at, updated_at', { count: 'exact' })
+    .select('id, no_dossier, prospect_id, opportunity_id, client, statut, description, created_by, created_at, updated_at', { count: 'exact' })
     .order('no_dossier', { ascending: true })
     .range(offset, offset + limit - 1);
 
   if (search) query = query.ilike('no_dossier', `%${search.replace(/[%_,]/g, '')}%`);
+  if (typeof rawDossierId === 'string') query = query.eq('id', rawDossierId);
 
   const { data, error, count } = await query;
   if (error) {
@@ -49,6 +56,7 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     dossiers: (data || []).map((row) => ({
       id: String(row.id),
       ...(typeof row.prospect_id === 'string' ? { prospectId: row.prospect_id } : {}),
+      ...(typeof row.opportunity_id === 'string' ? { opportunityId: row.opportunity_id } : {}),
       noDossier: String(row.no_dossier),
       client: typeof row.client === 'string' ? row.client : null,
       statut: String(row.statut),

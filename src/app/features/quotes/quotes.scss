@@ -288,6 +288,13 @@ textarea:focus {
 .quotes-table tbody tr:last-child td { border-bottom: 0; }
 .quotes-table tbody tr:hover { background: var(--quote-surface-hover); }
 .reference-cell { color: var(--quote-accent); font-weight: 700; }
+.quote-related-link {
+  display: inline-block;
+  color: var(--quote-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.quotes-table td small { display: block; margin-top: 3px; }
 .amount-cell {
   color: var(--quote-text);
   font-weight: 700;

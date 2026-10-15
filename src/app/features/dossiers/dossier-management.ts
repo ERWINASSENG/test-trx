@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import { A11yModule } from '@angular/cdk/a11y';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { DossierService } from '../../core/services/dossier.service';
 import { Dossier } from '../../core/models/dossier.model';
@@ -17,7 +18,7 @@ interface DossierStatusColumn {
 
 @Component({
   selector: 'app-dossier-management',
-  imports: [A11yModule, ReactiveFormsModule, MatIconModule, ModuleControlPanel, ModuleDataTable],
+  imports: [A11yModule, ReactiveFormsModule, MatIconModule, ModuleControlPanel, ModuleDataTable, RouterLink],
   templateUrl: './dossier-management.html',
   styleUrl: './dossier-management.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,9 +27,11 @@ export class DossierManagementComponent {
   public readonly dossierService = inject(DossierService);
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
+  private readonly route = inject(ActivatedRoute);
 
   public readonly searchDraft = signal('');
   public readonly searchTerm = signal('');
+  public readonly dossierId = signal<string | null>(null);
   public readonly prospectSearch = signal('');
   public readonly view = signal<'list' | 'kanban'>('list');
   public readonly offset = signal(0);
@@ -73,15 +76,22 @@ export class DossierManagementComponent {
     effect(() => {
       if (this.dossierService.consumeCreateModalRequest()) this.openCreate();
     });
+    const search = this.route.snapshot.queryParamMap.get('search') || '';
+    const dossierId = this.route.snapshot.queryParamMap.get('dossierId');
+    this.dossierId.set(dossierId);
+    this.searchDraft.set(search);
+    this.searchTerm.set(search);
     void this.loadPage();
     if (this.canLinkProspect()) void this.loadProspectOptions();
   }
 
   public async loadPage(): Promise<void> {
+    const dossierId = this.dossierId();
     await this.dossierService.loadDossiers({
       limit: this.pageSize,
       offset: this.offset(),
       search: this.searchTerm(),
+      ...(dossierId ? { dossierId } : {}),
     });
   }
 

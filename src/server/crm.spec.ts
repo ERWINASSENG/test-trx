@@ -1,10 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
+  validateCrmActivityPayload,
   validateCrmClientPayload,
   validateCrmOpportunityPayload,
 } from './crm';
 
 describe('CRM payload validation', () => {
+  it('accepts a contact tied to an activity and maps it to the shared contact id', () => {
+    const result = validateCrmActivityPayload({
+      prospectId: '123e4567-e89b-42d3-a456-426614174000',
+      contactId: '123e4567-e89b-42d3-a456-426614174001',
+      activityType: 'call',
+      title: 'Appeler le contact',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({
+      prospect_id: '123e4567-e89b-42d3-a456-426614174000',
+      contact_id: '123e4567-e89b-42d3-a456-426614174001',
+    });
+  });
+
+  it('rejects an invalid contact id for an activity', () => {
+    expect(validateCrmActivityPayload({
+      prospectId: '123e4567-e89b-42d3-a456-426614174000',
+      contactId: 'invalid',
+      activityType: 'call',
+      title: 'Appeler le contact',
+    }).error).toBe('Le contact associé à l’activité est invalide.');
+  });
+
   it('normalizes company details before inserting a shared client record', () => {
     const result = validateCrmClientPayload({
       companyName: '  Transmex  ',

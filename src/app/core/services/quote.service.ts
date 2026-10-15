@@ -2,6 +2,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   QuoteAssignee,
   QuoteColumn,
+  QuoteContact,
   QuoteRow,
   QuoteStatus,
   QuoteTemplate,
@@ -14,6 +15,7 @@ import { AuthService } from './auth.service';
 export interface QuoteInput {
   prospectId: string;
   opportunityId?: string | null;
+  contactId?: string | null;
   assignedTo?: string;
   title: string;
   currency: string;
@@ -39,6 +41,7 @@ export class QuoteService {
   private readonly getCache = new Map<string, { cachedAt: number; data: unknown }>();
   private readonly _quotes = signal<SalesQuote[]>([]);
   private readonly _prospects = signal<Prospect[]>([]);
+  private readonly _contacts = signal<QuoteContact[]>([]);
   private readonly _assignees = signal<QuoteAssignee[]>([]);
   private readonly _templates = signal<QuoteTemplate[]>([]);
   private readonly _isLoading = signal(false);
@@ -46,6 +49,7 @@ export class QuoteService {
 
   public readonly quotes = computed(() => this._quotes());
   public readonly prospects = computed(() => this._prospects());
+  public readonly contacts = computed(() => this._contacts());
   public readonly assignees = computed(() => this._assignees());
   public readonly templates = computed(() => this._templates());
   public readonly isLoading = computed(() => this._isLoading());
@@ -120,11 +124,40 @@ export class QuoteService {
       this._error.set(result.error || 'Impossible de charger les commerciaux.');
       return false;
     }
+
     this._assignees.set((result.data.assignees || []).map((row) => ({
       id: String(row['id'] ?? ''),
       firstName: String(row['first_name'] ?? ''),
       lastName: String(row['last_name'] ?? ''),
       email: String(row['email'] ?? ''),
+    })));
+    this._error.set(null);
+    return true;
+  }
+
+  public async loadContacts(prospectId: string): Promise<boolean> {
+    this.resetForAccountChange();
+    if (!prospectId) {
+      this._contacts.set([]);
+      return true;
+    }
+    const query = new URLSearchParams({ prospectId });
+    const result = await this.request<{ contacts: Record<string, unknown>[] }>(
+      `/api/quotes/contacts?${query.toString()}`
+    );
+    if (!this.isCurrentDataUser()) return false;
+    if (!result.success || !result.data) {
+      this._contacts.set([]);
+      this._error.set(result.error || 'Impossible de charger les contacts du client.');
+      return false;
+    }
+    this._contacts.set((result.data.contacts || []).map((row) => ({
+      id: String(row['id'] ?? ''),
+      prospectId: String(row['prospect_id'] ?? ''),
+      fullName: String(row['full_name'] ?? ''),
+      jobTitle: typeof row['job_title'] === 'string' ? row['job_title'] : null,
+      email: typeof row['email'] === 'string' ? row['email'] : null,
+      phone: typeof row['phone'] === 'string' ? row['phone'] : null,
     })));
     this._error.set(null);
     return true;
@@ -223,6 +256,7 @@ export class QuoteService {
     this.dataUserId = userId;
     this._quotes.set([]);
     this._prospects.set([]);
+    this._contacts.set([]);
     this._assignees.set([]);
     this._templates.set([]);
     this._error.set(null);
@@ -285,6 +319,12 @@ export class QuoteService {
       prospectId: String(row['prospectId'] ?? row['prospect_id'] ?? ''),
       opportunityId: typeof row['opportunityId'] === 'string' ? row['opportunityId']
         : typeof row['opportunity_id'] === 'string' ? row['opportunity_id'] : null,
+      contactId: typeof row['contactId'] === 'string' ? row['contactId']
+        : typeof row['contact_id'] === 'string' ? row['contact_id'] : null,
+      contactName: typeof row['contactName'] === 'string' ? row['contactName'] : null,
+      opportunityTitle: typeof row['opportunityTitle'] === 'string' ? row['opportunityTitle'] : null,
+      dossierId: typeof row['dossierId'] === 'string' ? row['dossierId'] : null,
+      dossierNumber: typeof row['dossierNumber'] === 'string' ? row['dossierNumber'] : null,
       prospectName: String(row['prospectName'] ?? ''),
       assignedTo: typeof row['assignedTo'] === 'string' ? row['assignedTo']
         : typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,

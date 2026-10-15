@@ -1,6 +1,7 @@
 export interface Dossier {
   id: string;
   prospectId: string | null;
+  opportunityId?: string | null;
   noDossier: string;
   client: string | null;
   statut: string;

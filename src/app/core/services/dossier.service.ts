@@ -6,6 +6,7 @@ export interface DossierPageRequest {
   limit?: number;
   offset?: number;
   search?: string;
+  dossierId?: string;
 }
 
 export type CreateDossierInput = Pick<Dossier, 'noDossier'> &
@@ -15,6 +16,7 @@ export interface DossierApiResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  preserveData?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -54,12 +56,15 @@ export class DossierService {
       offset: String(params.offset ?? 0),
     });
     if (params.search?.trim()) query.set('search', params.search.trim());
+    if (params.dossierId) query.set('dossierId', params.dossierId);
 
     const result = await this.request<{ dossiers: Record<string, unknown>[]; total: number }>(`?${query}`);
     if (!this.isCurrentDataUser()) return false;
     if (!result.success || !result.data) {
-      this._dossiers.set([]);
-      this._total.set(0);
+      if (!result.preserveData) {
+        this._dossiers.set([]);
+        this._total.set(0);
+      }
       this._error.set(result.error || 'Impossible de charger les dossiers.');
       return false;
     }
@@ -82,8 +87,10 @@ export class DossierService {
       );
       if (!this.isCurrentDataUser()) return false;
       if (!result.success || !result.data) {
-        this._dossiers.set([]);
-        this._total.set(0);
+        if (!result.preserveData) {
+          this._dossiers.set([]);
+          this._total.set(0);
+        }
         this._error.set(result.error || 'Impossible de charger les dossiers.');
         return false;
       }
@@ -206,7 +213,11 @@ export class DossierService {
         if (refresh.status === 'refreshed') {
           response = await sendRequest(refresh.accessToken);
         } else if (refresh.status === 'unavailable') {
-          return { success: false, error: 'La vérification de session est temporairement indisponible. Réessayez.' };
+          return {
+            success: false,
+            error: 'La vérification de session est temporairement indisponible. Réessayez.',
+            preserveData: true,
+          };
         }
       }
 
@@ -238,6 +249,9 @@ export class DossierService {
       prospectId: typeof row['prospectId'] === 'string'
         ? row['prospectId']
         : typeof row['prospect_id'] === 'string' ? row['prospect_id'] : null,
+      opportunityId: typeof row['opportunityId'] === 'string'
+        ? row['opportunityId']
+        : typeof row['opportunity_id'] === 'string' ? row['opportunity_id'] : null,
       noDossier: String(row['noDossier'] ?? row['no_dossier'] ?? ''),
       client: typeof row['client'] === 'string' ? row['client'] : null,
       statut: String(row['statut'] ?? 'ouvert'),

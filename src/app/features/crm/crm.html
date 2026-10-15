@@ -107,14 +107,19 @@
                 </div>
                 <div class="card-links">
                   @if (opportunity.quoteNumber) {
-                    <span class="linked-record">{{ opportunity.quoteNumber }}</span>
+                    <a class="linked-record" [routerLink]="['/quotes']"
+                      [queryParams]="{ quoteId: opportunity.quoteId }">{{ opportunity.quoteNumber }}</a>
+                    @if (opportunity.quoteStatus) {
+                      <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                    }
                   } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
                     <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
                       Créer une cotation
                     </a>
                   }
                   @if (opportunity.dossierNumber) {
-                    <span class="linked-record">{{ opportunity.dossierNumber }}</span>
+                    <a class="linked-record" [routerLink]="['/dossiers']"
+                      [queryParams]="{ dossierId: opportunity.dossierId }">{{ opportunity.dossierNumber }}</a>
                   } @else if (opportunity.stage === 'won' && canCreate()) {
                     <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
                       Créer le dossier
@@ -155,7 +160,9 @@
         @if (selectedClient(); as client) {
           <article class="client-profile">
             <header>
-              <div><p class="crm-eyebrow">Fiche société unique</p><h2>{{ client.companyName || client.name }}</h2></div>
+              <div><p class="crm-eyebrow">Fiche société unique</p><h2>{{ client.companyName || client.name }}</h2>
+                <a class="text-link" [routerLink]="['/prospects']" [queryParams]="{ prospectId: client.id }">Ouvrir la fiche Contact</a>
+              </div>
               <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
             </header>
             <dl class="client-details">
@@ -170,7 +177,7 @@
             @if (selectedClientContacts().length > 0) {
               <div class="contact-list">
                 @for (contact of selectedClientContacts(); track contact.id) {
-                  <div class="contact-row"><div><strong>{{ contact.fullName }}</strong><span>{{ contact.jobTitle || 'Fonction non précisée' }}</span></div><div class="contact-reach"><span>{{ contact.email || 'E-mail non renseigné' }}</span><span>{{ contact.phone || 'Téléphone non renseigné' }}</span></div></div>
+                  <div class="contact-row" [class.focused-contact]="focusedContactId() === contact.id"><div><strong>{{ contact.fullName }}</strong><span>{{ contact.jobTitle || 'Fonction non précisée' }}</span></div><div class="contact-reach"><span>{{ contact.email || 'E-mail non renseigné' }}</span><span>{{ contact.phone || 'Téléphone non renseigné' }}</span></div></div>
                 }
               </div>
             } @else {
@@ -195,7 +202,7 @@
         <div class="activity-list">
           @for (activity of visibleActivities(); track activity.id) {
             <article class="activity-row" [class.is-complete]="activity.status === 'completed'">
-              <div class="activity-main"><div><span class="activity-kind">{{ activityLabel(activity.activityType) }}</span><span class="activity-client">{{ activity.clientName }}</span></div><h3>{{ activity.title }}</h3>@if (activity.notes) { <p>{{ activity.notes }}</p> }</div>
+              <div class="activity-main"><div><span class="activity-kind">{{ activityLabel(activity.activityType) }}</span><span class="activity-client">{{ activity.clientName }}</span>@if (activity.contactName) { <span class="activity-client"> · {{ activity.contactName }}</span> }</div><h3>{{ activity.title }}</h3>@if (activity.notes) { <p>{{ activity.notes }}</p> }</div>
               <div class="activity-due"><span>{{ activity.dueAt ? (activity.dueAt | date:'dd/MM/yyyy à HH:mm') : 'Sans échéance' }}</span><small>{{ activity.status === 'completed' ? 'Terminée' : 'À faire' }}</small></div>
               @if (canUpdate() && activity.status === 'pending') {
                 <button type="button" class="complete-action" (click)="completeActivity(activity)">Terminer</button>
@@ -276,6 +283,7 @@
       @if (dialog() === 'activity') {
         <form class="dialog-form" (ngSubmit)="saveActivity()">
           <label>Société *<select name="activityProspect" required [ngModel]="activityDraft().prospectId" (ngModelChange)="setActivityField('prospectId', $event)"><option value="">Choisir</option>@for (client of crmService.clients(); track client.id) { <option [value]="client.id">{{ client.companyName || client.name }}</option> }</select></label>
+          <label>Contact<select name="activityContact" [ngModel]="activityDraft().contactId" (ngModelChange)="setActivityField('contactId', $event)"><option value="">Contact principal / société entière</option>@for (contact of crmService.contacts(); track contact.id) { @if (contact.prospectId === activityDraft().prospectId) { <option [value]="contact.id">{{ contact.fullName }}@if (contact.jobTitle) { · {{ contact.jobTitle }} }</option> } }</select></label>
           <label>Opportunité<select name="activityOpportunity" [ngModel]="activityDraft().opportunityId" (ngModelChange)="setActivityField('opportunityId', $event)"><option value="">Aucune opportunité liée</option>@for (opportunity of crmService.opportunities(); track opportunity.id) { @if (opportunity.prospectId === activityDraft().prospectId) { <option [value]="opportunity.id">{{ opportunity.title }}</option> } }</select></label>
           <div class="form-two"><label>Type<select name="activityType" [ngModel]="activityDraft().activityType" (ngModelChange)="setActivityField('activityType', $event)">@for (item of activityTypes; track item[0]) { <option [value]="item[0]">{{ item[1] }}</option> }</select></label><label>Échéance<input name="dueAt" type="datetime-local" [ngModel]="activityDraft().dueAt" (ngModelChange)="setActivityField('dueAt', $event)" /></label></div>
           <label>Objet du rappel *<input name="activityTitle" required maxlength="200" placeholder="Ex. Confirmer l’origine de l’expédition" [ngModel]="activityDraft().title" (ngModelChange)="setActivityField('title', $event)" /></label>

@@ -1,8 +1,10 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { ProspectService } from '../../core/services/prospect.service';
+import { Prospect } from '../../core/models/prospect.model';
 import { ProspectsComponent } from './prospects';
 
 const mockAssignee = {
@@ -33,7 +35,7 @@ const prospect = {
 
 describe('ProspectsComponent', () => {
   const mockProspectService = {
-    prospects: signal<typeof prospect[]>([]),
+    prospects: signal<Prospect[]>([]),
     assignees: signal([mockAssignee]),
     total: signal(0),
     isLoading: signal(false),
@@ -52,6 +54,7 @@ describe('ProspectsComponent', () => {
     TestBed.configureTestingModule({
       imports: [ProspectsComponent],
       providers: [
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
         { provide: ProspectService, useValue: mockProspectService },
         { provide: AccessControlService, useValue: mockAccessControl },
       ],
@@ -66,6 +69,27 @@ describe('ProspectsComponent', () => {
     expect(fixture.componentInstance).toBeTruthy();
     expect(mockProspectService.loadProspects).toHaveBeenCalled();
     expect(mockProspectService.loadAssignees).toHaveBeenCalled();
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  it('charge la fiche prospect exacte demandée par le CRM', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [ProspectsComponent],
+      providers: [
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ prospectId: prospect.id }) } } },
+        { provide: ProspectService, useValue: mockProspectService },
+        { provide: AccessControlService, useValue: mockAccessControl },
+      ],
+    });
+    const fixture = TestBed.createComponent(ProspectsComponent);
+    fixture.detectChanges();
+    expect(mockProspectService.loadProspects).toHaveBeenCalledWith({
+      limit: 1,
+      offset: 0,
+      prospectId: prospect.id,
+    });
     fixture.destroy();
     TestBed.resetTestingModule();
   });
@@ -182,7 +206,7 @@ describe('ProspectsComponent', () => {
       sector: 'BTP',
       phone: '+237 611111111',
       email: 'alpha@example.com',
-      status: 'won' as const,
+      status: 'converted' as const,
       assignedTo: mockAssignee.id,
       createdAt: '2026-10-01T00:00:00.000Z',
     };

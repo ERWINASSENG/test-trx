@@ -259,7 +259,7 @@ export const validateCrmOpportunityPayload = (
 
 export const validateCrmActivityPayload = (value: unknown): { data?: JsonRecord; error?: string } => {
   if (!isRecord(value)) return { error: 'Les informations de l’activité sont invalides.' };
-  const allowed = new Set(['prospectId', 'opportunityId', 'activityType', 'title', 'dueAt', 'notes']);
+  const allowed = new Set(['prospectId', 'opportunityId', 'contactId', 'activityType', 'title', 'dueAt', 'notes']);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     return { error: 'La demande contient un champ non autorisé.' };
   }
@@ -282,6 +282,12 @@ export const validateCrmActivityPayload = (value: unknown): { data?: JsonRecord;
       return { error: 'L’opportunité associée à l’activité est invalide.' };
     }
     data['opportunity_id'] = value['opportunityId'];
+  }
+  if (value['contactId'] !== undefined && value['contactId'] !== null && value['contactId'] !== '') {
+    if (typeof value['contactId'] !== 'string' || !UUID_PATTERN.test(value['contactId'])) {
+      return { error: 'Le contact associé à l’activité est invalide.' };
+    }
+    data['contact_id'] = value['contactId'];
   }
   if (value['dueAt'] !== undefined && value['dueAt'] !== null && value['dueAt'] !== '') {
     if (typeof value['dueAt'] !== 'string' || !Number.isFinite(Date.parse(value['dueAt']))) {
@@ -473,10 +479,10 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
       ? admin.from('prospect_contacts').select('*').in('prospect_id', clientIds).order('is_primary', { ascending: false }).order('full_name')
       : Promise.resolve({ data: [], error: null }),
     visibleOpportunityRows.length
-      ? admin.from('dossiers').select('opportunity_id, no_dossier').in('opportunity_id', visibleOpportunityRows.map((row) => String(row.id)))
+      ? admin.from('dossiers').select('id, opportunity_id, no_dossier').in('opportunity_id', visibleOpportunityRows.map((row) => String(row.id)))
       : Promise.resolve({ data: [], error: null }),
     visibleOpportunityRows.length
-      ? admin.from('sales_quotes').select('opportunity_id, quote_number, status, created_at')
+      ? admin.from('sales_quotes').select('id, opportunity_id, quote_number, status, created_at')
         .in('opportunity_id', visibleOpportunityRows.map((row) => String(row.id)))
         .order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
@@ -491,6 +497,7 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     return;
   }
   const contacts = (contactsResult.data || []).map((row) => contactFromRow(row));
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
   const contactsByClient = new Map<string, typeof contacts>();
   for (const contact of contacts) {
     const list = contactsByClient.get(contact.prospectId) || [];
@@ -499,12 +506,16 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   }
   const dossierByOpportunity = new Map((dossierResult.data || []).map((row) => [
     String(row.opportunity_id),
-    String(row.no_dossier),
+    { id: String(row.id), number: String(row.no_dossier) },
   ]));
-  const quoteByOpportunity = new Map<string, string>();
+  const quoteByOpportunity = new Map<string, { id: string; number: string; status: string }>();
   for (const quote of quoteResult.data || []) {
     if (!quoteByOpportunity.has(String(quote.opportunity_id))) {
-      quoteByOpportunity.set(String(quote.opportunity_id), String(quote.quote_number));
+      quoteByOpportunity.set(String(quote.opportunity_id), {
+        id: String(quote.id),
+        number: String(quote.quote_number),
+        status: String(quote.status),
+      });
     }
   }
   const profileNames = new Map((profilesResult.data || []).map((profile) => [
@@ -538,8 +549,11 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
       notes: typeof row.notes === 'string' ? row.notes : null,
       client,
       contacts: contactsByClient.get(prospectId) || [],
-      quoteNumber: quoteByOpportunity.get(String(row.id)) || null,
-      dossierNumber: dossierByOpportunity.get(String(row.id)) || null,
+      quoteId: quoteByOpportunity.get(String(row.id))?.id || null,
+      quoteNumber: quoteByOpportunity.get(String(row.id))?.number || null,
+      quoteStatus: quoteByOpportunity.get(String(row.id))?.status || null,
+      dossierNumber: dossierByOpportunity.get(String(row.id))?.number || null,
+      dossierId: dossierByOpportunity.get(String(row.id))?.id || null,
     }];
   });
   const activities = visibleActivityRows.map((row) => ({
@@ -555,6 +569,8 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     clientName: clientById.get(String(row.prospect_id))?.companyName
       || clientById.get(String(row.prospect_id))?.name
       || 'Client',
+    contactId: typeof row.contact_id === 'string' ? row.contact_id : null,
+    contactName: typeof row.contact_id === 'string' ? contactById.get(row.contact_id)?.fullName || null : null,
   }));
   const campaignIds = (campaignsResult.data || []).map((row) => String(row.id));
   const recipientResult = campaignIds.length
@@ -915,20 +931,38 @@ export const createCrmActivityHandler = async (req: express.Request, res: expres
     databaseFailure(res, clientError);
     return;
   }
-  if (!client || (!ownsRecord(client, actor) && !teamManage)) {
-    res.status(client ? 403 : 404).json({ error: client ? 'Vous ne pouvez créer une activité pour ce client.' : 'Client introuvable.' });
+  if (!client) {
+    res.status(404).json({ error: 'Client introuvable.' });
     return;
   }
   if (validated.data['opportunity_id']) {
     const { data: opportunity, error } = await admin.from('sales_opportunities')
-      .select('id, prospect_id, assigned_to').eq('id', String(validated.data['opportunity_id'])).maybeSingle();
+      .select('id, prospect_id, assigned_to, created_by').eq('id', String(validated.data['opportunity_id'])).maybeSingle();
     if (error) {
       databaseFailure(res, error);
       return;
     }
-    if (!opportunity || opportunity.prospect_id !== prospectId
-      || (opportunity.assigned_to !== actor.id && !teamManage)) {
-      res.status(400).json({ error: 'L’opportunité ne correspond pas au client sélectionné ou n’est pas accessible.' });
+    if (!opportunity || opportunity.prospect_id !== prospectId) {
+      res.status(400).json({ error: 'L’opportunité ne correspond pas au client sélectionné.' });
+      return;
+    }
+    if (!ownsRecord(opportunity, actor) && !teamManage) {
+      res.status(403).json({ error: 'Vous ne pouvez créer une activité que pour une opportunité qui vous est attribuée.' });
+      return;
+    }
+  } else if (!ownsRecord(client, actor) && !teamManage) {
+    res.status(403).json({ error: 'Vous ne pouvez créer une activité pour ce client.' });
+    return;
+  }
+  if (validated.data['contact_id']) {
+    const { data: contact, error } = await admin.from('prospect_contacts')
+      .select('id, prospect_id').eq('id', String(validated.data['contact_id'])).maybeSingle();
+    if (error) {
+      databaseFailure(res, error);
+      return;
+    }
+    if (!contact || contact.prospect_id !== prospectId) {
+      res.status(400).json({ error: 'Le contact ne correspond pas à la société sélectionnée.' });
       return;
     }
   }

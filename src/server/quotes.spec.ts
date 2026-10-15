@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { validateQuotePayload } from './quotes';
+import { isQuoteStatusTransitionAllowed, validateQuotePayload } from './quotes';
 
 const prospectId = '54a1d1d1-297d-4bad-8c36-4c864c3526dc';
+const contactId = '76543210-297d-4bad-8c36-4c864c3526dc';
 const descriptionId = 'c64db547-5cf7-42e0-aa59-66b100c4a2c1';
 const amountId = '91a8723a-f935-45f5-b932-afd16c5d38d7';
 
@@ -42,11 +43,12 @@ const validPayload = () => ({
 
 describe('validateQuotePayload', () => {
   it('accepte une cotation avec colonnes personnalisées et une date valide', () => {
-    const result = validateQuotePayload(validPayload());
+    const result = validateQuotePayload({ ...validPayload(), contactId });
 
     expect(result.error).toBeUndefined();
     expect(result.data).toMatchObject({
       prospectId,
+      contactId,
       title: 'Transport de marchandises',
       currency: 'XAF',
       totalColumnId: amountId,
@@ -71,6 +73,7 @@ describe('validateQuotePayload', () => {
         },
       },
     });
+
     expect(result.data?.rows).toHaveLength(2);
   });
 
@@ -84,13 +87,18 @@ describe('validateQuotePayload', () => {
     expect(validateQuotePayload(invalidDetails).error).toContain('nombre positif');
 
     const unsupportedDetails = validPayload();
-    (unsupportedDetails.seaFreight as Record<string, unknown>).unexpected = true;
+    (unsupportedDetails.seaFreight as Record<string, unknown>)['unexpected'] = true;
     expect(validateQuotePayload(unsupportedDetails).error).toContain('champ non autorisé');
 
     const accepted = validateQuotePayload(validPayload());
     expect(accepted.data?.seaFreight?.serviceTypes?.fcl).toBe(false);
     expect(accepted.data?.seaFreight?.availableDocuments?.commercialInvoice).toBe(false);
     expect(accepted.data?.seaFreight?.additionalServices?.tracking).toBe(false);
+  });
+
+  it('rejette un contact qui n’est pas un identifiant UUID', () => {
+    expect(validateQuotePayload({ ...validPayload(), contactId: 'invalid' }).error)
+      .toBe('Le contact sélectionné est invalide.');
   });
 
   it('exige une colonne montant pour calculer le total', () => {
@@ -123,5 +131,14 @@ describe('validateQuotePayload', () => {
       ...payload,
       rows: [{ ...payload.rows[0], 'unknown-column': 'interdit' }],
     }).error).toContain('colonne inconnue');
+  });
+});
+
+describe('isQuoteStatusTransitionAllowed', () => {
+  it('keeps an accepted quote terminal while allowing other quote progressions', () => {
+    expect(isQuoteStatusTransitionAllowed('accepted', 'draft')).toBe(false);
+    expect(isQuoteStatusTransitionAllowed('accepted', 'accepted')).toBe(true);
+    expect(isQuoteStatusTransitionAllowed('sent', 'accepted')).toBe(true);
+    expect(isQuoteStatusTransitionAllowed('sent', undefined)).toBe(true);
   });
 });

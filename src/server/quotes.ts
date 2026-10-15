@@ -23,6 +23,7 @@ const MAX_ROWS = 200;
 interface QuoteMutation {
   prospectId?: string;
   opportunityId?: string | null;
+  contactId?: string | null;
   assignedTo?: string | null;
   title?: string;
   currency?: string;
@@ -306,7 +307,7 @@ export function validateQuotePayload(
 ): { data?: QuoteMutation; error?: string } {
   if (!isRecord(value)) return { error: 'Le corps de la demande est invalide.' };
   const allowed = new Set([
-    'prospectId', 'opportunityId', 'assignedTo', 'title', 'currency', 'columns', 'rows',
+    'prospectId', 'opportunityId', 'contactId', 'assignedTo', 'title', 'currency', 'columns', 'rows',
     'totalColumnId', 'status', 'validUntil', 'seaFreight',
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
@@ -326,6 +327,13 @@ export function validateQuotePayload(
     else if (typeof value['opportunityId'] === 'string' && UUID_PATTERN.test(value['opportunityId'])) {
       data.opportunityId = value['opportunityId'];
     } else return { error: 'L’opportunité sélectionnée est invalide.' };
+  }
+
+  if (Object.hasOwn(value, 'contactId')) {
+    if (value['contactId'] === null || value['contactId'] === '') data.contactId = null;
+    else if (typeof value['contactId'] === 'string' && UUID_PATTERN.test(value['contactId'])) {
+      data.contactId = value['contactId'];
+    } else return { error: 'Le contact sélectionné est invalide.' };
   }
 
   if (Object.hasOwn(value, 'assignedTo')) {
@@ -405,10 +413,14 @@ export function validateQuotePayload(
   return { data };
 }
 
+export const isQuoteStatusTransitionAllowed = (current: QuoteStatus, next: QuoteStatus | undefined): boolean =>
+  current !== 'accepted' || next === undefined || next === 'accepted';
+
 const mapQuoteToDatabase = (data: QuoteMutation): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   if (data.prospectId !== undefined) result['prospect_id'] = data.prospectId;
   if (data.opportunityId !== undefined) result['opportunity_id'] = data.opportunityId;
+  if (data.contactId !== undefined) result['contact_id'] = data.contactId;
   if (data.assignedTo !== undefined) result['assigned_to'] = data.assignedTo;
   if (data.title !== undefined) result['title'] = data.title;
   if (data.currency !== undefined) result['currency'] = data.currency;
@@ -476,6 +488,10 @@ const sendQuoteDatabaseError = (res: express.Response, error: { code?: string; m
     res.status(400).json({ error: 'Le client ou le commercial sélectionné n’existe pas.' });
     return;
   }
+  if (error.code === '23514') {
+    res.status(409).json({ error: 'Cette modification contredit une règle métier de la cotation.' });
+    return;
+  }
   console.error('[QUOTES] Erreur base de données:', error.message || error.code || 'inconnue');
   res.status(500).json({ error: 'Impossible de traiter la cotation pour le moment.' });
 };
@@ -485,6 +501,7 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   quoteNumber: row['quote_number'],
   prospectId: row['prospect_id'],
   opportunityId: row['opportunity_id'] ?? null,
+  contactId: row['contact_id'] ?? null,
   prospectName,
   assignedTo: row['assigned_to'],
   createdBy: row['created_by'],
@@ -558,6 +575,43 @@ export const listQuoteProspectsHandler = async (req: express.Request, res: expre
     return;
   }
   res.json({ prospects: data || [] });
+};
+
+export const listQuoteContactsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  const prospectId = req.query['prospectId'];
+  if (!adminClient || !actor?.id) {
+    if (!actor?.id) res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (typeof prospectId !== 'string' || !UUID_PATTERN.test(prospectId)) {
+    res.status(400).json({ error: 'La société sélectionnée est invalide.' });
+    return;
+  }
+  let prospectQuery = adminClient.from('prospects').select('id, assigned_to').eq('id', prospectId);
+  if (!await actorCanManageAllQuotes(actor.id)) {
+    prospectQuery = prospectQuery.or(`assigned_to.eq.${actor.id},assigned_to.is.null`);
+  }
+  const { data: prospect, error: prospectError } = await prospectQuery.maybeSingle();
+  if (prospectError) {
+    sendQuoteDatabaseError(res, prospectError);
+    return;
+  }
+  if (!prospect) {
+    res.status(404).json({ error: 'Société introuvable ou non accessible.' });
+    return;
+  }
+  const { data, error } = await adminClient.from('prospect_contacts')
+    .select('id, prospect_id, full_name, job_title, email, phone')
+    .eq('prospect_id', prospectId)
+    .order('is_primary', { ascending: false })
+    .order('full_name');
+  if (error) {
+    sendQuoteDatabaseError(res, error);
+    return;
+  }
+  res.json({ contacts: data || [] });
 };
 
 export const createQuoteProspectHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -669,12 +723,24 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
   const assigneeIds = [...new Set(rows
     .map((row) => row.assigned_to)
     .filter((id): id is string => typeof id === 'string'))];
-  const [prospectsResult, assigneesResult] = await Promise.all([
+  const contactIds = [...new Set(rows
+    .map((row) => row.contact_id)
+    .filter((id): id is string => typeof id === 'string'))];
+  const opportunityIds = [...new Set(rows
+    .map((row) => row.opportunity_id)
+    .filter((id): id is string => typeof id === 'string'))];
+  const [prospectsResult, assigneesResult, contactsResult, opportunitiesResult] = await Promise.all([
     prospectIds.length
       ? adminClient.from('prospects').select('id, name, company_name').in('id', prospectIds)
       : Promise.resolve({ data: [], error: null }),
     assigneeIds.length
       ? adminClient.from('profiles').select('id, first_name, last_name').in('id', assigneeIds)
+      : Promise.resolve({ data: [], error: null }),
+    contactIds.length
+      ? adminClient.from('prospect_contacts').select('id, full_name').in('id', contactIds)
+      : Promise.resolve({ data: [], error: null }),
+    opportunityIds.length
+      ? adminClient.from('sales_opportunities').select('id, title').in('id', opportunityIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   const { data: prospects, error: prospectsError } = prospectsResult;
@@ -695,9 +761,39 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     String(assignee.id),
     `${assignee.first_name} ${assignee.last_name}`.trim(),
   ]));
+  const { data: contacts, error: contactsError } = contactsResult;
+  if (contactsError) {
+    sendQuoteDatabaseError(res, contactsError);
+    return;
+  }
+  const contactNames = new Map((contacts || []).map((contact) => [String(contact.id), String(contact.full_name)]));
+  const { data: opportunities, error: opportunitiesError } = opportunitiesResult;
+  if (opportunitiesError) {
+    sendQuoteDatabaseError(res, opportunitiesError);
+    return;
+  }
+  const opportunityTitles = new Map((opportunities || []).map((opportunity) => [
+    String(opportunity.id),
+    String(opportunity.title),
+  ]));
+  const { data: dossiers, error: dossiersError } = opportunityIds.length
+    ? await adminClient.from('dossiers').select('id, opportunity_id, no_dossier').in('opportunity_id', opportunityIds)
+    : { data: [], error: null };
+  if (dossiersError) {
+    sendQuoteDatabaseError(res, dossiersError);
+    return;
+  }
+  const dossierByOpportunity = new Map((dossiers || []).map((dossier) => [
+    String(dossier.opportunity_id),
+    { id: String(dossier.id), number: String(dossier.no_dossier) },
+  ]));
   res.json({ quotes: rows.map((row) => ({
     ...toQuoteResponse(row, prospectNames.get(String(row.prospect_id))),
     assignedToName: typeof row.assigned_to === 'string' ? assigneeNames.get(row.assigned_to) || null : null,
+    contactName: typeof row.contact_id === 'string' ? contactNames.get(row.contact_id) || null : null,
+    opportunityTitle: typeof row.opportunity_id === 'string' ? opportunityTitles.get(row.opportunity_id) || null : null,
+    dossierId: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.id || null : null,
+    dossierNumber: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.number || null : null,
   })) });
 };
 
@@ -758,6 +854,28 @@ export const createQuoteHandler = async (req: express.Request, res: express.Resp
       res.status(403).json({ error: 'Vous ne pouvez créer une cotation que pour une opportunité qui vous est attribuée.' });
       return;
     }
+    const { data: existingQuote, error: existingQuoteError } = await adminClient.from('sales_quotes')
+      .select('id').eq('opportunity_id', validated.data.opportunityId).limit(1).maybeSingle();
+    if (existingQuoteError) {
+      sendQuoteDatabaseError(res, existingQuoteError);
+      return;
+    }
+    if (existingQuote) {
+      res.status(409).json({ error: 'Cette opportunité possède déjà une cotation. Ouvrez-la depuis le CRM pour la modifier.' });
+      return;
+    }
+  }
+  if (validated.data.contactId) {
+    const { data: contact, error: contactError } = await adminClient.from('prospect_contacts')
+      .select('id, prospect_id').eq('id', validated.data.contactId).maybeSingle();
+    if (contactError) {
+      sendQuoteDatabaseError(res, contactError);
+      return;
+    }
+    if (!contact || contact.prospect_id !== validated.data.prospectId) {
+      res.status(400).json({ error: 'Le contact ne correspond pas au client sélectionné.' });
+      return;
+    }
   }
   const { data, error } = await adminClient.from('sales_quotes').insert({
     ...mapQuoteToDatabase(validated.data),
@@ -765,6 +883,10 @@ export const createQuoteHandler = async (req: express.Request, res: express.Resp
     created_by: actor.id,
   }).select('*').single();
   if (error || !data) {
+    if (error?.code === '23505') {
+      res.status(409).json({ error: 'Cette opportunité possède déjà une cotation.' });
+      return;
+    }
     sendQuoteDatabaseError(res, error || { message: 'quote insert returned no row' });
     return;
   }
@@ -800,6 +922,14 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
     return;
   }
   const nextData = { ...validated.data };
+  if (!isQuoteStatusTransitionAllowed(current.status as QuoteStatus, nextData.status)) {
+    res.status(409).json({ error: 'Une cotation acceptée ne peut pas revenir à un autre statut.' });
+    return;
+  }
+  if (nextData.prospectId && nextData.prospectId !== current.prospect_id
+    && nextData.opportunityId === undefined) {
+    nextData.opportunityId = null;
+  }
   if (nextData.status === 'expired') {
     const validUntil = nextData.validUntil ?? current.valid_until;
     if (typeof validUntil !== 'string' || validUntil >= new Date().toISOString().slice(0, 10)) {
@@ -823,11 +953,31 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
   } else if (!canManageAll) {
     delete nextData.prospectId;
   }
+  if (nextData.prospectId && nextData.prospectId !== current.prospect_id
+    && nextData.contactId === undefined) {
+    nextData.contactId = null;
+  }
+  if (nextData.contactId) {
+    const { data: contact, error: contactError } = await adminClient.from('prospect_contacts')
+      .select('id, prospect_id').eq('id', nextData.contactId).maybeSingle();
+    if (contactError) {
+      sendQuoteDatabaseError(res, contactError);
+      return;
+    }
+    if (!contact || contact.prospect_id !== (nextData.prospectId || current.prospect_id)) {
+      res.status(400).json({ error: 'Le contact ne correspond pas au client sélectionné.' });
+      return;
+    }
+  }
   if (nextData.opportunityId !== undefined) {
     const canManageCrmTeam = await hasPermission(actor.id, 'crm.team.manage', undefined);
     if (nextData.opportunityId === null) {
+      if (current.opportunity_id && nextData.prospectId === current.prospect_id) {
+        res.status(409).json({ error: 'Une cotation doit rester liée à son opportunité CRM.' });
+        return;
+      }
       if (current.opportunity_id && !canManageCrmTeam) {
-        res.status(403).json({ error: 'Vous ne pouvez pas retirer le lien CRM de cette cotation.' });
+        res.status(403).json({ error: 'Vous ne pouvez changer le client lié à cette opportunité.' });
         return;
       }
     } else {
@@ -843,6 +993,16 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
       }
       if (opportunity.assigned_to !== actor.id && !canManageCrmTeam) {
         res.status(403).json({ error: 'Vous ne pouvez lier que vos propres opportunités à cette cotation.' });
+        return;
+      }
+      const { data: existingQuote, error: existingQuoteError } = await adminClient.from('sales_quotes')
+        .select('id').eq('opportunity_id', nextData.opportunityId).neq('id', id).limit(1).maybeSingle();
+      if (existingQuoteError) {
+        sendQuoteDatabaseError(res, existingQuoteError);
+        return;
+      }
+      if (existingQuote) {
+        res.status(409).json({ error: 'Cette opportunité possède déjà une autre cotation.' });
         return;
       }
     }
@@ -867,6 +1027,10 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
   const { data, error } = await adminClient.from('sales_quotes').update(mapQuoteToDatabase(nextData))
     .eq('id', id).select('*').single();
   if (error || !data) {
+    if (error?.code === '23505') {
+      res.status(409).json({ error: 'Cette opportunité possède déjà une autre cotation.' });
+      return;
+    }
     sendQuoteDatabaseError(res, error || { message: 'quote update returned no row' });
     return;
   }

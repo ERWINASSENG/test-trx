@@ -69,6 +69,11 @@ export interface SalesQuote {
   quoteNumber: string;
   prospectId: string;
   opportunityId?: string | null;
+  contactId?: string | null;
+  contactName?: string | null;
+  opportunityTitle?: string | null;
+  dossierId?: string | null;
+  dossierNumber?: string | null;
   prospectName: string;
   assignedTo: string | null;
   assignedToName: string | null;
@@ -84,6 +89,15 @@ export interface SalesQuote {
   seaFreight?: SeaFreightDetails;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface QuoteContact {
+  id: string;
+  prospectId: string;
+  fullName: string;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
 }
 
 export interface QuoteTemplate {

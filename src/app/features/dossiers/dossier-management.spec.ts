@@ -2,9 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
+import { AuthService } from '../../core/services/auth.service';
 import { DossierService } from '../../core/services/dossier.service';
 import { ProspectService } from '../../core/services/prospect.service';
 import { DossierManagementComponent } from './dossier-management';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 
 describe('DossierManagementComponent', () => {
   let fixture: ComponentFixture<DossierManagementComponent>;
@@ -24,6 +26,17 @@ describe('DossierManagementComponent', () => {
     await TestBed.configureTestingModule({
       imports: [DossierManagementComponent],
       providers: [
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
+        provideRouter([]),
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: () => ({ id: 'test-user' }),
+            token: () => 'test-token',
+            handleUnauthorizedSession: vi.fn(),
+            refreshAccessTokenAfterUnauthorized: vi.fn().mockResolvedValue({ status: 'invalid' }),
+          },
+        },
         {
           provide: AccessControlService,
           useValue: {

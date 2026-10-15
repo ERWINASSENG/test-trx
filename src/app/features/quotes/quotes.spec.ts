@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
 import { QuoteService } from '../../core/services/quote.service';
-import { QuoteAssignee, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
+import { QuoteAssignee, QuoteContact, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
 import { Prospect } from '../../core/models/prospect.model';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { QuotesComponent } from './quotes';
 
 describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
@@ -15,6 +15,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
 
   const mockQuotes = signal<SalesQuote[]>([]);
   const mockProspects = signal<Prospect[]>([]);
+  const mockContacts = signal<QuoteContact[]>([]);
   const mockAssignees = signal<QuoteAssignee[]>([]);
   const mockTemplates = signal<QuoteTemplate[]>([]);
   const mockLoading = signal<boolean>(false);
@@ -24,12 +25,14 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   const mockQuoteService = {
     quotes: mockQuotes,
     prospects: mockProspects,
+    contacts: mockContacts,
     assignees: mockAssignees,
     templates: mockTemplates,
     isLoading: mockLoading,
     error: mockError,
     loadQuotes: vi.fn().mockResolvedValue(true),
     loadProspects: vi.fn().mockResolvedValue(true),
+    loadContacts: vi.fn().mockResolvedValue(true),
     loadAssignees: vi.fn().mockResolvedValue(true),
     loadTemplates: vi.fn().mockResolvedValue(true),
     createQuote: vi.fn().mockResolvedValue({ success: true, data: { id: 'created-quote-1' } }),
@@ -67,6 +70,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   beforeEach(async () => {
     mockRoute.snapshot.queryParamMap.get.mockReturnValue(null);
     mockQuotes.set([]);
+    mockContacts.set([]);
     mockProspects.set([
       {
         id: 'prospect-abc',
@@ -94,6 +98,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     await TestBed.configureTestingModule({
       imports: [QuotesComponent],
       providers: [
+        provideRouter([]),
         { provide: QuoteService, useValue: mockQuoteService },
         { provide: AccessControlService, useValue: mockAccessControl },
         { provide: AuthService, useValue: mockAuthService },
@@ -127,6 +132,32 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.quoteSearch()).toBe('COT-2026-000001');
   });
 
+  it('prépare une cotation pour la société et l’opportunité passées par le CRM', async () => {
+    fixture.destroy();
+    mockContacts.set([{
+      id: 'contact-crm',
+      prospectId: 'prospect-abc',
+      fullName: 'Amina Nono',
+      jobTitle: 'Achats',
+      email: 'amina@example.com',
+      phone: '+237 600 00 00 00',
+    }]);
+    mockRoute.snapshot.queryParamMap.get = vi.fn((key: string) => ({
+      prospectId: 'prospect-abc',
+      opportunityId: 'opportunity-abc',
+      contactId: 'contact-crm',
+    }[key] || null));
+    fixture = TestBed.createComponent(QuotesComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(component.isEditorOpen()).toBe(true));
+
+    expect(component.error()).toBeNull();
+    expect(component.prospectId()).toBe('prospect-abc');
+    expect(component.opportunityId()).toBe('opportunity-abc');
+    expect(component.contactId()).toBe('contact-crm');
+  });
+
   it('devrait ouvrir une fiche vierge avec toutes les cases décochées par défaut', () => {
     component.openCreate();
     fixture.detectChanges();
@@ -155,15 +186,32 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.columns().length).toBeGreaterThanOrEqual(3);
   });
 
-  it('devrait pré-remplir les coordonnées de contact lors de la sélection d’un client existant', () => {
+  it('devrait pré-remplir les coordonnées de contact lors de la sélection d’un client existant', async () => {
     component.openCreate();
-    component.onProspectSelected('prospect-abc');
+    await component.onProspectSelected('prospect-abc');
 
     expect(component.prospectId()).toBe('prospect-abc');
     expect(component.clientSearch()).toBe('Cameroun Trading SA');
     expect(component.seaContactName()).toBe('M. Jean Nono');
     expect(component.seaPhone()).toBe('+237 699 00 11 22');
     expect(component.seaEmail()).toBe('trading@camnet.cm');
+  });
+
+  it('associe un contact CRM partagé à la cotation et reprend ses coordonnées', async () => {
+    mockContacts.set([{
+      id: 'contact-abc',
+      prospectId: 'prospect-abc',
+      fullName: 'Amina Nono',
+      jobTitle: 'Achats',
+      email: 'amina@example.com',
+      phone: '+237 600 00 00 00',
+    }]);
+    component.onContactSelected('contact-abc');
+
+    expect(component.contactId()).toBe('contact-abc');
+    expect(component.seaContactName()).toBe('Amina Nono');
+    expect(component.seaEmail()).toBe('amina@example.com');
+    expect(component.seaPhone()).toBe('+237 600 00 00 00');
   });
 
   it('devrait calculer dynamiquement le montant total de la cotation à partir des lignes chiffrées', () => {
@@ -187,8 +235,18 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   });
 
   it('devrait construire le payload complet seaFreight et appeler createQuote lors de l’enregistrement', async () => {
+    mockContacts.set([{
+      id: 'contact-abc',
+      prospectId: 'prospect-abc',
+      fullName: 'Amina Nono',
+      jobTitle: 'Achats',
+      email: 'amina@example.com',
+      phone: '+237 600 00 00 00',
+    }]);
     component.openCreate();
-    component.onProspectSelected('prospect-abc');
+    await component.onProspectSelected('prospect-abc');
+    component.onContactSelected('contact-abc');
+    component.assignedTo.set('usr-agent-01');
 
     // Saisie des détails d'expédition et d'itinéraire
     component.seaGoodsType.set('Produits agricoles');
@@ -200,6 +258,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     component.seaPortOfLoading.set('Douala Port');
     component.seaPortOfDischarge.set('Anvers');
     component.seaIncoterm.set('CIF');
+    component.serviceFcl.set(true);
 
     // Chiffrage
     const amountCol = component.columns().find((c) => c.type === 'amount')!;
@@ -212,6 +271,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(mockQuoteService.createQuote).toHaveBeenCalledTimes(1);
     const passedInput = mockQuoteService.createQuote.mock.calls[0][0];
     expect(passedInput.prospectId).toBe('prospect-abc');
+    expect(passedInput.contactId).toBe('contact-abc');
     expect(passedInput.seaFreight).toBeDefined();
     expect(passedInput.seaFreight.goodsType).toBe('Produits agricoles');
     expect(passedInput.seaFreight.grossWeightKg).toBe(24000);

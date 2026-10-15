@@ -19,7 +19,12 @@ describe('DossierService', () => {
         DossierService,
         {
           provide: AuthService,
-          useValue: { token: () => token, handleUnauthorizedSession, refreshAccessTokenAfterUnauthorized },
+          useValue: {
+            currentUser: () => ({ id: 'user-1' }),
+            token: () => token,
+            handleUnauthorizedSession,
+            refreshAccessTokenAfterUnauthorized,
+          },
         },
       ],
     });
@@ -53,6 +58,7 @@ describe('DossierService', () => {
           id: 'dossier-1',
           noDossier: 'DOS-001',
           prospectId: 'prospect-1',
+          opportunityId: 'opportunity-1',
           client: 'Client test',
           statut: 'ouvert',
           description: 'Suivi commercial',
@@ -64,15 +70,21 @@ describe('DossierService', () => {
       }),
     });
 
-    await expect(service.loadDossiers({ limit: 10, offset: 5, search: 'DOS-' })).resolves.toBe(true);
+    await expect(service.loadDossiers({
+      limit: 10,
+      offset: 5,
+      search: 'DOS-',
+      dossierId: 'dossier-1',
+    })).resolves.toBe(true);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/dossiers?limit=10&offset=5&search=DOS-');
+    expect(url).toBe('/api/dossiers?limit=10&offset=5&search=DOS-&dossierId=dossier-1');
     expect(init.headers).toMatchObject({ Authorization: 'Bearer mock-jwt-token' });
     expect(service.dossiers()[0]).toMatchObject({
       id: 'dossier-1',
       noDossier: 'DOS-001',
       prospectId: 'prospect-1',
+      opportunityId: 'opportunity-1',
       statut: 'ouvert',
     });
     expect(service.total()).toBe(12);

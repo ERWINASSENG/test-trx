@@ -95,7 +95,16 @@
         <tbody moduleTableBody>
           @for (dossier of dossierService.dossiers(); track dossier.id) {
             <tr>
-              <td><strong>{{ dossier.noDossier }}</strong></td>
+              <td>
+                <strong>{{ dossier.noDossier }}</strong>
+                @if (dossier.opportunityId) {
+                  <a class="text-xs font-semibold text-[#0b5ed7] underline hover:text-[#084db1] dark:text-[#8cc2ff]"
+                    [routerLink]="['/crm-commercial']"
+                    [queryParams]="{ view: 'pipeline', opportunityId: dossier.opportunityId }">
+                    Voir l’opportunité CRM
+                  </a>
+                }
+              </td>
               <td>{{ dossier.client || (dossier.prospectId ? 'Prospect associé' : '—') }}</td>
               <td><span class="status-pill">{{ dossier.statut }}</span></td>
               <td>{{ dossier.description || '—' }}</td>
@@ -123,6 +132,13 @@
                 <h3>{{ dossier.noDossier }}</h3>
                 <span class="status-pill">{{ dossier.statut }}</span>
               </div>
+              @if (dossier.opportunityId) {
+                <a class="text-xs font-semibold text-[#0b5ed7] underline hover:text-[#084db1] dark:text-[#8cc2ff]"
+                  [routerLink]="['/crm-commercial']"
+                  [queryParams]="{ view: 'pipeline', opportunityId: dossier.opportunityId }">
+                  Voir l’opportunité CRM
+                </a>
+              }
               <p>{{ dossier.client || (dossier.prospectId ? 'Prospect associé' : 'Client non renseigné') }}</p>
               @if (dossier.description) {
                 <p>{{ dossier.description }}</p>

@@ -380,6 +380,16 @@
   color: var(--crm-subtle);
 }
 
+.quote-status {
+  border: 1px solid var(--crm-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--crm-ink);
+  background: var(--crm-surface);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
 .text-link,
 .icon-text-action {
   border: 0;
@@ -596,6 +606,10 @@
   padding: 10px;
   color: var(--crm-text);
   background: var(--crm-surface);
+}
+.contact-row.focused-contact {
+  border-color: var(--crm-accent, #0b5ed7);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--crm-accent, #0b5ed7) 24%, transparent);
 }
 
 .contact-row > div,

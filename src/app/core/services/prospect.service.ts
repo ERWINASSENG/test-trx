@@ -7,6 +7,7 @@ export interface ProspectPageRequest {
   offset?: number;
   search?: string;
   status?: ProspectStatus | '';
+  prospectId?: string;
 }
 
 export interface ProspectApiResult<T> {
@@ -47,6 +48,7 @@ export class ProspectService {
     });
     if (params.search?.trim()) query.set('search', params.search.trim());
     if (params.status) query.set('status', params.status);
+    if (params.prospectId) query.set('prospectId', params.prospectId);
 
     const result = await this.request<{ prospects: Record<string, unknown>[]; total: number }>(`?${query}`);
     if (!this.isCurrentDataUser()) return false;

@@ -110,7 +110,24 @@
             @for (quote of displayedQuotes(); track quote.id) {
               <tr>
                 <td class="reference-cell">{{ quote.quoteNumber }}</td>
-                <td>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</td>
+                <td>
+                  <a class="quote-related-link" [routerLink]="['/prospects']"
+                    [queryParams]="{ prospectId: quote.prospectId }">{{ quote.prospectName || prospectLabel(quote.prospectId) }}</a>
+                  @if (quote.contactId && quote.contactName) {
+                    <small><a class="quote-related-link" [routerLink]="['/crm-commercial']"
+                      [queryParams]="{ view: 'clients', prospectId: quote.prospectId, contactId: quote.contactId }">Contact : {{ quote.contactName }}</a></small>
+                  }
+                  @if (quote.opportunityId) {
+                    <small><a class="quote-related-link" [routerLink]="['/crm-commercial']"
+                      [queryParams]="{ view: 'pipeline', opportunityId: quote.opportunityId }">
+                      CRM : {{ quote.opportunityTitle || 'Ouvrir l’opportunité' }}
+                    </a></small>
+                  }
+                  @if (quote.dossierId && quote.dossierNumber) {
+                    <small><a class="quote-related-link" [routerLink]="['/dossiers']"
+                      [queryParams]="{ dossierId: quote.dossierId }">Dossier : {{ quote.dossierNumber }}</a></small>
+                  }
+                </td>
                 <td>
                   <strong>{{ quote.title }}</strong>
                   @if (quote.seaFreight?.portOfLoading || quote.seaFreight?.portOfDischarge) {
@@ -155,7 +172,22 @@
                   <span [class]="'status-pill ' + statusClass(quote.status)">{{ statusLabel(quote.status) }}</span>
                 </div>
                 <p class="quote-kanban-title">{{ quote.title }}</p>
-                <p>{{ quote.prospectName || prospectLabel(quote.prospectId) }}</p>
+                <p><a class="quote-related-link" [routerLink]="['/prospects']"
+                  [queryParams]="{ prospectId: quote.prospectId }">{{ quote.prospectName || prospectLabel(quote.prospectId) }}</a></p>
+                @if (quote.contactId && quote.contactName) {
+                  <p><a class="quote-related-link" [routerLink]="['/crm-commercial']"
+                    [queryParams]="{ view: 'clients', prospectId: quote.prospectId, contactId: quote.contactId }">Contact : {{ quote.contactName }}</a></p>
+                }
+                @if (quote.opportunityId) {
+                  <a class="quote-related-link" [routerLink]="['/crm-commercial']"
+                    [queryParams]="{ view: 'pipeline', opportunityId: quote.opportunityId }">
+                    CRM : {{ quote.opportunityTitle || 'Ouvrir l’opportunité' }}
+                  </a>
+                }
+                @if (quote.dossierId && quote.dossierNumber) {
+                  <a class="quote-related-link" [routerLink]="['/dossiers']"
+                    [queryParams]="{ dossierId: quote.dossierId }">Dossier : {{ quote.dossierNumber }}</a>
+                }
                 @if (quote.seaFreight?.portOfLoading || quote.seaFreight?.portOfDischarge) {
                   <small class="route-hint">
                     {{ quote.seaFreight?.portOfLoading || 'Départ' }} → {{ quote.seaFreight?.portOfDischarge || 'Arrivée' }}
@@ -329,6 +361,21 @@
             @if (showNewProspect()) {
               <div class="col-span-2 new-prospect-panel">
                 <div class="new-prospect-grid">
+                  <div class="odoo-field">
+                    <label for="field-contact-record">Contact enregistré / Shared contact</label>
+                    <select id="field-contact-record" [value]="contactId()" [disabled]="!prospectId()"
+                      (change)="onContactSelected($any($event.target).value)">
+                      <option value="">Aucun contact lié</option>
+                      @for (contact of quoteService.contacts(); track contact.id) {
+                        <option [value]="contact.id">{{ contact.fullName }}@if (contact.jobTitle) { · {{ contact.jobTitle }} }</option>
+                      }
+                    </select>
+                    @if (prospectId()) {
+                      <a class="quote-related-link" [routerLink]="['/prospects']"
+                        [queryParams]="{ prospectId: prospectId() }">Ouvrir la fiche partagée Contacts</a>
+                    }
+                  </div>
+
                   <div class="odoo-field">
                     <label for="new-prop-contact">Contact direct</label>
                     <input id="new-prop-contact" type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" placeholder="Nom complet" />
