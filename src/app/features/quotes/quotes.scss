@@ -54,6 +54,21 @@
 :host-context(html.dark),
 :host-context(.dark),
 :host-context([data-theme="dark"]) {
+  --quote-bg: var(--app-bg, #1e2227);
+  --quote-surface: var(--app-surface, #2b2f33);
+  --quote-surface-muted: var(--app-surface-muted, #24282d);
+  --quote-surface-hover: var(--app-surface-hover, #343a40);
+  --quote-border: var(--app-border, #383f45);
+  --quote-separator: var(--app-border, #383f45);
+  --quote-text: var(--app-text, #f8fafc);
+  --quote-muted: var(--app-text-muted, #cbd5e1);
+  --quote-subtle: var(--app-text-subtle, #94a3b8);
+
+  --odoo-banner-bg: var(--app-surface-muted, #24282d);
+  --odoo-banner-text: var(--app-text, #f8fafc);
+  --odoo-sheet-bg: var(--app-surface, #2b2f33);
+  --odoo-border: var(--app-border, #383f45);
+
   --quote-info-bg: rgba(56, 189, 248, .12);
   --quote-info-text: #bae6fd;
   --quote-success-bg: rgba(34, 197, 94, .12);
