@@ -14,6 +14,63 @@ export type CanonicalAccessRoleKey = typeof CANONICAL_ACCESS_ROLE_KEYS[number];
 export const isCanonicalAccessRoleKey = (roleKey: string): roleKey is CanonicalAccessRoleKey =>
   (CANONICAL_ACCESS_ROLE_KEYS as readonly string[]).includes(roleKey);
 
+async function isRoleAlreadySynced(
+  adminClient: SupabaseClient,
+  userId: string,
+  roleKey: string,
+  assignmentSource: 'admin' | 'legacy_profile'
+): Promise<boolean> {
+  const [roleResult, profileResult, assignmentsResult] = await Promise.all([
+    adminClient
+      .from('access_roles')
+      .select('id')
+      .eq('role_key', roleKey)
+      .eq('is_active', true)
+      .maybeSingle(),
+    adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle(),
+    adminClient
+      .from('access_user_roles')
+      .select('role_id, assignment_source, expires_at')
+      .eq('user_id', userId),
+  ]);
+
+  if (roleResult.error || profileResult.error || assignmentsResult.error) {
+    console.warn(
+      'Impossible de vérifier si le rôle est déjà synchronisé; la synchronisation sera exécutée:',
+      [
+        roleResult.error?.message,
+        profileResult.error?.message,
+        assignmentsResult.error?.message,
+      ].filter((message): message is string => Boolean(message)).join('; ')
+    );
+    return false;
+  }
+
+  const role = roleResult.data;
+  if (!role || profileResult.data?.role !== roleKey) {
+    return false;
+  }
+
+  const assignments = assignmentsResult.data ?? [];
+  const targetAssignment = assignments.find((assignment) => assignment.role_id === role.id);
+  if (!targetAssignment || targetAssignment.expires_at !== null) {
+    return false;
+  }
+
+  if (assignmentSource === 'admin') {
+    return assignments.length === 1;
+  }
+
+  return !assignments.some(
+    (assignment) =>
+      assignment.role_id !== role.id && assignment.assignment_source === 'legacy_profile'
+  );
+}
+
 /**
  * Synchronise le rôle d'un utilisateur de manière strictement atomique et idempotente.
  * 
@@ -30,6 +87,10 @@ export async function syncUserAccessRole(
   assignedBy: string | null,
   assignmentSource: 'admin' | 'legacy_profile' = 'admin'
 ): Promise<void> {
+  if (await isRoleAlreadySynced(adminClient, userId, roleKey, assignmentSource)) {
+    return;
+  }
+
   // La fonction SQL de production attend explicitement l'acteur et le mode exclusif.
   // - admin : mono-rôle strict, cohérent avec access_control_mutate.
   // - legacy_profile : synchronisation conservatrice qui ne retire que l'ancien rôle legacy.
