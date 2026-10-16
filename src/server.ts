@@ -189,6 +189,10 @@ app.use('/api', (req, res, next): void => {
  */
 
 /**
+ * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
+ * La signature HMAC-SHA256 est vérifiée avec SUPABASE_JWT_SECRET avant tout usage.
+ * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
+/**
  * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase.
  * Vérifie la signature HMAC-SHA256 si SUPABASE_JWT_SECRET est configuré,
  * ou décode le token de manière sécurisée en amont de requireAuth.
