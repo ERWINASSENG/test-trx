@@ -1,0 +1,224 @@
+// Styles pour le Tableau de bord des commerciaux (Transimex)
+// Conforme au design de la maquette, responsive et compatible mode clair / mode sombre
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.dashboard-commercial {
+  --comm-accent: #0b5ed7;
+  --comm-accent-hover: #084db1;
+  --comm-surface: var(--app-surface, #ffffff);
+  --comm-surface-muted: var(--app-surface-muted, #f1f4f8);
+  --comm-border: var(--app-border, #d5dce5);
+  --comm-text: var(--app-text, #1e293b);
+  --comm-text-muted: var(--app-text-muted, #475569);
+  --comm-text-subtle: var(--app-text-subtle, #64748b);
+
+  width: 100%;
+  color: var(--comm-text);
+  font-family: inherit;
+}
+
+// ---------------------------------------------------------------------------
+// 1. CARTES KPIS SUPÉRIEURES
+// ---------------------------------------------------------------------------
+.kpi-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  &:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.kpi-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #0d284f 0%, #0b5ed7 100%);
+  color: #ffffff;
+}
+
+// ---------------------------------------------------------------------------
+// 2. ENTONNOIR DES VENTES (SALES FUNNEL)
+// ---------------------------------------------------------------------------
+.funnel-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding-top: 8px;
+}
+
+.funnel-layer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: transform 0.15s ease, filter 0.15s ease;
+
+  &:hover {
+    transform: translateX(4px);
+  }
+}
+
+.funnel-shape-wrapper {
+  flex: 1;
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.funnel-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+// Paliers de couleurs conformes à la maquette
+.funnel-bar-prospects {
+  background: linear-gradient(90deg, #0c2340 0%, #153e75 100%);
+}
+.funnel-bar-opportunites {
+  background: linear-gradient(90deg, #0b5ed7 0%, #1d73d3 100%);
+}
+.funnel-bar-devis {
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+}
+.funnel-bar-negociations {
+  background: linear-gradient(90deg, #ea580c 0%, #f97316 100%);
+}
+.funnel-bar-contrats {
+  background: linear-gradient(90deg, #dc2626 0%, #ef4444 100%);
+}
+
+// ---------------------------------------------------------------------------
+// 3. TABLEAU DU PIPELINE DES OPPORTUNITÉS
+// ---------------------------------------------------------------------------
+.pipeline-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pipeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.8125rem;
+
+  thead th {
+    padding: 10px 12px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 2px solid var(--comm-border);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--comm-border);
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition: background-color 0.15s ease;
+    &:hover {
+      background-color: var(--comm-surface-muted);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. CHECKLIST DES TÂCHES DE SUIVI
+// ---------------------------------------------------------------------------
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--comm-border);
+  transition: all 0.15s ease;
+
+  &:hover {
+    background-color: var(--comm-surface-muted);
+    border-color: var(--comm-accent);
+  }
+
+  &.task-completed {
+    opacity: 0.65;
+    .task-title {
+      text-decoration: line-through;
+    }
+  }
+}
+
+// Pastilles de priorité conformes à la maquette
+.badge-priority-urgent {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+.badge-priority-important {
+  background-color: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+.badge-priority-normal {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+}
+.badge-priority-faible {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+// ---------------------------------------------------------------------------
+// 5. ADAPTATIONS STRICTES MODE SOMBRE
+// ---------------------------------------------------------------------------
+:host-context(html.dark),
+:host-context(.dark),
+:host-context([data-theme="dark"]) {
+  .dashboard-commercial {
+    --comm-accent: #38bdf8;
+    --comm-accent-hover: #7dd3fc;
+    --comm-surface: #2b2f33;
+    --comm-surface-muted: #24282d;
+    --comm-border: #383f45;
+    --comm-text: #f8fafc;
+    --comm-text-muted: #cbd5e1;
+    --comm-text-subtle: #94a3b8;
+  }
+
+  .badge-priority-urgent {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  .badge-priority-important {
+    background-color: rgba(249, 115, 22, 0.2);
+    color: #fdba74;
+    border-color: rgba(249, 115, 22, 0.4);
+  }
+  .badge-priority-normal {
+    background-color: rgba(56, 189, 248, 0.2);
+    color: #7dd3fc;
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+  .badge-priority-faible {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+}

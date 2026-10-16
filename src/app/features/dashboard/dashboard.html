@@ -1,5 +1,48 @@
 <div class="w-full" id="root-dashboard-container">
+  @if (isPrivileged()) {
+    <div class="flex items-center justify-end px-4 sm:px-6 pt-3 pb-1" id="dashboard-view-switcher">
+      <div class="inline-flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-xs font-semibold">
+        <span class="px-2 text-slate-500 dark:text-slate-400">Vue :</span>
+        <button
+          type="button"
+          (click)="setManualView(null)"
+          [class]="manualViewOverride() === null ? 'bg-[#0b5ed7] text-white shadow-xs' : 'text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10'"
+          class="px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          id="view-auto-btn">
+          Mon rôle
+        </button>
+        <button
+          type="button"
+          (click)="setManualView('commercial')"
+          [class]="manualViewOverride() === 'commercial' ? 'bg-[#0b5ed7] text-white shadow-xs' : 'text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10'"
+          class="px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          id="view-commercial-btn">
+          Commercial
+        </button>
+        <button
+          type="button"
+          (click)="setManualView('admin')"
+          [class]="manualViewOverride() === 'admin' ? 'bg-[#0b5ed7] text-white shadow-xs' : 'text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10'"
+          class="px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          id="view-admin-btn">
+          Admin
+        </button>
+        <button
+          type="button"
+          (click)="setManualView('manager')"
+          [class]="manualViewOverride() === 'manager' ? 'bg-[#0b5ed7] text-white shadow-xs' : 'text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10'"
+          class="px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          id="view-manager-btn">
+          Manager
+        </button>
+      </div>
+    </div>
+  }
+
   @switch (dashboardView()) {
+    @case ('commercial') {
+      <app-dashboard-commercial id="commercial-dashboard-section" />
+    }
     @case ('admin') {
       <app-dashboard-admin id="admin-dashboard-section" />
     }

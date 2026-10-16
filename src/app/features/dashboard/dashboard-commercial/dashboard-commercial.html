@@ -1,0 +1,386 @@
+<div class="dashboard-commercial space-y-6 p-4 sm:p-6" id="dashboard-commercial-view">
+
+  <!-- ========================================================================= -->
+  <!-- 1. EN-TÊTE DU TABLEAU DE BORD COMMERCIAL                                  -->
+  <!-- ========================================================================= -->
+  <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs" id="comm-header">
+    <div>
+      <div class="flex items-center gap-2">
+        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50" id="comm-title">
+          Tableau de bord Commercial
+        </h1>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60" id="comm-live-badge">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+          Direct Ventes & Cotations
+        </span>
+      </div>
+      <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1">
+        Suivi en temps réel du pipeline d'affaires, de l'entonnoir de conversion et des devis maritimes et logistiques.
+      </p>
+    </div>
+
+    <!-- Actions rapides -->
+    <div class="flex items-center gap-2.5">
+      <a
+        routerLink="/crm"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-white/5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+        id="quick-crm-link"
+        title="Accéder à l'espace CRM">
+        <mat-icon class="!h-4 !w-4 !text-[15px]">trending_up</mat-icon>
+        <span>Espace CRM</span>
+      </a>
+      <a
+        routerLink="/cotations"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b5ed7] hover:bg-[#084db1] dark:bg-[#1d4ed8] dark:hover:bg-[#2563eb] text-xs font-semibold text-white shadow-xs transition-colors"
+        id="quick-quote-link"
+        title="Créer ou consulter les cotations">
+        <mat-icon class="!h-4 !w-4 !text-[15px]">add</mat-icon>
+        <span>Nouvelle cotation</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 2. CARTES KPIS SUPÉRIEURES (4 CARTES CONFORMES À LA MAQUETTE)             -->
+  <!-- ========================================================================= -->
+  <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Indicateurs clés commerciaux">
+    
+    <!-- KPI 1 : Chiffre d'affaires prévisionnel -->
+    <div class="kpi-card bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex items-center justify-between" id="kpi-ca-previsionnel">
+      <div class="space-y-1">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Chiffre d'affaires prévisionnel</span>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-ca-valeur">
+          {{ forecastRevenueFormatted() }}
+        </div>
+        <div class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_upward</mat-icon>
+          <span>+12% vs mois précédent</span>
+        </div>
+      </div>
+      <div class="kpi-icon-wrapper" aria-hidden="true">
+        <mat-icon class="!h-6 !w-6 !text-2xl">account_balance_wallet</mat-icon>
+      </div>
+    </div>
+
+    <!-- KPI 2 : Devis en cours -->
+    <div class="kpi-card bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex items-center justify-between" id="kpi-devis-en-cours">
+      <div class="space-y-1">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Devis en cours</span>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-devis-valeur">
+          {{ pendingQuotesCount() }}
+        </div>
+        <div class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_upward</mat-icon>
+          <span>+6% vs mois précédent</span>
+        </div>
+      </div>
+      <div class="kpi-icon-wrapper" aria-hidden="true">
+        <mat-icon class="!h-6 !w-6 !text-2xl">description</mat-icon>
+      </div>
+    </div>
+
+    <!-- KPI 3 : Opportunités -->
+    <div class="kpi-card bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex items-center justify-between" id="kpi-opportunites">
+      <div class="space-y-1">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Opportunités</span>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-opp-valeur">
+          {{ opportunitiesCount() }}
+        </div>
+        <div class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_upward</mat-icon>
+          <span>+18% vs mois précédent</span>
+        </div>
+      </div>
+      <div class="kpi-icon-wrapper" aria-hidden="true">
+        <mat-icon class="!h-6 !w-6 !text-2xl">track_changes</mat-icon>
+      </div>
+    </div>
+
+    <!-- KPI 4 : Taux de conversion -->
+    <div class="kpi-card bg-white dark:bg-[#2b2f33] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex items-center justify-between" id="kpi-taux-conversion">
+      <div class="space-y-1">
+        <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Taux de conversion</span>
+        <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight" id="kpi-conv-valeur">
+          {{ conversionRate() }}%
+        </div>
+        <div class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_upward</mat-icon>
+          <span>+7 pts vs mois précédent</span>
+        </div>
+      </div>
+      <div class="kpi-icon-wrapper" aria-hidden="true">
+        <mat-icon class="!h-6 !w-6 !text-2xl">percent</mat-icon>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 3. SECTION CENTRALE : ENTONNOIR DES VENTES & ÉVOLUTION DU CA              -->
+  <!-- ========================================================================= -->
+  <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" aria-label="Analyses de performance des ventes">
+
+    <!-- Colonne GAUCHE : Entonnoir des ventes (5 étapes visuelles) -->
+    <div class="lg:col-span-5 bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="sales-funnel-card">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50" id="funnel-title">
+              Entonnoir des ventes
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Du prospect à la signature de contrat
+            </p>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300">
+            Pipeline actif
+          </span>
+        </div>
+
+        <div class="funnel-container mt-4" role="list" aria-labelledby="funnel-title">
+          @for (step of funnelSteps(); track step.label) {
+            <div class="funnel-layer" role="listitem">
+              <div class="w-32 shrink-0">
+                <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 block">{{ step.label }}</span>
+                <span class="text-xs font-bold text-slate-900 dark:text-slate-50">{{ step.count }}</span>
+              </div>
+              
+              <div class="funnel-shape-wrapper">
+                <div
+                  class="funnel-bar"
+                  [class]="step.barClass"
+                  [style.width.%]="step.percent"
+                  [attr.aria-label]="step.label + ' : ' + step.count + ' (' + step.percent + '%)'">
+                </div>
+              </div>
+
+              <div class="w-12 text-right shrink-0">
+                <span class="text-xs font-bold text-slate-600 dark:text-slate-400">({{ step.percent }}%)</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Cycle moyen de signature : <strong>18 jours</strong></span>
+        <a routerLink="/crm" class="font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:underline">
+          Optimiser le funnel &rarr;
+        </a>
+      </div>
+    </div>
+
+    <!-- Colonne DROITE : Graphique Chart.js Évolution du CA (12 mois) -->
+    <div class="lg:col-span-7 bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="revenue-chart-card">
+      <div>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50" id="chart-title">
+              Évolution du chiffre d'affaires
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              En millions de FCFA (Année 2026)
+            </p>
+          </div>
+
+          <!-- Légende native personnalisée -->
+          <div class="flex items-center gap-4 text-xs font-medium" id="chart-legend">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-[#0b5ed7]"></span>
+              <span class="text-slate-700 dark:text-slate-300">Réalisé</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-1 bg-[#ea580c]"></span>
+              <span class="text-slate-700 dark:text-slate-300">Prévisionnel</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas du graphique Chart.js -->
+        <div class="relative w-full h-[280px] sm:h-[310px] mt-3" id="revenue-chart-wrapper">
+          <canvas
+            #revenueChartCanvas
+            id="revenue-chart-canvas"
+            class="w-full h-full block"
+            aria-label="Graphique d'évolution du chiffre d'affaires réalisé et prévisionnel"
+            role="img">
+          </canvas>
+        </div>
+      </div>
+
+      <div class="mt-3 pt-3 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Objectif annuel cumulé : <strong>4.8 Milliards FCFA</strong></span>
+        <span class="font-semibold text-emerald-600 dark:text-emerald-400">+104% d'atteinte globale</span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 4. SECTION INFÉRIEURE : PIPELINE DES OPPORTUNITÉS & TÂCHES DE SUIVI       -->
+  <!-- ========================================================================= -->
+  <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" aria-label="Opérations et suivi commercial">
+
+    <!-- Colonne GAUCHE : Pipeline des opportunités (Tableau Odoo style) -->
+    <div class="lg:col-span-7 bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="pipeline-table-card">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50">
+              Pipeline des opportunités
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Dernières affaires en cours de négociation
+            </p>
+          </div>
+          <a
+            routerLink="/crm"
+            class="text-xs font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:underline inline-flex items-center gap-1"
+            title="Consulter l'ensemble du CRM">
+            <span>Voir tout</span>
+            <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_forward</mat-icon>
+          </a>
+        </div>
+
+        <div class="pipeline-table-wrapper mt-3">
+          <table class="pipeline-table" aria-label="Tableau du pipeline commercial">
+            <thead>
+              <tr class="text-slate-500 dark:text-slate-400">
+                <th scope="col">Client</th>
+                <th scope="col">Service</th>
+                <th scope="col" class="text-right">Montant (FCFA)</th>
+                <th scope="col" class="text-center">Probabilité</th>
+                <th scope="col">Statut</th>
+                <th scope="col">Prochaine action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (opp of pipelineRows(); track opp.id) {
+                <tr [id]="'opp-row-' + opp.id">
+                  <!-- Client avec avatar/logo -->
+                  <td class="font-semibold text-slate-900 dark:text-slate-100">
+                    <div class="flex items-center gap-2">
+                      <div class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-bold text-xs flex items-center justify-center shrink-0">
+                        {{ opp.clientInitials }}
+                      </div>
+                      <span class="truncate max-w-[130px] sm:max-w-[160px]">{{ opp.clientName }}</span>
+                    </div>
+                  </td>
+                  
+                  <!-- Service -->
+                  <td class="text-slate-600 dark:text-slate-300">
+                    {{ opp.service }}
+                  </td>
+
+                  <!-- Montant FCFA -->
+                  <td class="text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                    {{ formatCurrency(opp.amount) }}
+                  </td>
+
+                  <!-- Probabilité -->
+                  <td class="text-center font-semibold text-slate-700 dark:text-slate-300">
+                    {{ opp.probability }}%
+                  </td>
+
+                  <!-- Statut avec badge Odoo coloré -->
+                  <td>
+                    <span
+                      class="px-2.5 py-1 rounded-full text-xs font-semibold inline-block border"
+                      [class]="opp.statusClass">
+                      {{ opp.statusLabel }}
+                    </span>
+                  </td>
+
+                  <!-- Prochaine action planifiée -->
+                  <td class="text-slate-600 dark:text-slate-300 text-xs">
+                    <div class="flex items-center gap-1.5">
+                      <mat-icon class="!h-3.5 !w-3.5 !text-[14px] text-slate-400">calendar_today</mat-icon>
+                      <span class="truncate max-w-[140px]">{{ opp.nextAction }}</span>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Total pipeline pondéré : <strong>{{ formatCurrency(weightedPipelineTotal()) }} FCFA</strong></span>
+        <span class="font-semibold text-slate-700 dark:text-slate-300">{{ pipelineRows().length }} affaires affichées</span>
+      </div>
+    </div>
+
+    <!-- Colonne DROITE : Mes tâches de suivi (Checklist interactive) -->
+    <div class="lg:col-span-5 bg-white dark:bg-[#2b2f33] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between" id="follow-up-tasks-card">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 dark:text-slate-50">
+              Mes tâches de suivi
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Relances et rendez-vous commerciaux planifiés
+            </p>
+          </div>
+          <a
+            routerLink="/crm"
+            class="text-xs font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:underline inline-flex items-center gap-1"
+            title="Consulter toutes les activités">
+            <span>Voir tout</span>
+            <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_forward</mat-icon>
+          </a>
+        </div>
+
+        <div class="space-y-2.5 mt-3" role="list" aria-label="Liste des tâches commerciales">
+          @for (task of followUpTasks(); track task.id) {
+            <div
+              class="task-item"
+              [class.task-completed]="task.completed"
+              role="listitem"
+              [id]="'task-item-' + task.id">
+              
+              <input
+                type="checkbox"
+                [checked]="task.completed"
+                (change)="toggleTask(task.id)"
+                class="mt-1 h-4 w-4 rounded border-slate-300 text-[#0b5ed7] focus:ring-[#0b5ed7] dark:border-white/20 cursor-pointer"
+                [attr.aria-label]="'Marquer comme effectuée : ' + task.title" />
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                  <span class="text-xs font-bold text-slate-900 dark:text-slate-100 task-title truncate">
+                    {{ task.title }}
+                  </span>
+                  <span
+                    class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0"
+                    [class]="task.priorityClass">
+                    {{ task.priority }}
+                  </span>
+                </div>
+
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center justify-between gap-2">
+                  <span>{{ task.client }} &bull; {{ task.service }}</span>
+                  <span class="font-medium text-slate-600 dark:text-slate-300">{{ task.dueDate }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Tâches complétées : <strong>{{ completedTasksCount() }} / {{ followUpTasks().length }}</strong></span>
+        <button
+          type="button"
+          (click)="addNewFollowUpTask()"
+          class="font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:underline inline-flex items-center gap-1 cursor-pointer">
+          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">add</mat-icon>
+          <span>Ajouter une tâche</span>
+        </button>
+      </div>
+    </div>
+
+  </section>
+
+</div>

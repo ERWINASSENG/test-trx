@@ -11,8 +11,39 @@ export const CRM_OPPORTUNITY_STAGES = [
 ] as const;
 
 export type CrmOpportunityStage = typeof CRM_OPPORTUNITY_STAGES[number];
-export type CrmTransportMode = 'air' | 'sea';
-export type CrmDirection = 'import' | 'export';
+export type CrmTransportMode = 'air' | 'sea' | 'road';
+export type CrmDirection = 'import' | 'export' | 'transit';
+
+export const CRM_INCOTERMS = [
+  'EXW',
+  'FCA',
+  'FAS',
+  'FOB',
+  'CFR',
+  'CIF',
+  'CPT',
+  'CIP',
+  'DAP',
+  'DPU',
+  'DDP',
+] as const;
+
+export type CrmIncoterm = typeof CRM_INCOTERMS[number];
+
+export const CRM_COMMON_HUBS = [
+  'Port de Douala (CM DLA)',
+  'Port de Kribi (CM KBI)',
+  'Aéroport Douala (DLA)',
+  'Aéroport Yaoundé Nsimalen (NSI)',
+  'N\'Djamena (Tchad)',
+  'Bangui (RCA)',
+  'Port d\'Anvers (BE ANR)',
+  'Port du Havre (FR LEH)',
+  'Port de Shanghai (CN SHA)',
+  'Port de Ningbo (CN NGB)',
+  'Port de Guangzhou (CN CAN)',
+  'Dubai Jebel Ali (AE JEA)',
+] as const;
 
 export interface CrmClient {
   id: string;
@@ -147,4 +178,27 @@ export interface CrmOverview {
   activities: CrmActivity[];
   campaigns: CrmCampaign[];
   canManageTeam: boolean;
+}
+
+/**
+ * Génère automatiquement un numéro de dossier normalisé Transimex
+ * Format standard : TRX-DOS-AAAA-XXXX
+ */
+export function generateDefaultDossierNumber(year: number = new Date().getFullYear()): string {
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  return `TRX-DOS-${year}-${randomSuffix}`;
+}
+
+/**
+ * Génère automatiquement une description contextuelle pour le dossier d'exploitation
+ */
+export function generateDefaultDossierDescription(opportunity: CrmOpportunity): string {
+  const modeStr = opportunity.transportMode === 'sea' ? 'Maritime'
+    : opportunity.transportMode === 'air' ? 'Aérien'
+    : opportunity.transportMode === 'road' ? 'Routier'
+    : 'Multimodal';
+  const corridor = [opportunity.origin, opportunity.destination].filter(Boolean).join(' -> ');
+  const cargo = opportunity.goodsDescription ? ` - ${opportunity.goodsDescription}` : '';
+  const client = opportunity.client?.companyName || opportunity.client?.name || '';
+  return `Transit ${modeStr}${corridor ? ` (${corridor})` : ''} pour ${client}${cargo}`.trim();
 }

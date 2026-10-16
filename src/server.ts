@@ -107,7 +107,7 @@ dotenv.config();
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+const angularApp = new AngularNodeAppEngine({ trustProxyHeaders: true });
 
 const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
   const value = process.env[name];
@@ -1319,6 +1319,17 @@ app.use(
     redirect: false,
   }),
 );
+
+// Garde-fou pour les ressources statiques introuvables (.js, .css, .ico, etc.) :
+// Évite qu'Angular SSR ne serve une page HTML 200 à la place d'un chunk manquant,
+// ce qui provoquerait l'erreur "TypeError: Failed to fetch dynamically imported module".
+app.use((req, res, next) => {
+  if (/\.(?:js|mjs|css|map|ico|png|jpg|jpeg|svg|woff2?|ttf|eot)$/i.test(req.path)) {
+    res.status(404).type('text/plain').send('Asset introuvable');
+    return;
+  }
+  next();
+});
 
 /**
  * Traite les requêtes de rendu Angular SSR :
