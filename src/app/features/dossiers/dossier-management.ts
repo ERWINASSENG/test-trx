@@ -54,6 +54,8 @@ export class DossierManagementComponent {
   public readonly canCreate = computed(() =>
     this.accessControl.hasPermission('dossiers.create') && this.canLinkProspect()
   );
+  public readonly canAssign = computed(() => this.accessControl.hasPermission('crm.team.manage'));
+  public readonly isAssigning = signal<string | null>(null);
 
   public readonly isModalOpen = signal(false);
   public readonly isSaving = signal(false);
@@ -70,11 +72,17 @@ export class DossierManagementComponent {
       nonNullable: true,
       validators: [Validators.required],
     }),
+    assignedTo: new FormControl<string | null>(null),
   });
 
   public constructor() {
     effect(() => {
       if (this.dossierService.consumeCreateModalRequest()) this.openCreate();
+    });
+    effect(() => {
+      if (this.canAssign() && !this.dossierService.assigneesLoaded()) {
+        void this.dossierService.loadAssignees();
+      }
     });
     const search = this.route.snapshot.queryParamMap.get('search') || '';
     const dossierId = this.route.snapshot.queryParamMap.get('dossierId');
@@ -124,7 +132,7 @@ export class DossierManagementComponent {
   public openCreate(): void {
     if (!this.canCreate()) return;
     this.formError.set(null);
-    this.form.reset({ noDossier: '', description: '', prospectId: '' });
+    this.form.reset({ noDossier: '', description: '', prospectId: '', assignedTo: null });
     this.isModalOpen.set(true);
     if (this.canLinkProspect() && this.prospectService.prospects().length === 0) {
       void this.loadProspectOptions();
@@ -148,6 +156,7 @@ export class DossierManagementComponent {
       noDossier: values.noDossier.trim(),
       description: values.description.trim() || null,
       prospectId: values.prospectId,
+      ...(this.canAssign() ? { assignedTo: values.assignedTo } : {}),
     };
 
     this.isSaving.set(true);
@@ -163,5 +172,20 @@ export class DossierManagementComponent {
     this.isModalOpen.set(false);
     this.feedback.set('Dossier créé.');
     await this.loadPage();
+  }
+
+  public async assignDossier(dossier: Dossier, rawAssigneeId: string): Promise<void> {
+    if (!this.canAssign() || this.isAssigning()) return;
+    const assignedTo = rawAssigneeId || null;
+    if (assignedTo === dossier.assignedTo) return;
+
+    this.isAssigning.set(dossier.id);
+    const result = await this.dossierService.assignDossier(dossier.id, assignedTo);
+    this.isAssigning.set(null);
+    if (!result.success) {
+      this.feedback.set(result.error || 'Impossible de modifier le responsable du dossier.');
+      return;
+    }
+    this.feedback.set('Responsable du dossier mis à jour.');
   }
 }

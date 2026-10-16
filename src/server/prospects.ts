@@ -1,5 +1,6 @@
 import express from 'express';
 import { PROSPECT_STATUSES, ProspectStatus } from '../app/core/models/prospect.model';
+import { createAppNotification } from './app-notifications';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
 
@@ -279,6 +280,19 @@ export const createProspectHandler = async (req: express.Request, res: express.R
     return;
   }
   await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'CREATE_PROSPECT', entityType: 'prospect', entityId: data.id, details: { status: data.status }, ipAddress: req.ip || null });
+  if (typeof data.assigned_to === 'string') {
+    await createAppNotification(adminClient, {
+      recipientId: data.assigned_to,
+      actorId: currentUser.id,
+      notificationType: 'assignment',
+      title: 'Nouveau client attribué',
+      message: `Le client ${String(data.company_name || data.name)} vous a été attribué.`,
+      href: `/prospects?prospectId=${data.id}`,
+      sourceType: 'prospect',
+      sourceId: String(data.id),
+      dedupeKey: `prospect:${data.id}:assigned:${data.assigned_to}:${data.updated_at}`,
+    });
+  }
   res.status(201).json({ prospect: data });
 };
 
@@ -306,6 +320,20 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
       res.status(400).json({ error: 'Le responsable sélectionné est introuvable ou inactif.' });
       return;
     }
+  }
+  let previousAssignee: string | null | undefined;
+  if (parsed.data.assigned_to !== undefined) {
+    const { data: current, error: currentError } = await adminClient.from('prospects')
+      .select('assigned_to').eq('id', prospectId).maybeSingle();
+    if (currentError) {
+      sendDatabaseError(res, currentError);
+      return;
+    }
+    if (!current) {
+      res.status(404).json({ error: 'Prospect introuvable.' });
+      return;
+    }
+    previousAssignee = typeof current.assigned_to === 'string' ? current.assigned_to : null;
   }
   let updateData = parsed.data;
   if (Object.keys(parsed.legacyDetails || {}).length) {
@@ -338,6 +366,19 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
     return;
   }
   await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'UPDATE_PROSPECT', entityType: 'prospect', entityId: prospectId, details: { fields: Object.keys(updateData) }, ipAddress: req.ip || null });
+  if (typeof data.assigned_to === 'string' && data.assigned_to !== previousAssignee) {
+    await createAppNotification(adminClient, {
+      recipientId: data.assigned_to,
+      actorId: currentUser.id,
+      notificationType: 'assignment',
+      title: 'Client attribué',
+      message: `Le client ${String(data.company_name || data.name)} vous a été attribué.`,
+      href: `/prospects?prospectId=${data.id}`,
+      sourceType: 'prospect',
+      sourceId: prospectId,
+      dedupeKey: `prospect:${prospectId}:assigned:${data.assigned_to}:${data.updated_at}`,
+    });
+  }
   res.json({ prospect: data });
 };
 

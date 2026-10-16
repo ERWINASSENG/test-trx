@@ -204,6 +204,7 @@ describe('DashboardManager', () => {
       statut: 'ouvert',
       description: null,
       createdBy: null,
+      assignedTo: null,
       createdAt: '',
       updatedAt: '',
       expenseCount: 2,

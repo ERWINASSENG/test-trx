@@ -12,6 +12,7 @@ import { ProspectStatus } from '../app/core/models/prospect.model';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
 import { hasPermission } from './access-control';
+import { createAppNotification } from './app-notifications';
 import { validateProspectPayload } from './prospects';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -891,6 +892,19 @@ export const createQuoteHandler = async (req: express.Request, res: express.Resp
     return;
   }
   await auditQuote(req, actor, { action: 'CREATE_QUOTE', entityId: String(data.id), details: { quote_number: data.quote_number } });
+  if (typeof data.assigned_to === 'string') {
+    await createAppNotification(adminClient, {
+      recipientId: data.assigned_to,
+      actorId: actor.id,
+      notificationType: 'assignment',
+      title: 'Nouvelle cotation attribuée',
+      message: `La cotation ${String(data.quote_number)} vous a été attribuée.`,
+      href: `/quotes?quoteId=${data.id}`,
+      sourceType: 'quote',
+      sourceId: String(data.id),
+      dedupeKey: `quote:${data.id}:assigned:${data.assigned_to}:${data.updated_at}`,
+    });
+  }
   res.status(201).json({ quote: toQuoteResponse(data) });
 };
 
@@ -1035,6 +1049,19 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
     return;
   }
   await auditQuote(req, actor, { action: 'UPDATE_QUOTE', entityId: id, details: { status: data.status } });
+  if (typeof data.assigned_to === 'string' && data.assigned_to !== current.assigned_to) {
+    await createAppNotification(adminClient, {
+      recipientId: data.assigned_to,
+      actorId: actor.id,
+      notificationType: 'assignment',
+      title: 'Cotation attribuée',
+      message: `La cotation ${String(data.quote_number)} vous a été attribuée.`,
+      href: `/quotes?quoteId=${data.id}`,
+      sourceType: 'quote',
+      sourceId: id,
+      dedupeKey: `quote:${id}:assigned:${data.assigned_to}:${data.updated_at}`,
+    });
+  }
   res.json({ quote: toQuoteResponse(data) });
 };
 

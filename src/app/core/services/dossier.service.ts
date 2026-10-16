@@ -10,7 +10,14 @@ export interface DossierPageRequest {
 }
 
 export type CreateDossierInput = Pick<Dossier, 'noDossier'> &
-  Partial<Pick<Dossier, 'client' | 'description' | 'prospectId'>>;
+  Partial<Pick<Dossier, 'client' | 'description' | 'prospectId' | 'assignedTo'>>;
+
+export interface DossierAssignee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
 
 export interface DossierApiResult<T> {
   success: boolean;
@@ -26,6 +33,8 @@ export class DossierService {
 
   private readonly _dossiers = signal<Dossier[]>([]);
   private readonly _total = signal(0);
+  private readonly _assignees = signal<DossierAssignee[]>([]);
+  private readonly _assigneesLoaded = signal(false);
   private readonly _isLoading = signal(false);
   private readonly _error = signal<string | null>(null);
   private readonly _expenseSummary = signal<DossierExpenseSummary[]>([]);
@@ -39,6 +48,8 @@ export class DossierService {
   public readonly isExpenseSummaryLoading = computed(() => this._isExpenseSummaryLoading());
   public readonly expenseSummaryError = computed(() => this._expenseSummaryError());
   public readonly total = computed(() => this._total());
+  public readonly assignees = this._assignees.asReadonly();
+  public readonly assigneesLoaded = this._assigneesLoaded.asReadonly();
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
 
@@ -73,6 +84,35 @@ export class DossierService {
     this._total.set(Number(result.data.total) || 0);
     this._error.set(null);
     return true;
+  }
+
+  public async loadAssignees(): Promise<boolean> {
+    const result = await this.request<{ assignees: Record<string, unknown>[] }>('/assignees');
+    if (!result.success || !result.data) {
+      this._error.set(result.error || 'Impossible de charger les responsables.');
+      return false;
+    }
+    this._assignees.set((result.data.assignees || []).map((row) => ({
+      id: String(row['id'] ?? ''),
+      firstName: String(row['first_name'] ?? ''),
+      lastName: String(row['last_name'] ?? ''),
+      email: String(row['email'] ?? ''),
+    })));
+    this._assigneesLoaded.set(true);
+    return true;
+  }
+
+  public async assignDossier(id: string, assignedTo: string | null): Promise<DossierApiResult<void>> {
+    const result = await this.request<{ assignedTo: string | null }>(
+      `/${encodeURIComponent(id)}/assignment`,
+      'PATCH',
+      { assignedTo }
+    );
+    if (!result.success) return { success: false, error: result.error };
+    this._dossiers.update((dossiers) => dossiers.map((dossier) => dossier.id === id
+      ? { ...dossier, assignedTo: result.data?.assignedTo ?? null }
+      : dossier));
+    return { success: true };
   }
 
   public async loadAllDossiers(): Promise<boolean> {
@@ -168,6 +208,8 @@ export class DossierService {
     this.dataUserId = userId;
     this._dossiers.set([]);
     this._total.set(0);
+    this._assignees.set([]);
+    this._assigneesLoaded.set(false);
     this._expenseSummary.set([]);
     this._error.set(null);
     this._expenseSummaryError.set(null);
@@ -259,6 +301,9 @@ export class DossierService {
       createdBy: typeof row['createdBy'] === 'string'
         ? row['createdBy']
         : typeof row['created_by'] === 'string' ? row['created_by'] : null,
+      assignedTo: typeof row['assignedTo'] === 'string'
+        ? row['assignedTo']
+        : typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
       createdAt: String(row['createdAt'] ?? row['created_at'] ?? ''),
       updatedAt: String(row['updatedAt'] ?? row['updated_at'] ?? ''),
     };

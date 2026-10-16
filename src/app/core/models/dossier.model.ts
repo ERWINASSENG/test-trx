@@ -7,6 +7,7 @@ export interface Dossier {
   statut: string;
   description: string | null;
   createdBy: string | null;
+  assignedTo: string | null;
   createdAt: string;
   updatedAt: string;
 }

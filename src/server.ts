@@ -20,7 +20,17 @@ import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
 import { getDossierExpenseSummaryHandler, getOperationsHandler } from './server/cashier.read';
-import { createDossierHandler, listDossiersHandler } from './server/dossiers';
+import {
+  assignDossierHandler,
+  createDossierHandler,
+  listDossierAssigneesHandler,
+  listDossiersHandler,
+} from './server/dossiers';
+import {
+  listAppNotificationsHandler,
+  markAllAppNotificationsReadHandler,
+  markAppNotificationReadHandler,
+} from './server/notifications';
 import { writeAuditLog } from './server/audit-log';
 import {
   createProspectHandler,
@@ -375,6 +385,9 @@ collaboratorCollectionAliases.forEach((path) => {
  */
 app.get('/api/profile/me', requireAuth, getCurrentUserProfileHandler);
 app.patch('/api/profile/me', requireAuth, requirePermission('profile.update'), updateCurrentUserProfileHandler);
+app.get('/api/notifications', requireAuth, listAppNotificationsHandler);
+app.post('/api/notifications/read-all', requireAuth, markAllAppNotificationsReadHandler);
+app.post('/api/notifications/:id/read', requireAuth, markAppNotificationReadHandler);
 
 collaboratorCollectionAliases.forEach((path) => {
   app.patch(`${path}/:id`, requireAuth, requirePermission('users.update'), updateCollaboratorHandler);
@@ -1245,7 +1258,9 @@ app.delete('/api/prospects/:id', requireAuth, requirePermission('prospects.delet
 // Module Dossiers : chaque opération possède une permission métier dédiée.
 app.get('/api/dossiers', requireAuth, requirePermission('dossiers.read'), listDossiersHandler);
 app.get('/api/dossiers/expenses', requireAuth, requirePermission('dossiers.read'), getDossierExpenseSummaryHandler);
+app.get('/api/dossiers/assignees', requireAuth, requirePermission('crm.team.manage'), listDossierAssigneesHandler);
 app.post('/api/dossiers', requireAuth, requirePermission('dossiers.create'), createDossierHandler);
+app.patch('/api/dossiers/:id/assignment', requireAuth, requirePermission('crm.team.manage'), assignDossierHandler);
 
 // Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
 app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);

@@ -201,7 +201,11 @@
       } @else {
         <div class="activity-list">
           @for (activity of visibleActivities(); track activity.id) {
-            <article class="activity-row" [class.is-complete]="activity.status === 'completed'">
+            <article
+              class="activity-row"
+              [id]="'activity-' + activity.id"
+              [class.is-complete]="activity.status === 'completed'"
+              [class.notification-target]="focusedActivityId() === activity.id">
               <div class="activity-main"><div><span class="activity-kind">{{ activityLabel(activity.activityType) }}</span><span class="activity-client">{{ activity.clientName }}</span>@if (activity.contactName) { <span class="activity-client"> · {{ activity.contactName }}</span> }</div><h3>{{ activity.title }}</h3>@if (activity.notes) { <p>{{ activity.notes }}</p> }</div>
               <div class="activity-due"><span>{{ activity.dueAt ? (activity.dueAt | date:'dd/MM/yyyy à HH:mm') : 'Sans échéance' }}</span><small>{{ activity.status === 'completed' ? 'Terminée' : 'À faire' }}</small></div>
               @if (canUpdate() && activity.status === 'pending') {

@@ -110,6 +110,78 @@
 
       <!-- DROITE : Utilitaires, Bascule Thème, Profil & Actions -->
       <div class="topbar-right flex items-center gap-2 sm:gap-3.5 shrink-0" id="topbar-utilities-section">
+
+        @if (currentUser()) {
+          <div class="relative" id="notifications-container">
+            <button
+              type="button"
+              (click)="toggleNotifications($event)"
+              class="utility-icon-btn relative flex items-center justify-center rounded p-1.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+              aria-label="Notifications"
+              title="Notifications"
+              [attr.aria-expanded]="isNotificationsOpen()"
+              aria-haspopup="dialog">
+              <mat-icon class="!text-[18px] !w-4.5 !h-4.5">notifications</mat-icon>
+              @if (appNotificationService.unreadCount() > 0) {
+                <span class="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                  {{ appNotificationService.unreadCount() > 99 ? '99+' : appNotificationService.unreadCount() }}
+                </span>
+              }
+            </button>
+
+            @if (isNotificationsOpen()) {
+              <section
+                class="absolute right-0 top-full z-[9999] mt-2 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-[#343a40] dark:bg-[#282d33]"
+                role="dialog"
+                aria-label="Centre de notifications">
+                <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-white/10">
+                  <div>
+                    <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                      {{ appNotificationService.unreadCount() }} non lue(s)
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="text-xs font-medium text-[#0b5ed7] hover:underline disabled:opacity-50 dark:text-[#8cc2ff]"
+                    [disabled]="appNotificationService.unreadCount() === 0"
+                    (click)="markAllNotificationsRead()">
+                    Tout lire
+                  </button>
+                </header>
+                @if (appNotificationService.error()) {
+                  <p class="px-4 py-2 text-xs text-red-600 dark:text-red-300" role="alert">
+                    {{ appNotificationService.error() }}
+                  </p>
+                }
+                <div class="max-h-[min(28rem,70vh)] overflow-y-auto">
+                  @for (notification of appNotificationService.notifications(); track notification.id) {
+                    <button
+                      type="button"
+                      class="flex w-full gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-white/5"
+                      [class.bg-blue-50]="!notification.readAt"
+                      [class.dark:bg-blue-900/20]="!notification.readAt"
+                      (click)="openNotification(notification)">
+                      <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                        [class.bg-blue-600]="!notification.readAt"
+                        [class.bg-transparent]="!!notification.readAt"
+                        aria-hidden="true"></span>
+                      <span class="min-w-0">
+                        <span class="block text-xs font-semibold text-slate-900 dark:text-white">{{ notification.title }}</span>
+                        <span class="mt-1 block text-xs text-slate-600 dark:text-slate-300">{{ notification.message }}</span>
+                        <span class="mt-1 block text-[10px] text-slate-400">{{ notification.createdAt | date:'short' }}</span>
+                      </span>
+                    </button>
+                  } @empty {
+                    <p class="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
+                      Aucune notification pour le moment.
+                    </p>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        }
         
         <!-- Bouton direct Mode Clair / Sombre (Soleil / Lune) -->
         <button
@@ -357,4 +429,3 @@
   }
 
 </div>
-

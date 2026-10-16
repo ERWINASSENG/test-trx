@@ -147,6 +147,7 @@ describe('dossier handlers', () => {
         statut: 'ouvert',
         description: 'Dossier de test',
         createdBy: 'user-1',
+        assignedTo: null,
         createdAt: '2026-10-01T10:00:00Z',
         updatedAt: '2026-10-01T10:00:00Z',
       }],
@@ -220,6 +221,7 @@ describe('dossier handlers', () => {
       description: null,
       created_by: 'user-1',
       prospect_id: '11111111-1111-4111-8111-111111111111',
+      assigned_to: null,
     });
     const auditRequest = fetchMock.mock.calls.find((call) => new URL(String(call[0])).pathname.endsWith('/audit_logs'));
     expect(JSON.parse(String(auditRequest?.[1]?.body))).toEqual(expect.arrayContaining([
@@ -239,6 +241,7 @@ describe('dossier handlers', () => {
         statut: 'ouvert',
         description: null,
         createdBy: 'user-1',
+        assignedTo: null,
         createdAt: '2026-10-03T10:00:00Z',
         updatedAt: '2026-10-03T10:00:00Z',
       },

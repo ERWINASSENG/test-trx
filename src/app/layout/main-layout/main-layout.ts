@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs/operators';
@@ -9,6 +10,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { CashierService } from '../../core/services/cashier.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { AppNotificationService } from '../../core/services/app-notification.service';
+import { AppNotification } from '../../core/models/app-notification.model';
 import { CashierImportModal } from '../../features/cashier/import-modal/cashier-import-modal.component';
 import { ParsedImportRow } from '../../core/services/import.service';
 import { JournalService } from '../../core/services/journal.service';
@@ -25,7 +28,7 @@ type CrmView = 'pipeline' | 'clients' | 'activities' | 'campaigns';
 
 @Component({
   selector: 'app-main-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatIconModule, CashierImportModal],
+  imports: [DatePipe, RouterOutlet, RouterLink, RouterLinkActive, MatIconModule, CashierImportModal],
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,6 +43,7 @@ export class MainLayout {
   public readonly cashierService = inject(CashierService);
   public readonly themeService = inject(ThemeService);
   public readonly notificationService = inject(NotificationService);
+  public readonly appNotificationService = inject(AppNotificationService);
   public readonly journalService = inject(JournalService);
   public readonly router = inject(Router);
 
@@ -47,6 +51,7 @@ export class MainLayout {
   public readonly isMenuOpen = signal<boolean>(false);
   public readonly isUserDropdownOpen = signal<boolean>(false);
   public readonly isConfigDropdownOpen = signal<boolean>(false);
+  public readonly isNotificationsOpen = signal(false);
 
   // Thème actuel
   public readonly currentTheme = this.themeService.currentTheme;
@@ -174,6 +179,7 @@ export class MainLayout {
       event.stopPropagation();
     }
     this.closeConfigDropdown();
+    this.closeNotifications();
     this.isUserDropdownOpen.update((open) => !open);
   }
 
@@ -201,6 +207,30 @@ export class MainLayout {
     this.isConfigDropdownOpen.set(false);
   }
 
+  public toggleNotifications(event?: Event): void {
+    event?.stopPropagation();
+    this.closeUserDropdown();
+    this.closeConfigDropdown();
+    this.isNotificationsOpen.update((open) => !open);
+    if (this.isNotificationsOpen()) void this.appNotificationService.load();
+  }
+
+  public closeNotifications(): void {
+    this.isNotificationsOpen.set(false);
+  }
+
+  public async openNotification(notification: AppNotification): Promise<void> {
+    this.closeNotifications();
+    await this.appNotificationService.markAsRead(notification.id);
+    if (notification.href.startsWith('/') && !notification.href.startsWith('//')) {
+      await this.router.navigateByUrl(notification.href);
+    }
+  }
+
+  public async markAllNotificationsRead(): Promise<void> {
+    await this.appNotificationService.markAllAsRead();
+  }
+
   public onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
     // Si le clic s'est produit en dehors du dropdown utilisateur, on le ferme
@@ -211,11 +241,15 @@ export class MainLayout {
     if (!target.closest('#config-dropdown-container')) {
       this.closeConfigDropdown();
     }
+    if (!target.closest('#notifications-container')) {
+      this.closeNotifications();
+    }
   }
 
   public onEscape(): void {
     this.closeUserDropdown();
     this.closeConfigDropdown();
+    this.closeNotifications();
     this.closeMenu();
   }
 

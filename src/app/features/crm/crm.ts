@@ -120,6 +120,7 @@ export class CrmComponent {
   public readonly selectedClientId = signal<string | null>(null);
   public readonly focusedContactId = signal<string | null>(null);
   public readonly focusedOpportunityId = signal<string | null>(null);
+  public readonly focusedActivityId = signal<string | null>(null);
   public readonly dialogOpportunityId = signal<string | null>(null);
   public readonly opportunityDraft = signal<OpportunityDraft>({ ...EMPTY_OPPORTUNITY });
   public readonly clientDraft = signal({
@@ -185,6 +186,10 @@ export class CrmComponent {
     );
   });
   public readonly filteredActivities = computed(() => {
+    const focusedId = this.focusedActivityId();
+    if (focusedId) {
+      return this.crmService.activities().filter((activity) => activity.id === focusedId);
+    }
     const query = this.search().trim().toLocaleLowerCase('fr');
     const activities = this.crmService.activities();
     if (!query) return activities;
@@ -253,6 +258,7 @@ export class CrmComponent {
       const requestedTab = params.get('view');
       const nextTab = this.tabs.find((item) => item.id === requestedTab)?.id ?? 'pipeline';
       this.focusedOpportunityId.set(params.get('opportunityId'));
+      this.focusedActivityId.set(params.get('activityId'));
       this.selectedClientId.set(params.get('prospectId'));
       this.focusedContactId.set(params.get('contactId'));
       if (this.tab() !== nextTab) {

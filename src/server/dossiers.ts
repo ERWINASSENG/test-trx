@@ -1,5 +1,6 @@
 import express from 'express';
 import { hasPermission } from './access-control';
+import { createAppNotification } from './app-notifications';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
 
@@ -38,7 +39,7 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
 
   let query = adminClient
     .from('dossiers')
-    .select('id, no_dossier, prospect_id, opportunity_id, client, statut, description, created_by, created_at, updated_at', { count: 'exact' })
+    .select('id, no_dossier, prospect_id, opportunity_id, client, statut, description, created_by, assigned_to, created_at, updated_at', { count: 'exact' })
     .order('no_dossier', { ascending: true })
     .range(offset, offset + limit - 1);
 
@@ -62,6 +63,7 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
       statut: String(row.statut),
       description: typeof row.description === 'string' ? row.description : null,
       createdBy: typeof row.created_by === 'string' ? row.created_by : null,
+      assignedTo: typeof row.assigned_to === 'string' ? row.assigned_to : null,
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     })),
@@ -69,6 +71,29 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     limit,
     offset,
   });
+};
+
+export const listDossierAssigneesHandler = async (
+  _req: express.Request,
+  res: express.Response
+): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    res.status(503).json({ error: 'Le service Dossiers est indisponible.' });
+    return;
+  }
+
+  const { data, error } = await adminClient
+    .from('profiles')
+    .select('id, first_name, last_name, email')
+    .eq('is_active', true)
+    .order('last_name', { ascending: true });
+  if (error) {
+    console.error('[DOSSIERS] Erreur de lecture des responsables:', error.message);
+    res.status(500).json({ error: 'Impossible de charger la liste des responsables.' });
+    return;
+  }
+  res.json({ assignees: data || [] });
 };
 
 export const createDossierHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -100,6 +125,16 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
     return;
   }
   const description = typeof rawDescription === 'string' ? rawDescription.trim() || null : null;
+  const rawAssignee = req.body?.['assignedTo'];
+  if (rawAssignee !== undefined && rawAssignee !== null && (typeof rawAssignee !== 'string' || !UUID_PATTERN.test(rawAssignee))) {
+    res.status(400).json({ error: 'Le commercial sélectionné est invalide.' });
+    return;
+  }
+  const assignedTo = typeof rawAssignee === 'string' && rawAssignee ? rawAssignee : null;
+  if (assignedTo && !await hasPermission(actor.id, 'crm.team.manage', undefined)) {
+    res.status(403).json({ error: 'Vous ne pouvez pas attribuer ce dossier à un commercial.' });
+    return;
+  }
   const prospectId = req.body?.['prospectId'] ?? req.body?.['prospect_id'];
   if (typeof prospectId !== 'string' || !UUID_PATTERN.test(prospectId)) {
     res.status(400).json({ error: 'La sélection d’un prospect valide est obligatoire.' });
@@ -124,6 +159,23 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
   if (!prospect) {
     res.status(400).json({ error: 'Le prospect sélectionné est introuvable.' });
     return;
+  }
+  if (assignedTo) {
+    const { data: assignee, error: assigneeError } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('id', assignedTo)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (assigneeError) {
+      console.error('[DOSSIERS] Erreur de vérification du commercial:', assigneeError.message);
+      res.status(500).json({ error: 'Impossible de vérifier le commercial sélectionné.' });
+      return;
+    }
+    if (!assignee) {
+      res.status(400).json({ error: 'Le commercial sélectionné est introuvable ou inactif.' });
+      return;
+    }
   }
   const companyName = typeof prospect.company_name === 'string' ? prospect.company_name.trim() : '';
   const prospectName = typeof prospect.name === 'string' ? prospect.name.trim() : '';
@@ -154,11 +206,12 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
     description,
     created_by: actor.id,
     prospect_id: prospectId,
+    assigned_to: assignedTo,
   };
   const { data, error } = await adminClient
     .from('dossiers')
     .insert(dossierInsert)
-    .select('id, no_dossier, prospect_id, client, statut, description, created_by, created_at, updated_at')
+    .select('id, no_dossier, prospect_id, client, statut, description, created_by, assigned_to, created_at, updated_at')
     .single();
 
   if (error || !data) {
@@ -186,6 +239,20 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
     ipAddress: req.ip || null,
   });
 
+  if (assignedTo) {
+    await createAppNotification(adminClient, {
+      recipientId: assignedTo,
+      actorId: actor.id,
+      notificationType: 'assignment',
+      title: 'Nouveau dossier attribué',
+      message: `Le dossier ${String(data.no_dossier)} vous a été attribué.`,
+      href: `/dossiers?dossierId=${data.id}`,
+      sourceType: 'dossier',
+      sourceId: String(data.id),
+      dedupeKey: `dossier:${data.id}:assigned:${assignedTo}:${data.updated_at}`,
+    });
+  }
+
   res.status(201).json({
     dossier: {
       id: String(data.id),
@@ -195,8 +262,106 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
       statut: String(data.statut),
       description: typeof data.description === 'string' ? data.description : null,
       createdBy: typeof data.created_by === 'string' ? data.created_by : null,
+      assignedTo: typeof data.assigned_to === 'string' ? data.assigned_to : null,
       createdAt: String(data.created_at),
       updatedAt: String(data.updated_at),
     },
   });
+};
+
+export const assignDossierHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  const actor = getActor(req);
+  const rawId = req.params['id'];
+  const dossierId = Array.isArray(rawId) ? rawId[0] : rawId;
+  const rawAssignee = req.body?.['assignedTo'];
+
+  if (!adminClient) {
+    res.status(503).json({ error: 'Le service Dossiers est indisponible.' });
+    return;
+  }
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!dossierId || !UUID_PATTERN.test(dossierId)
+    || (rawAssignee !== null && rawAssignee !== '' && (typeof rawAssignee !== 'string' || !UUID_PATTERN.test(rawAssignee)))) {
+    res.status(400).json({ error: 'Le dossier ou le commercial sélectionné est invalide.' });
+    return;
+  }
+  if (!await hasPermission(actor.id, 'crm.team.manage', undefined)) {
+    res.status(403).json({ error: 'Vous ne pouvez pas attribuer les dossiers.' });
+    return;
+  }
+
+  const assignedTo = typeof rawAssignee === 'string' && rawAssignee ? rawAssignee : null;
+  const { data: current, error: currentError } = await adminClient
+    .from('dossiers')
+    .select('id, no_dossier, assigned_to')
+    .eq('id', dossierId)
+    .maybeSingle();
+  if (currentError) {
+    console.error('[DOSSIERS] Erreur de lecture avant affectation:', currentError.message);
+    res.status(500).json({ error: 'Impossible de vérifier le dossier.' });
+    return;
+  }
+  if (!current) {
+    res.status(404).json({ error: 'Dossier introuvable.' });
+    return;
+  }
+  if (current.assigned_to === assignedTo) {
+    res.json({ assignedTo });
+    return;
+  }
+  if (assignedTo) {
+    const { data: assignee, error: assigneeError } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('id', assignedTo)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (assigneeError || !assignee) {
+      if (assigneeError) console.error('[DOSSIERS] Erreur de vérification du commercial:', assigneeError.message);
+      res.status(assigneeError ? 500 : 400).json({
+        error: assigneeError ? 'Impossible de vérifier le commercial sélectionné.' : 'Le commercial sélectionné est introuvable ou inactif.',
+      });
+      return;
+    }
+  }
+  const { data, error } = await adminClient
+    .from('dossiers')
+    .update({ assigned_to: assignedTo, updated_at: new Date().toISOString() })
+    .eq('id', dossierId)
+    .select('id, no_dossier, assigned_to, updated_at')
+    .single();
+  if (error || !data) {
+    console.error('[DOSSIERS] Échec de l’affectation:', error?.message || 'aucune ligne retournée');
+    res.status(500).json({ error: 'Impossible d’attribuer le dossier.' });
+    return;
+  }
+
+  await writeAuditLog(adminClient, {
+    userId: actor.id,
+    userEmail: actor.email,
+    userRole: actor.role,
+    action: 'ASSIGN_DOSSIER',
+    entityType: 'dossier',
+    entityId: dossierId,
+    details: { previousAssignee: current.assigned_to, assignedTo },
+    ipAddress: req.ip || null,
+  });
+  if (assignedTo) {
+    await createAppNotification(adminClient, {
+      recipientId: assignedTo,
+      actorId: actor.id,
+      notificationType: 'assignment',
+      title: 'Dossier attribué',
+      message: `Le dossier ${String(data.no_dossier)} vous a été attribué.`,
+      href: `/dossiers?dossierId=${data.id}`,
+      sourceType: 'dossier',
+      sourceId: dossierId,
+      dedupeKey: `dossier:${dossierId}:assigned:${assignedTo}:${data.updated_at}`,
+    });
+  }
+  res.json({ assignedTo });
 };

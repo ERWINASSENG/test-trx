@@ -90,6 +90,9 @@
             <th scope="col">Client / prospect</th>
             <th scope="col">Statut</th>
             <th scope="col">Description</th>
+            @if (canAssign()) {
+              <th scope="col">Responsable</th>
+            }
           </tr>
         </thead>
         <tbody moduleTableBody>
@@ -108,10 +111,24 @@
               <td>{{ dossier.client || (dossier.prospectId ? 'Prospect associé' : '—') }}</td>
               <td><span class="status-pill">{{ dossier.statut }}</span></td>
               <td>{{ dossier.description || '—' }}</td>
+              @if (canAssign()) {
+                <td>
+                  <select
+                    [attr.aria-label]="'Responsable du dossier ' + dossier.noDossier"
+                    [value]="dossier.assignedTo || ''"
+                    [disabled]="isAssigning() !== null"
+                    (change)="assignDossier(dossier, $any($event.target).value)">
+                    <option value="">Non attribué</option>
+                    @for (assignee of dossierService.assignees(); track assignee.id) {
+                      <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }}</option>
+                    }
+                  </select>
+                </td>
+              }
             </tr>
           } @empty {
             <tr>
-              <td class="empty-state" colspan="4">
+              <td class="empty-state" [attr.colspan]="canAssign() ? 5 : 4">
                 Aucun dossier ne correspond à la recherche.
               </td>
             </tr>
@@ -142,6 +159,21 @@
               <p>{{ dossier.client || (dossier.prospectId ? 'Prospect associé' : 'Client non renseigné') }}</p>
               @if (dossier.description) {
                 <p>{{ dossier.description }}</p>
+              }
+              @if (canAssign()) {
+                <label class="field">
+                  Responsable
+                  <select
+                    [attr.aria-label]="'Responsable du dossier ' + dossier.noDossier"
+                    [value]="dossier.assignedTo || ''"
+                    [disabled]="isAssigning() !== null"
+                    (change)="assignDossier(dossier, $any($event.target).value)">
+                    <option value="">Non attribué</option>
+                    @for (assignee of dossierService.assignees(); track assignee.id) {
+                      <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }}</option>
+                    }
+                  </select>
+                </label>
               }
             </article>
           }
@@ -224,6 +256,18 @@
               Description
               <textarea id="dossier-description" formControlName="description" rows="3"></textarea>
             </label>
+
+            @if (canAssign()) {
+              <label class="field field-wide">
+                Responsable
+                <select id="dossier-assignee" formControlName="assignedTo">
+                  <option value="">Non attribué</option>
+                  @for (assignee of dossierService.assignees(); track assignee.id) {
+                    <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }}</option>
+                  }
+                </select>
+              </label>
+            }
           </div>
 
           <footer class="modal-actions">
