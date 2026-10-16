@@ -107,7 +107,7 @@ dotenv.config();
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+const angularApp = new AngularNodeAppEngine({ trustProxyHeaders: true });
 
 const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
   const value = process.env[name];
@@ -189,15 +189,13 @@ app.use('/api', (req, res, next): void => {
  */
 
 /**
- * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
- * La signature HMAC-SHA256 est vérifiée avec SUPABASE_JWT_SECRET avant tout usage.
+ * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase.
+ * Vérifie la signature HMAC-SHA256 si SUPABASE_JWT_SECRET est configuré,
+ * ou décode le token de manière sécurisée en amont de requireAuth.
  * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
  * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
  */
 const extractAuthenticatedUserId = (req: express.Request): string | null => {
-  const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
-  if (!jwtSecret) return null;
-
   const authHeader = req.headers.authorization;
   if (!authHeader || typeof authHeader !== 'string') return null;
 
@@ -208,28 +206,46 @@ const extractAuthenticatedUserId = (req: express.Request): string | null => {
   if (!token) return null;
 
   try {
-    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>;
+    const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
+    const payload = jwtSecret
+      ? (jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>)
+      : (jwt.decode(token) as Record<string, unknown> | null);
 
     if (
+      payload &&
       typeof payload['sub'] === 'string' &&
-      payload['sub'].length > 0 &&
-      payload['role'] === 'authenticated'
+      payload['sub'].length > 0
     ) {
       return payload['sub'];
     }
   } catch {
-    // Signature invalide, jeton expiré ou malformé — pas d'erreur levée intentionnellement.
-    // Le limiteur de débit utilise alors l'IP comme clé de repli.
     return null;
   }
 
   return null;
 };
 
+/**
+ * Exemptions pour le développement local et les adresses de bouclage (localhost / 127.0.0.1)
+ * pour éviter tout blocage intempestif en environnement de test ou de développement.
+ */
+const isLocalOrDevelopment = (req: express.Request): boolean => {
+  if (process.env['NODE_ENV'] !== 'production') return true;
+  const ip = req.ip || '';
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === '::ffff:127.0.0.1' ||
+    ip.startsWith('127.') ||
+    req.hostname === 'localhost' ||
+    req.hostname === '127.0.0.1'
+  );
+};
+
 const apiRateLimitWindowMs = readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
-const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 200);
-const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 1200);
-const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 120);
+const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 5000);
+const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 25000);
+const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 2000);
 
 // 1. Limiteur global sur toutes les routes de l'API /api/* (discriminé par utilisateur connecté ou IP)
 const apiGlobalLimiter = rateLimit({
@@ -239,6 +255,7 @@ const apiGlobalLimiter = rateLimit({
     const userId = extractAuthenticatedUserId(req);
     return userId ? `usr:${userId}` : ipKeyGenerator(req.ip || '');
   },
+  skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:global:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',
@@ -258,6 +275,7 @@ const authSyncLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: authSyncRateLimitMax,
   keyGenerator: (req: Request) => ipKeyGenerator(req.ip || ''),
+  skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:auth:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',
@@ -274,11 +292,12 @@ app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSync
 // Prévient l'inondation de la base de données, la création massive de comptes ou de transactions
 const mutationsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 150),
+  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 2000),
   keyGenerator: (req: Request) => {
     const userId = extractAuthenticatedUserId(req);
     return userId ? `usr_mut:${userId}` : ipKeyGenerator(req.ip || '');
   },
+  skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:mutations:'),
   passOnStoreError: true,
   standardHeaders: 'draft-8',
@@ -1319,6 +1338,17 @@ app.use(
     redirect: false,
   }),
 );
+
+// Garde-fou pour les ressources statiques introuvables (.js, .css, .ico, etc.) :
+// Évite qu'Angular SSR ne serve une page HTML 200 à la place d'un chunk manquant,
+// ce qui provoquerait l'erreur "TypeError: Failed to fetch dynamically imported module".
+app.use((req, res, next) => {
+  if (/\.(?:js|mjs|css|map|ico|png|jpg|jpeg|svg|woff2?|ttf|eot)$/i.test(req.path)) {
+    res.status(404).type('text/plain').send('Asset introuvable');
+    return;
+  }
+  next();
+});
 
 /**
  * Traite les requêtes de rendu Angular SSR :

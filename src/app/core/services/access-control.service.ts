@@ -98,10 +98,11 @@ export class AccessControlService {
   }
 
   public hasPermission(permissionKey: string): boolean {
-    this.resetForAccountChange();
+    const currentUser = this.authService.currentUser();
+    const permissionsBelongToCurrentUser = this.permissionsUserId === (currentUser?.id ?? null);
 
     // 1. Règle d'or : l'administrateur système possède tous les droits
-    if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
+    if (this.authService.isAdmin() || currentUser?.role === 'admin') {
       return true;
     }
 
@@ -111,15 +112,15 @@ export class AccessControlService {
     }
 
     // 3. Évaluation granulaire issue de l'API /api/access-control/me
-    const matchingPermissions = this._effectivePermissions().filter(
-      (permission) => permission.permissionKey === permissionKey
-    );
+    const matchingPermissions = permissionsBelongToCurrentUser
+      ? this._effectivePermissions().filter((permission) => permission.permissionKey === permissionKey)
+      : [];
     if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope.type === 'all')) return false;
     if (matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all')) return true;
     if (matchingPermissions.length > 0) return false;
 
     // Dynamic roles must not inherit privileges from their normalized legacy role.
-    if (this.authService.currentUser()?.customRole) return false;
+    if (currentUser?.customRole) return false;
 
     // 4. Repli canonique robuste selon le rôle Transmex du collaborateur
     const userRole = this.authService.currentRole();

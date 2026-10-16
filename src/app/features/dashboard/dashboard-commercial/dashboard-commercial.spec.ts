@@ -5,6 +5,8 @@ import { signal } from '@angular/core';
 import { DashboardCommercial } from './dashboard-commercial';
 import { CrmService } from '../../../core/services/crm.service';
 import { QuoteService } from '../../../core/services/quote.service';
+import { DossierService } from '../../../core/services/dossier.service';
+import { ProspectService } from '../../../core/services/prospect.service';
 import { CrmActivity, CrmClient, CrmOpportunity } from '../../../core/models/crm.model';
 import { SalesQuote } from '../../../core/models/quote.model';
 
@@ -110,6 +112,9 @@ describe('DashboardCommercial', () => {
       prospectId: 'p-1',
       opportunityId: 'opp-1',
       assignedTo: 'user-1',
+      prospectName: 'Société Minière du Cameroun',
+      assignedToName: 'Commercial Test',
+      createdBy: 'user-1',
       title: 'Offre Minier',
       currency: 'XAF',
       columns: [],
@@ -154,6 +159,16 @@ describe('DashboardCommercial', () => {
     loadQuotes: vi.fn().mockResolvedValue(true),
   };
 
+  const dossierServiceMock = {
+    total: signal(1),
+    loadDossiers: vi.fn().mockResolvedValue(true),
+  };
+
+  const prospectServiceMock = {
+    total: signal(2),
+    loadProspects: vi.fn().mockResolvedValue(true),
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
     await TestBed.configureTestingModule({
@@ -162,6 +177,8 @@ describe('DashboardCommercial', () => {
         provideRouter([]),
         { provide: CrmService, useValue: crmServiceMock },
         { provide: QuoteService, useValue: quoteServiceMock },
+        { provide: DossierService, useValue: dossierServiceMock },
+        { provide: ProspectService, useValue: prospectServiceMock },
       ],
     }).compileComponents();
 
@@ -177,6 +194,8 @@ describe('DashboardCommercial', () => {
   it('devrait charger les données du CRM et des cotations lors de ngOnInit', () => {
     expect(crmServiceMock.load).toHaveBeenCalled();
     expect(quoteServiceMock.loadQuotes).toHaveBeenCalled();
+    expect(dossierServiceMock.loadDossiers).toHaveBeenCalled();
+    expect(prospectServiceMock.loadProspects).toHaveBeenCalled();
   });
 
   it('devrait calculer le chiffre d\'affaires prévisionnel à partir de la base', () => {
@@ -189,15 +208,17 @@ describe('DashboardCommercial', () => {
     expect(component.activeQuotesCount()).toBe(1);
   });
 
-  it('devrait calculer le taux de conversion à partir des opportunités gagnées', () => {
-    expect(component.conversionRate()).toBe(50);
+  it('devrait calculer le taux de conversion parmi les opportunités clôturées', () => {
+    expect(component.conversionRate()).toBe(100);
   });
 
   it('devrait exposer les paliers de l\'entonnoir des ventes', () => {
     const stages = component.funnelStages();
-    expect(stages.length).toBe(5);
+    expect(stages.length).toBe(6);
     expect(stages[0].label).toBe('Prospects');
     expect(stages[0].count).toBe(2);
+    expect(stages[4].label).toBe('Dossiers');
+    expect(stages[4].count).toBe(1);
   });
 
   it('devrait afficher les tâches et permettre de les marquer comme terminées', async () => {

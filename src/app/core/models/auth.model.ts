@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'caissiere' | 'employe' | 'tresorier' | 'comptable';
+export type UserRole = 'admin' | 'manager' | 'caissiere' | 'employe' | 'tresorier' | 'comptable' | 'commercial';
 
 export interface RoleDefinition {
   id: UserRole;
@@ -104,5 +104,11 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     label: 'Employé',
     description: 'Consultation et suivi des activités opérationnelles',
     badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  commercial: {
+    id: 'commercial',
+    label: 'Commercial',
+    description: 'Gestion du pipeline des ventes, prospection, cotations et suivi client',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
   },
 };

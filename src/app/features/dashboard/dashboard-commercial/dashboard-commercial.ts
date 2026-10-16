@@ -26,6 +26,8 @@ import {
 } from 'chart.js';
 import { CrmService } from '../../../core/services/crm.service';
 import { QuoteService } from '../../../core/services/quote.service';
+import { DossierService } from '../../../core/services/dossier.service';
+import { ProspectService } from '../../../core/services/prospect.service';
 import { CrmActivity } from '../../../core/models/crm.model';
 
 Chart.register(
@@ -57,6 +59,8 @@ export class DashboardCommercial implements OnInit, AfterViewInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
   public readonly crmService = inject(CrmService);
   public readonly quoteService = inject(QuoteService);
+  private readonly dossierService = inject(DossierService);
+  private readonly prospectService = inject(ProspectService);
 
   @ViewChild('revenueChartCanvas') private readonly revenueChartCanvas?: ElementRef<HTMLCanvasElement>;
   private chartInstance?: Chart;
@@ -95,11 +99,12 @@ export class DashboardCommercial implements OnInit, AfterViewInit, OnDestroy {
 
   // 2. Entonnoir des ventes
   public readonly funnelStages = computed<StageMetric[]>(() => {
-    const prospectsCount = this.clients().length;
+    const prospectsCount = this.prospectService.total();
     const opps = this.opportunities();
     const oppsCount = opps.length;
     const quotesSentCount = this.quotes().filter((q) => q.status === 'sent' || q.status === 'accepted').length;
     const negotiationsCount = opps.filter((o) => o.stage === 'negotiation' || o.stage === 'quote_sent').length;
+    const dossiersCount = this.dossierService.total();
     const contractsSignedCount = opps.filter((o) => o.stage === 'won').length;
 
     const baseCount = Math.max(prospectsCount, oppsCount, 1);
@@ -128,6 +133,12 @@ export class DashboardCommercial implements OnInit, AfterViewInit, OnDestroy {
         count: negotiationsCount,
         percentage: Math.min(100, Math.round((negotiationsCount / baseCount) * 100)),
         color: '#ea580c', // Orange-red
+      },
+      {
+        label: 'Dossiers',
+        count: dossiersCount,
+        percentage: Math.min(100, Math.round((dossiersCount / baseCount) * 100)),
+        color: '#7c3aed',
       },
       {
         label: 'Contrats signés',
@@ -189,6 +200,8 @@ export class DashboardCommercial implements OnInit, AfterViewInit, OnDestroy {
   public ngOnInit(): void {
     void this.crmService.load();
     void this.quoteService.loadQuotes();
+    void this.dossierService.loadDossiers();
+    void this.prospectService.loadProspects();
   }
 
   public ngAfterViewInit(): void {

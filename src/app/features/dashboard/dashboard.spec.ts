@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { Dashboard } from './dashboard';
 import { AuthService } from '../../core/services/auth.service';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { UserService } from '../../core/services/user.service';
 import { UserProfile } from '../../core/models/auth.model';
 
@@ -26,6 +27,7 @@ describe('Dashboard Component', () => {
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: authServiceMock },
+        { provide: AccessControlService, useValue: { hasPermission: () => false } },
         { provide: UserService, useValue: userServiceMock },
       ],
     });
@@ -92,5 +94,38 @@ describe('Dashboard Component', () => {
     });
 
     expect(component.dashboardView()).toBe('employee');
+  });
+
+  it('devrait orienter vers la vue commercial pour un utilisateur ayant le rôle commercial', () => {
+    currentUserMock.set({
+      id: 'comm-id',
+      email: 'commercial@transimex.cm',
+      firstName: 'Agent',
+      lastName: 'Commercial',
+      role: 'commercial',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    expect(component.dashboardView()).toBe('commercial');
+  });
+
+  it('devrait permettre aux rôles privilégiés de basculer manuellement vers la vue commercial', () => {
+    currentUserMock.set({
+      id: 'admin-id',
+      email: 'admin@transimex.cm',
+      firstName: 'Admin',
+      lastName: 'Transimex',
+      role: 'admin',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    expect(component.isPrivileged()).toBe(true);
+    component.setManualView('commercial');
+    expect(component.dashboardView()).toBe('commercial');
+
+    component.setManualView(null);
+    expect(component.dashboardView()).toBe('admin');
   });
 });
