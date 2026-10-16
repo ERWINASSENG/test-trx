@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
+import jwt from 'jsonwebtoken';
 import { UpstashRateLimitStore } from './server/upstash-rate-limit.store';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
@@ -179,10 +180,14 @@ app.use('/api', (req, res, next): void => {
 
 /**
  * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
+ * La signature HMAC-SHA256 est vérifiée avec SUPABASE_JWT_SECRET avant tout usage.
  * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
  * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
  */
 const extractAuthenticatedUserId = (req: express.Request): string | null => {
+  const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
+  if (!jwtSecret) return null;
+
   const authHeader = req.headers.authorization;
   if (!authHeader || typeof authHeader !== 'string') return null;
 
@@ -193,22 +198,18 @@ const extractAuthenticatedUserId = (req: express.Request): string | null => {
   if (!token) return null;
 
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-    const payload = JSON.parse(payloadJson);
+    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>;
 
     if (
-      typeof payload.sub === 'string' &&
-      payload.sub.length > 0 &&
-      typeof payload.exp === 'number' &&
-      payload.exp * 1000 > Date.now() &&
-      payload.role === 'authenticated'
+      typeof payload['sub'] === 'string' &&
+      payload['sub'].length > 0 &&
+      payload['role'] === 'authenticated'
     ) {
-      return payload.sub;
+      return payload['sub'];
     }
   } catch {
+    // Signature invalide, jeton expiré ou malformé — pas d'erreur levée intentionnellement.
+    // Le limiteur de débit utilise alors l'IP comme clé de repli.
     return null;
   }
 

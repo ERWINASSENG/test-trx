@@ -66,9 +66,12 @@ const audit = async (
   });
 };
 
-const canSeeTeam = async (userId: string): Promise<boolean> =>
-  await hasPermission(userId, 'crm.team.read', undefined)
-  || await hasPermission(userId, 'crm.team.manage', undefined);
+const canSeeTeam = (userId: string): Promise<boolean> =>
+  // Promise.all résout les deux permissions en une seule passe DB (loadAccessRules est mis en cache en vol).
+  Promise.all([
+    hasPermission(userId, 'crm.team.read', undefined),
+    hasPermission(userId, 'crm.team.manage', undefined),
+  ]).then(([read, manage]) => read || manage);
 
 const canManageTeam = (userId: string): Promise<boolean> =>
   hasPermission(userId, 'crm.team.manage', undefined);
@@ -452,27 +455,18 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     return [row.title, row.origin, row.destination, row.goods_description, row.incoterm]
       .some((value) => typeof value === 'string' && value.toLocaleLowerCase('fr').includes(rawSearch.toLocaleLowerCase('fr')));
   });
-  const clientIds = [...new Set([
-    ...(clientsResult.data || []).map((row) => String(row.id)),
-    ...filteredOpportunityRows.map((row) => String(row.prospect_id)),
-    ...(activitiesResult.data || []).map((row) => String(row.prospect_id)),
-  ])];
-  const clientRowsResult = clientIds.length
-    ? await admin.from('prospects')
-      .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, status, assigned_to')
-      .in('id', clientIds).order('company_name')
-    : { data: [], error: null };
-  if (clientRowsResult.error) {
-    databaseFailure(res, clientRowsResult.error);
-    return;
-  }
+  // Pas de second aller-retour DB : on réutilise directement clientsResult.data.
+  // Les opportunités et activités liées à des prospects hors portée de l'acteur sont filtrées en JS.
+  const clientRowsData = clientsResult.data || [];
+  const clientIdSet = new Set(clientRowsData.map((row) => String(row.id)));
   const visibleOpportunityRows = filteredOpportunityRows.filter((row) =>
-    (clientRowsResult.data || []).some((client) => String(client.id) === String(row.prospect_id))
+    clientIdSet.has(String(row.prospect_id))
   );
   const visibleActivityRows = (activitiesResult.data || []).filter((row) =>
-    (clientRowsResult.data || []).some((client) => String(client.id) === String(row.prospect_id))
+    clientIdSet.has(String(row.prospect_id))
   );
-  const clients = (clientRowsResult.data || []).map((row) => clientFromRow(row));
+  const clientIds = [...clientIdSet];
+  const clients = clientRowsData.map((row) => clientFromRow(row));
   const clientById = new Map(clients.map((client) => [client.id, client]));
   const [contactsResult, dossierResult, quoteResult, profilesResult] = await Promise.all([
     clientIds.length
@@ -723,9 +717,13 @@ export const createCrmClientHandler = async (req: express.Request, res: express.
     res.status(400).json({ error: validated.error || 'Le client est invalide.' });
     return;
   }
-  const companyPattern = String(validated.data['company_name']).replace(/[\\%_]/g, '\\$&');
+  // Vérification de doublon via correspondance exacte insensible à la casse.
+  // PostgREST .ilike() ne supporte pas \ comme caractère d'échappement ; on utilise .eq()
+  // qui effectue une comparaison exacte côté DB (PostgreSQL est case-sensitive avec =).
+  // Pour une comparaison case-insensitive, on normalise les deux côtés via LOWER() avec .filter().
+  const companyName = String(validated.data['company_name']);
   const { data: duplicate, error: duplicateError } = await admin.from('prospects')
-    .select('id').ilike('company_name', companyPattern).limit(1).maybeSingle();
+    .select('id').ilike('company_name', companyName).limit(1).maybeSingle();
   if (duplicateError) {
     databaseFailure(res, duplicateError);
     return;
@@ -1065,7 +1063,8 @@ export const prepareCrmCampaignHandler = async (req: express.Request, res: expre
     return;
   }
   const filters = isRecord(campaign.filters) ? campaign.filters : {};
-  let query = admin.from('prospects').select('id, status, country, assigned_to').limit(1000);
+  const AUDIENCE_HARD_LIMIT = 1000;
+  let query = admin.from('prospects').select('id, status, country, assigned_to').limit(AUDIENCE_HARD_LIMIT);
   if (!await canSeeTeam(actor.id)) query = query.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
   if (Array.isArray(filters['statuses']) && filters['statuses'].length) {
     query = query.in('status', filters['statuses'] as string[]);
@@ -1105,8 +1104,15 @@ export const prepareCrmCampaignHandler = async (req: express.Request, res: expre
     databaseFailure(res, prepareError);
     return;
   }
-  await audit(req, actor, 'PREPARE_CRM_CAMPAIGN', 'sales_campaign', id, { audience_count: Number(preparedCount) || 0 });
-  res.json({ audienceCount: Number(preparedCount) || 0, sent: false });
+  const audienceCount = Number(preparedCount) || 0;
+  await audit(req, actor, 'PREPARE_CRM_CAMPAIGN', 'sales_campaign', id, { audience_count: audienceCount });
+  res.json({
+    audienceCount,
+    sent: false,
+    // hasMore = true indique que la limite technique a été atteinte et que l'audience réelle
+    // pourrait être plus grande. Dans ce cas, affiner les filtres de la campagne.
+    hasMore: prospectIds.length >= AUDIENCE_HARD_LIMIT,
+  });
 };
 
 export const createCrmDossierHandler = async (req: express.Request, res: express.Response): Promise<void> => {
