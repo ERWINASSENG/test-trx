@@ -26,6 +26,7 @@ export class DashboardEmployee implements OnInit {
   public ngOnInit(): void {
     if (this.isCashier()) {
       void this.cashierService.loadTransactions();
+      void this.cashierService.loadCashierSummary();
     }
   }
 

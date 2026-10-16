@@ -336,6 +336,11 @@ export class ProspectsComponent {
       ? values.assignedTo.trim()
       : null;
 
+    const editingId = this.editingId();
+    const existingProspect = editingId
+      ? this.prospectService.prospects().find((item) => item.id === editingId)
+      : undefined;
+
     const input: CreateProspectInput = {
       name: companyName || contactName || 'Prospect',
       companyName: companyName || null,
@@ -348,12 +353,11 @@ export class ProspectsComponent {
       phone: values.phone.trim() || null,
       email: values.email.trim().toLowerCase() || null,
       assignedTo,
-      status: 'new',
+      status: existingProspect?.status ?? 'new',
     };
 
     this.isSaving.set(true);
     this.formError.set(null);
-    const editingId = this.editingId();
     const result = editingId
       ? await this.prospectService.updateProspect(editingId, input)
       : await this.prospectService.createProspect(input);

@@ -297,6 +297,12 @@ app.use(
     '/api/cashier/transactions',
     '/api/system/operations',
     '/api/prospects',
+    '/api/crm',
+    '/api/quotes',
+    '/api/dossiers',
+    '/api/journals',
+    '/api/access-control',
+    '/api/profile/me',
   ],
   (req, res, next): void => {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {

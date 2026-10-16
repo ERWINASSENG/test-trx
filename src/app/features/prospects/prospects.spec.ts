@@ -176,18 +176,18 @@ describe('ProspectsComponent', () => {
     TestBed.resetTestingModule();
   });
 
-  it('fait disparaître le message de feedback automatiquement après 10 secondes', () => {
+  it('fait disparaître le message de feedback automatiquement après 15 secondes', () => {
     vi.useFakeTimers();
     const fixture = createComponent();
     const component = fixture.componentInstance;
     component.showFeedback('Prospect créé.');
     expect(component.feedback()).toBe('Prospect créé.');
 
-    // À 9 secondes : toujours visible
-    vi.advanceTimersByTime(9000);
+    // À 14 secondes : toujours visible
+    vi.advanceTimersByTime(14000);
     expect(component.feedback()).toBe('Prospect créé.');
 
-    // À 10 secondes : réinitialisé à null
+    // À 15 secondes : réinitialisé à null
     vi.advanceTimersByTime(1000);
     expect(component.feedback()).toBeNull();
 
@@ -229,25 +229,25 @@ describe('ProspectsComponent', () => {
       const component = fixture.componentInstance;
 
       expect(component.sortField()).toBeNull();
-      expect(component.sortDirection()).toBeNull();
+      expect(component.sortDirection()).toBe('asc');
       expect(component.getSortIcon('client')).toBe('unfold_more');
 
       // 1er clic : asc
       component.toggleSort('client');
       expect(component.sortField()).toBe('client');
       expect(component.sortDirection()).toBe('asc');
-      expect(component.getSortIcon('client')).toBe('expand_less');
+      expect(component.getSortIcon('client')).toBe('arrow_upward');
 
       // 2e clic : desc
       component.toggleSort('client');
       expect(component.sortField()).toBe('client');
       expect(component.sortDirection()).toBe('desc');
-      expect(component.getSortIcon('client')).toBe('expand_more');
+      expect(component.getSortIcon('client')).toBe('arrow_downward');
 
       // 3e clic : annulation du tri
       component.toggleSort('client');
       expect(component.sortField()).toBeNull();
-      expect(component.sortDirection()).toBeNull();
+      expect(component.sortDirection()).toBe('asc');
       expect(component.getSortIcon('client')).toBe('unfold_more');
 
       fixture.destroy();

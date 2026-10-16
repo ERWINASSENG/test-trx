@@ -79,12 +79,13 @@ BEGIN
   END IF;
 
   RETURN NEW;
-END
+END;
 $function$;
 
 DROP TRIGGER IF EXISTS trg_link_sales_quote_to_crm_opportunity ON public.sales_quotes;
 CREATE TRIGGER trg_link_sales_quote_to_crm_opportunity
   BEFORE INSERT OR UPDATE OF opportunity_id, prospect_id, assigned_to, title, sea_freight, total_amount, currency
+  ON public.sales_quotes
   FOR EACH ROW EXECUTE FUNCTION public.link_sales_quote_to_crm_opportunity();
 
 CREATE OR REPLACE FUNCTION public.sync_accepted_quote_to_sales_crm()
@@ -138,8 +139,13 @@ BEGIN
     END IF;
   END IF;
   RETURN NEW;
-END
+END;
 $function$;
+
+REVOKE ALL ON FUNCTION public.link_sales_quote_to_crm_opportunity() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.link_sales_quote_to_crm_opportunity() TO service_role;
+REVOKE ALL ON FUNCTION public.sync_accepted_quote_to_sales_crm() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_accepted_quote_to_sales_crm() TO service_role;
 
 WITH ranked_quotes AS (
   SELECT id,

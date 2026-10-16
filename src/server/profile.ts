@@ -117,11 +117,12 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
     if (department !== undefined) profileUpdates['department'] = department;
     if (phone !== undefined) profileUpdates['phone'] = phone;
 
-    const { error: profileUpdateError } = await adminClient
+    const { data: updatedProfile, error: profileUpdateError } = await adminClient
       .from('profiles')
       .update(profileUpdates)
       .eq('id', userId)
-      .select('id');
+      .select('id, first_name, last_name, phone')
+      .maybeSingle();
 
     if (profileUpdateError) {
       console.error('Échec de la mise à jour du profil utilisateur:', profileUpdateError.message);
@@ -129,16 +130,29 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
       return;
     }
 
-    const authMeta: Record<string, unknown> = {};
-    if (firstName !== undefined || lastName !== undefined) {
-      authMeta['user_metadata'] = {
-        first_name: firstName ?? undefined,
-        last_name: lastName ?? undefined,
-        display_name: `${firstName ?? ''} ${lastName ?? ''}`.trim(),
-      };
-    }
+    if (firstName !== undefined || lastName !== undefined || phone !== undefined) {
+      const { data: existingUser } = await adminClient.auth.admin.getUserById(userId);
+      const currentMeta = (existingUser?.user?.user_metadata as Record<string, unknown> | undefined) || {};
+      const resolvedFirstName = typeof updatedProfile?.first_name === 'string'
+        ? updatedProfile.first_name
+        : (firstName ?? String(currentMeta['first_name'] ?? ''));
+      const resolvedLastName = typeof updatedProfile?.last_name === 'string'
+        ? updatedProfile.last_name
+        : (lastName ?? String(currentMeta['last_name'] ?? ''));
+      const resolvedPhone = updatedProfile?.phone !== undefined
+        ? updatedProfile.phone
+        : (phone !== undefined ? phone : currentMeta['phone']);
 
-    if (Object.keys(authMeta).length > 0) {
+      const authMeta: Record<string, unknown> = {
+        user_metadata: {
+          ...currentMeta,
+          first_name: resolvedFirstName,
+          last_name: resolvedLastName,
+          display_name: `${resolvedFirstName} ${resolvedLastName}`.trim(),
+          ...(resolvedPhone !== undefined ? { phone: resolvedPhone } : {}),
+        },
+      };
+
       const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, authMeta);
       if (authUpdateError) {
         console.error('Échec de synchronisation auth.users:', authUpdateError.message);

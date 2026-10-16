@@ -1118,11 +1118,7 @@ export const listQuoteTemplatesHandler = async (req: express.Request, res: expre
     res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
   }
-  const canManageAll = await actorCanManageAllQuotes(actor.id);
-  let query = adminClient.from('sales_quote_templates').select('*').order('name').limit(200);
-  // Un non-manager ne voit que ses propres modèles.
-  if (!canManageAll) query = query.eq('created_by', actor.id);
-  const { data, error } = await query;
+  const { data, error } = await adminClient.from('sales_quote_templates').select('*').order('name').limit(200);
   if (error) {
     sendQuoteDatabaseError(res, error);
     return;

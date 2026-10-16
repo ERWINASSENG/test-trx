@@ -329,20 +329,37 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
   }
 
   if (body.montant !== undefined) {
-    const raw = Math.abs(Number(body.montant) || 0);
-    const cat = allowedUpdates['category'] || body.category;
-    allowedUpdates['montant'] = cat === 'sortie' ? -raw : raw;
-  } else if (allowedUpdates['category'] !== undefined) {
-    // Si la catégorie change seule, réajuster le signe du montant existant
-    const { data: existing } = await adminClient
-      .from('journal_entries')
-      .select('montant')
-      .eq('id', entryId)
-      .maybeSingle();
+    const parsedMontant = Number(body.montant);
+    if (isNaN(parsedMontant) || parsedMontant === 0) {
+      res.status(400).json({ error: 'Le montant doit être un nombre valide différent de zéro.' });
+      return;
+    }
+  }
 
-    if (existing) {
-      const raw = Math.abs(Number(existing.montant) || 0);
-      allowedUpdates['montant'] = allowedUpdates['category'] === 'sortie' ? -raw : raw;
+  if (body.montant !== undefined || allowedUpdates['category'] !== undefined) {
+    let existingCategory: string | undefined;
+    let existingMontant = 0;
+
+    if (!allowedUpdates['category'] || body.montant === undefined) {
+      const { data: existing } = await adminClient
+        .from('journal_entries')
+        .select('montant, category')
+        .eq('id', entryId)
+        .eq('journal_id', journalId)
+        .maybeSingle();
+
+      if (existing) {
+        existingCategory = typeof existing.category === 'string' ? existing.category : undefined;
+        existingMontant = Number(existing.montant) || 0;
+      }
+    }
+
+    const effectiveCategory = (allowedUpdates['category'] as string | undefined)
+      || existingCategory
+      || (existingMontant < 0 ? 'sortie' : 'entree');
+    const rawAmount = Math.abs(body.montant !== undefined ? Number(body.montant) : existingMontant);
+    if (rawAmount > 0) {
+      allowedUpdates['montant'] = effectiveCategory === 'sortie' ? -rawAmount : rawAmount;
     }
   }
 
@@ -546,7 +563,7 @@ export const getJournalChartDataHandler = async (req: express.Request, res: expr
       descriptions,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    console.error('[API JOURNAL ENTRIES] Erreur getJournalChartDataHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors du chargement des données graphiques du journal.' });
   }
 };

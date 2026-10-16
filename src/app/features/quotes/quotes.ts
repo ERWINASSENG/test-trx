@@ -113,7 +113,17 @@ export class QuotesComponent {
     this.columns().filter((column) => column.type === 'amount')
   );
 
-  public readonly filteredProspects = computed(() => this.quoteService.prospects());
+  public readonly filteredProspects = computed(() => {
+    const query = this.clientSearch().trim().toLocaleLowerCase('fr');
+    const selectedId = this.prospectId();
+    const prospects = this.quoteService.prospects();
+    if (!query) return prospects;
+    return prospects.filter((prospect) =>
+      prospect.id === selectedId ||
+      (prospect.companyName || prospect.name).toLocaleLowerCase('fr').includes(query) ||
+      (prospect.contactName && prospect.contactName.toLocaleLowerCase('fr').includes(query))
+    );
+  });
 
   public readonly filteredQuotes = computed(() => {
     const query = this.quoteSearch().trim().toLocaleLowerCase('fr');
