@@ -6,6 +6,8 @@ import { getSupabaseAdmin } from './auth';
 
 const MAX_DOSSIER_NUMBER_LENGTH = 100;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Caractères spéciaux ILIKE à supprimer (PostgREST n'accepte pas \ comme escape).
+const ILIKE_UNSAFE = /[%_]/g;
 
 interface DossierActor {
   id?: string;
@@ -18,8 +20,13 @@ const getActor = (req: express.Request): DossierActor | undefined =>
 
 export const listDossiersHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
+  const actor = getActor(req);
   if (!adminClient) {
     res.status(503).json({ error: 'Le service Dossiers est indisponible.' });
+    return;
+  }
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
   }
 
@@ -37,13 +44,17 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     return;
   }
 
+  // Seuls les admins/managers voient tous les dossiers ; les autres ne voient que les leurs.
+  const canSeeAll = await hasPermission(actor.id, 'dossiers.manage', undefined);
+
   let query = adminClient
     .from('dossiers')
     .select('id, no_dossier, prospect_id, opportunity_id, client, statut, description, created_by, assigned_to, created_at, updated_at', { count: 'exact' })
     .order('no_dossier', { ascending: true })
     .range(offset, offset + limit - 1);
 
-  if (search) query = query.ilike('no_dossier', `%${search.replace(/[%_,]/g, '')}%`);
+  if (!canSeeAll) query = query.eq('created_by', actor.id);
+  if (search) query = query.ilike('no_dossier', `%${search.replace(ILIKE_UNSAFE, '')}%`);
   if (typeof rawDossierId === 'string') query = query.eq('id', rawDossierId);
 
   const { data, error, count } = await query;

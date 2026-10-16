@@ -700,12 +700,20 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     return;
   }
   const canManageAll = await actorCanManageAllQuotes(actor.id);
-  if (!await expireDueQuotes(adminClient, actor.id, canManageAll)) {
-    res.status(500).json({ error: 'Impossible de mettre à jour les cotations expirées.' });
-    return;
-  }
+  // L'expiration automatique est gérée en arrière-plan (pg_cron ou tâche planifiée).
+  // Ne plus bloquer le GET sur une UPDATE — on lance en fire-and-forget non bloquant.
+  void expireDueQuotes(adminClient, actor.id, canManageAll);
+
+  const rawLimit = Number(req.query['limit']);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+  const rawOffset = Number(req.query['offset']);
+  const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? Math.min(rawOffset, 100000) : 0;
+
   const status = req.query['status'];
-  let query = adminClient.from('sales_quotes').select('*').order('updated_at', { ascending: false }).limit(200);
+  let query = adminClient.from('sales_quotes')
+    .select('*', { count: 'exact' })
+    .order('updated_at', { ascending: false })
+    .range(offset, offset + limit - 1);
   if (!canManageAll) query = query.eq('assigned_to', actor.id);
   if (typeof status === 'string' && status) {
     if (!QUOTE_STATUSES.includes(status as QuoteStatus)) {
@@ -714,7 +722,7 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     }
     query = query.eq('status', status);
   }
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) {
     sendQuoteDatabaseError(res, error);
     return;
@@ -788,14 +796,19 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     String(dossier.opportunity_id),
     { id: String(dossier.id), number: String(dossier.no_dossier) },
   ]));
-  res.json({ quotes: rows.map((row) => ({
-    ...toQuoteResponse(row, prospectNames.get(String(row.prospect_id))),
-    assignedToName: typeof row.assigned_to === 'string' ? assigneeNames.get(row.assigned_to) || null : null,
-    contactName: typeof row.contact_id === 'string' ? contactNames.get(row.contact_id) || null : null,
-    opportunityTitle: typeof row.opportunity_id === 'string' ? opportunityTitles.get(row.opportunity_id) || null : null,
-    dossierId: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.id || null : null,
-    dossierNumber: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.number || null : null,
-  })) });
+  res.json({
+    quotes: rows.map((row) => ({
+      ...toQuoteResponse(row, prospectNames.get(String(row.prospect_id))),
+      assignedToName: typeof row.assigned_to === 'string' ? assigneeNames.get(row.assigned_to) || null : null,
+      contactName: typeof row.contact_id === 'string' ? contactNames.get(row.contact_id) || null : null,
+      opportunityTitle: typeof row.opportunity_id === 'string' ? opportunityTitles.get(row.opportunity_id) || null : null,
+      dossierId: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.id || null : null,
+      dossierNumber: typeof row.opportunity_id === 'string' ? dossierByOpportunity.get(row.opportunity_id)?.number || null : null,
+    })),
+    total: count ?? rows.length,
+    limit,
+    offset,
+  });
 };
 
 export const createQuoteHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -1097,10 +1110,19 @@ export const deleteQuoteHandler = async (req: express.Request, res: express.Resp
   res.json({ deleted: true });
 };
 
-export const listQuoteTemplatesHandler = async (_req: express.Request, res: express.Response): Promise<void> => {
+export const listQuoteTemplatesHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getAdminClient(res);
+  const actor = getActor(req);
   if (!adminClient) return;
-  const { data, error } = await adminClient.from('sales_quote_templates').select('*').order('name').limit(200);
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  const canManageAll = await actorCanManageAllQuotes(actor.id);
+  let query = adminClient.from('sales_quote_templates').select('*').order('name').limit(200);
+  // Un non-manager ne voit que ses propres modèles.
+  if (!canManageAll) query = query.eq('created_by', actor.id);
+  const { data, error } = await query;
   if (error) {
     sendQuoteDatabaseError(res, error);
     return;
