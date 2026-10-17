@@ -157,164 +157,201 @@
     }
 
     @if (tab() === 'clients') {
-      @if (selectedClient(); as client) {
-        <article class="client-profile-full" aria-label="Fiche détaillée de la société">
-          <header class="client-profile-header">
-            <div class="client-header-main">
-              <button
-                type="button"
-                class="back-to-grid-btn"
-                (click)="selectedClientId.set(null)"
-                aria-label="Retour à la liste des sociétés">
-                <mat-icon aria-hidden="true">arrow_back</mat-icon>
-                <span>Retour aux sociétés</span>
-              </button>
-              <div class="client-profile-title">
-                <span class="client-profile-avatar" aria-hidden="true">
-                  {{ (client.companyName || client.name).slice(0, 2).toUpperCase() }}
-                </span>
-                <div>
-                  <h2>{{ client.companyName || client.name }}</h2>
-                  <span class="client-status" [class]="'status-' + (client.status || 'prospect')">
-                    {{ clientStatusLabel(client.status) }}
-                  </span>
+      <div class="table-scroll crm-table-fullwidth">
+        <table class="prospects-table odoo-table" aria-label="Liste des clients">
+          <thead>
+            <tr class="odoo-head-row select-none">
+              <th scope="col" class="th-checkbox">
+                <input
+                  type="checkbox"
+                  class="odoo-checkbox"
+                  [checked]="isAllClientsSelected()"
+                  (change)="toggleSelectAllClients()"
+                  aria-label="Sélectionner tous les clients"
+                />
+              </th>
+              <th
+                scope="col"
+                class="th-client th-sortable"
+                [attr.aria-sort]="getClientAriaSort('client')"
+                (click)="toggleClientSort('client')"
+                (keydown.enter)="toggleClientSort('client')"
+                (keydown.space)="toggleClientSort('client'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par client">
+                <div class="th-header-label">
+                  <span>Client</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'client'">{{ getClientSortIcon('client') }}</mat-icon>
                 </div>
-              </div>
-            </div>
-            <div class="client-header-actions">
-              @if (canCreate()) {
-                <button type="button" class="primary-action" (click)="openOpportunityDialog(client.id)">
-                  <mat-icon aria-hidden="true">add</mat-icon>
-                  <span>Créer une opportunité</span>
-                </button>
-                <button type="button" class="secondary-action" (click)="openContactDialog(client)">
-                  <mat-icon aria-hidden="true">person_add</mat-icon>
-                  <span>Ajouter un contact</span>
-                </button>
-              }
-            </div>
-          </header>
-
-          <dl class="client-details">
-            <div>
-              <dt><mat-icon aria-hidden="true">person</mat-icon>Contact principal</dt>
-              <dd>{{ client.contactName || 'À renseigner' }}@if (client.contactRole) { <small>({{ client.contactRole }})</small> }</dd>
-            </div>
-            <div>
-              <dt><mat-icon aria-hidden="true">email</mat-icon>E-mail</dt>
-              <dd>{{ client.email || 'Non renseigné' }}</dd>
-            </div>
-            <div>
-              <dt><mat-icon aria-hidden="true">phone</mat-icon>Téléphone</dt>
-              <dd>{{ client.phone || 'Non renseigné' }}</dd>
-            </div>
-            <div>
-              <dt><mat-icon aria-hidden="true">public</mat-icon>Pays</dt>
-              <dd>{{ client.country || 'Non précisé' }}</dd>
-            </div>
-            <div>
-              <dt><mat-icon aria-hidden="true">category</mat-icon>Secteur d'activité</dt>
-              <dd>{{ client.sector || 'Général' }}</dd>
-            </div>
-          </dl>
-
-          <section class="contacts-section" aria-label="Contacts associés">
-            <header class="section-heading">
-              <div>
-                <p class="crm-eyebrow">Interlocuteurs</p>
-                <h3>Contacts de la société</h3>
-              </div>
-              <span class="contacts-badge">{{ selectedClientContacts().length }}</span>
-            </header>
-            @if (selectedClientContacts().length === 0) {
-              <p class="column-empty">Aucun contact additionnel enregistré pour cette société.</p>
-            } @else {
-              <div class="matrix-table-wrapper">
-                <table class="matrix-table" aria-label="Liste des contacts">
-                  <thead>
-                    <tr>
-                      <th scope="col">Nom complet</th>
-                      <th scope="col">Fonction</th>
-                      <th scope="col">E-mail</th>
-                      <th scope="col">Téléphone</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (contact of selectedClientContacts(); track contact.id) {
-                      <tr>
-                        <td class="font-semibold">{{ contact.fullName }}</td>
-                        <td>{{ contact.jobTitle || 'Non précisée' }}</td>
-                        <td>{{ contact.email || '—' }}</td>
-                        <td>{{ contact.phone || '—' }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
-            }
-          </section>
-        </article>
-      } @else {
-        @if (crmService.clients().length === 0) {
-          <section class="crm-empty">
-            <h2>Aucune société enregistrée</h2>
-            <p>Une société ne possède qu’une fiche partagée entre prospects, cotations, CRM et dossiers.</p>
-            @if (canCreate()) {
-              <button type="button" class="primary-action" (click)="openClientDialog()">Créer une fiche société</button>
-            }
-          </section>
-        } @else {
-          <section class="clients-cards-grid" aria-label="Liste des sociétés clientes">
-            @for (client of visibleClients(); track client.id) {
-              <article class="client-grid-card">
-                <div class="client-card-top">
-                  <div class="client-identity">
-                    <span class="client-monogram" aria-hidden="true">{{ (client.companyName || client.name).slice(0, 2).toUpperCase() }}</span>
-                    <div class="client-names">
-                      <h3 class="client-company-name">{{ client.companyName || client.name }}</h3>
-                      @if (client.contactName) {
-                        <span class="client-contact-sub"><mat-icon aria-hidden="true">person</mat-icon>{{ client.contactName }}@if (client.contactRole) { · {{ client.contactRole }} }</span>
-                      }
+              </th>
+              <th
+                scope="col"
+                class="th-country th-sortable"
+                [attr.aria-sort]="getClientAriaSort('country')"
+                (click)="toggleClientSort('country')"
+                (keydown.enter)="toggleClientSort('country')"
+                (keydown.space)="toggleClientSort('country'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par pays">
+                <div class="th-header-label">
+                  <span>Pays</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'country'">{{ getClientSortIcon('country') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-sector th-sortable"
+                [attr.aria-sort]="getClientAriaSort('sector')"
+                (click)="toggleClientSort('sector')"
+                (keydown.enter)="toggleClientSort('sector')"
+                (keydown.space)="toggleClientSort('sector'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par secteur d'activité">
+                <div class="th-header-label">
+                  <span>Secteur d'activité</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'sector'">{{ getClientSortIcon('sector') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-contact th-sortable"
+                [attr.aria-sort]="getClientAriaSort('contact')"
+                (click)="toggleClientSort('contact')"
+                (keydown.enter)="toggleClientSort('contact')"
+                (keydown.space)="toggleClientSort('contact'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par contact principal">
+                <div class="th-header-label">
+                  <span>Contact principal</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'contact'">{{ getClientSortIcon('contact') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-phone th-sortable"
+                [attr.aria-sort]="getClientAriaSort('phone')"
+                (click)="toggleClientSort('phone')"
+                (keydown.enter)="toggleClientSort('phone')"
+                (keydown.space)="toggleClientSort('phone'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par téléphone">
+                <div class="th-header-label">
+                  <span>Téléphone</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'phone'">{{ getClientSortIcon('phone') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-email th-sortable"
+                [attr.aria-sort]="getClientAriaSort('email')"
+                (click)="toggleClientSort('email')"
+                (keydown.enter)="toggleClientSort('email')"
+                (keydown.space)="toggleClientSort('email'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par email">
+                <div class="th-header-label">
+                  <span>Email</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'email'">{{ getClientSortIcon('email') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-status th-sortable"
+                [attr.aria-sort]="getClientAriaSort('status')"
+                (click)="toggleClientSort('status')"
+                (keydown.enter)="toggleClientSort('status')"
+                (keydown.space)="toggleClientSort('status'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par statut">
+                <div class="th-header-label">
+                  <span>Statut</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'status'">{{ getClientSortIcon('status') }}</mat-icon>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (client of sortedClients(); track client.id) {
+              <tr
+                class="odoo-data-row select-none cursor-pointer"
+                [class.odoo-row-selected]="isClientSelected(client.id)"
+                (click)="toggleSelectClient(client.id)">
+                <td class="td-checkbox">
+                  <input
+                    type="checkbox"
+                    class="odoo-checkbox"
+                    [checked]="isClientSelected(client.id)"
+                    (change)="toggleSelectClient(client.id); $event.stopPropagation()"
+                    [attr.aria-label]="'Sélectionner ' + (client.companyName || client.name)"
+                  />
+                </td>
+                <td class="td-client">
+                  <div class="client-cell">
+                    <div class="company-avatar" [style.background-color]="getAvatarBg(client.companyName || client.name)">
+                      <span>{{ getMonogram(client.companyName || client.name) }}</span>
+                    </div>
+                    <div class="client-text">
+                      <strong class="company-name">{{ client.companyName || client.name }}</strong>
+                      <small class="company-sub">{{ client.sector || 'Société' }}</small>
                     </div>
                   </div>
-                  <span class="client-status" [class]="'status-' + (client.status || 'prospect')">{{ clientStatusLabel(client.status) }}</span>
-                </div>
-
-                <div class="client-card-meta">
-                  @if (client.country) {
-                    <span class="meta-tag"><mat-icon aria-hidden="true">public</mat-icon>{{ client.country }}</span>
-                  }
-                  @if (client.sector) {
-                    <span class="meta-tag"><mat-icon aria-hidden="true">category</mat-icon>{{ client.sector }}</span>
-                  }
-                  @if (client.email) {
-                    <span class="meta-tag"><mat-icon aria-hidden="true">email</mat-icon>{{ client.email }}</span>
-                  }
-                </div>
-
-                <footer class="client-card-footer">
-                  <button type="button" class="client-select-btn" (click)="selectedClientId.set(client.id)">
-                    <mat-icon aria-hidden="true">visibility</mat-icon>
-                    <span>Voir la fiche</span>
-                  </button>
-                  @if (canCreate()) {
-                    <button
-                      type="button"
-                      class="client-quick-opportunity-btn"
-                      (click)="openOpportunityDialog(client.id)"
-                      title="Créer une opportunité pour cette société"
-                      aria-label="Créer une opportunité">
-                      <mat-icon aria-hidden="true">add</mat-icon>
-                    </button>
-                  }
-                </footer>
-              </article>
+                </td>
+                <td class="td-country">
+                  <div class="country-cell">
+                    @if (getCountryFlag(client.country)) {
+                      <img
+                        class="country-flag"
+                        [src]="getCountryFlag(client.country)"
+                        [alt]="'Drapeau ' + (client.country || 'pays')"
+                        width="20"
+                        height="15"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                      />
+                    }
+                    <span class="country-name">{{ client.country || '—' }}</span>
+                  </div>
+                </td>
+                <td class="td-sector">
+                  <span class="sector-text">{{ client.sector || '—' }}</span>
+                </td>
+                <td class="td-contact">
+                  <div class="contact-text">
+                    <strong class="contact-name">{{ client.contactName || '—' }}</strong>
+                    @if (client.contactRole) {
+                      <small class="contact-sub">{{ client.contactRole }}</small>
+                    }
+                  </div>
+                </td>
+                <td class="td-phone">
+                  <span class="phone-text">{{ client.phone || '—' }}</span>
+                </td>
+                <td class="td-email">
+                  <span class="email-text">{{ client.email || '—' }}</span>
+                </td>
+                <td class="td-status">
+                  <span class="status-pill" [class]="getDisplayStatus(client.status).class">
+                    {{ getDisplayStatus(client.status).label }}
+                  </span>
+                </td>
+              </tr>
             } @empty {
-              <p class="column-empty">Aucune société trouvée pour cette recherche.</p>
+              <tr class="odoo-empty-row">
+                <td colspan="8" class="text-center py-8 text-slate-500">
+                  Aucun client trouvé pour cette recherche.
+                </td>
+              </tr>
             }
-          </section>
-        }
-      }
+          </tbody>
+        </table>
+      </div>
     }
 
     @if (tab() === 'activities') {

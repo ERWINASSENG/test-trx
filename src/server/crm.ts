@@ -361,19 +361,41 @@ export const validateCrmCampaignPayload = (value: unknown): { data?: JsonRecord;
   return { data };
 };
 
-const clientFromRow = (row: JsonRecord) => ({
-  id: String(row['id']),
-  name: String(row['name'] || ''),
-  companyName: typeof row['company_name'] === 'string' ? row['company_name'] : null,
-  contactName: typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
-  contactRole: typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
-  email: typeof row['email'] === 'string' ? row['email'] : null,
-  phone: typeof row['phone'] === 'string' ? row['phone'] : null,
-  country: typeof row['country'] === 'string' ? row['country'] : null,
-  sector: typeof row['sector'] === 'string' ? row['sector'] : null,
-  status: String(row['status'] || 'new'),
-  assignedTo: typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
-});
+const clientFromRow = (row: JsonRecord) => {
+  const rawNotes = String(row['notes'] ?? '');
+  let country = typeof row['country'] === 'string' && row['country'].trim() ? row['country'].trim() : null;
+  if (!country && rawNotes) {
+    if (rawNotes.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawNotes) as { country?: string };
+        if (typeof parsed.country === 'string' && parsed.country.trim()) country = parsed.country.trim();
+      } catch {
+        country = rawNotes.trim();
+      }
+    } else {
+      country = rawNotes.trim();
+    }
+  }
+
+  const source = typeof row['source'] === 'string' && row['source'].trim() ? row['source'].trim() : null;
+  const sector = typeof row['sector'] === 'string' && row['sector'].trim() ? row['sector'].trim() : source;
+
+  return {
+    id: String(row['id']),
+    name: String(row['name'] || ''),
+    companyName: typeof row['company_name'] === 'string' ? row['company_name'] : null,
+    contactName: typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
+    contactRole: typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
+    email: typeof row['email'] === 'string' ? row['email'] : null,
+    phone: typeof row['phone'] === 'string' ? row['phone'] : null,
+    country,
+    sector,
+    notes: rawNotes || null,
+    source,
+    status: String(row['status'] || 'new'),
+    assignedTo: typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
+  };
+};
 
 const contactFromRow = (row: JsonRecord) => ({
   id: String(row['id']),
@@ -413,7 +435,7 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   const teamRead = await canSeeTeam(actor.id);
   let opportunitiesQuery = admin.from('sales_opportunities').select('*').order('updated_at', { ascending: false }).limit(500);
   let clientsQuery = admin.from('prospects')
-    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, status, assigned_to')
+    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, notes, source, status, assigned_to')
     .order('company_name').limit(500);
   let activitiesQuery = admin.from('sales_activities').select('*').order('due_at', { ascending: true }).limit(500);
   let campaignsQuery = admin.from('sales_campaigns').select('*').order('starts_at', { ascending: false }).limit(200);
@@ -662,7 +684,7 @@ export const listCrmClientsHandler = async (req: express.Request, res: express.R
     return;
   }
   let query = admin.from('prospects')
-    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, status, assigned_to', { count: 'exact' })
+    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, notes, source, status, assigned_to', { count: 'exact' })
     .order('updated_at', { ascending: false }).range(offset, offset + limit - 1);
   const teamRead = await canSeeTeam(actor.id);
   if (status) query = query.eq('status', status);

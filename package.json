@@ -11,7 +11,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "ng lint",
-    "serve:ssr:app": "node dist/server/server.mjs"
+    "serve:ssr:app": "node dist/server/server.mjs",
+    "standup": "agent-standup --open"
   },
   "private": true,
   "dependencies": {
@@ -45,6 +46,7 @@
     "@angular/build": "21.2.24",
     "@angular/cli": "21.2.24",
     "@angular/compiler-cli": "21.2.24",
+    "@double_geste/agent-standup": "^1.38.0",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",

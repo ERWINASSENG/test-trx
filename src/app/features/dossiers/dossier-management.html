@@ -20,7 +20,7 @@
     </div>
 
     <div controlPanelCenter class="w-full">
-      <form class="flex w-full min-w-0 items-center gap-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]" (submit)="$event.preventDefault(); applyFilters()">
+      <form class="dossiers-control-search flex w-full min-w-0 items-center gap-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]" (submit)="$event.preventDefault(); applyFilters()">
         <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
         <input
           type="search"
@@ -35,7 +35,7 @@
       </form>
     </div>
 
-    <div controlPanelEnd class="flex items-center gap-2 sm:gap-3">
+    <div controlPanelEnd class="dossiers-control-end flex items-center gap-2 sm:gap-3">
       <div class="dossiers-view-switch" role="group" aria-label="Vue des dossiers">
         <button
           type="button"
@@ -56,8 +56,8 @@
           <i class="oi oi-view-kanban" aria-hidden="true"></i>
         </button>
       </div>
-      <span class="whitespace-nowrap text-[11px] text-slate-600 dark:text-slate-300" aria-live="polite">{{ dossierService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
-      <div class="flex items-center overflow-hidden rounded border border-slate-300 bg-white dark:border-[#343a40] dark:bg-white/5" aria-label="Pagination des dossiers">
+      <span class="dossiers-pagination-label whitespace-nowrap text-[11px] text-slate-600 dark:text-slate-300" aria-live="polite">{{ dossierService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
+      <div class="dossiers-pagination flex items-center overflow-hidden rounded border border-slate-300 bg-white dark:border-[#343a40] dark:bg-white/5" aria-label="Pagination des dossiers">
         <button type="button" class="p-1 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-white/10" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
           <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-[15px]">chevron_left</mat-icon>
         </button>

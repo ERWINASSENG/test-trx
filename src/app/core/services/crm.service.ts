@@ -72,7 +72,11 @@ export class CrmService {
       return false;
     }
     const payload = result.data;
-    this._clients.set(Array.isArray(payload.clients) ? payload.clients : []);
+    this._clients.set(
+      Array.isArray(payload.clients)
+        ? payload.clients.map((client) => this.mapClient(client as unknown as Record<string, unknown>))
+        : []
+    );
     this._contacts.set(Array.isArray(payload.contacts) ? payload.contacts : []);
     this._opportunities.set(Array.isArray(payload.opportunities) ? payload.opportunities : []);
     this._activities.set(Array.isArray(payload.activities) ? payload.activities : []);
@@ -298,19 +302,49 @@ export class CrmService {
   }
 
   private mapClient(row: Record<string, unknown>): CrmClient {
+    const rawNotes = String(row['notes'] ?? '');
+    let country: string | null = typeof row['country'] === 'string' && row['country'].trim()
+      ? row['country'].trim()
+      : null;
+    let contactRole: string | null = typeof row['contactRole'] === 'string' && row['contactRole'].trim()
+      ? row['contactRole'].trim()
+      : typeof row['contact_role'] === 'string' && row['contact_role'].trim()
+        ? row['contact_role'].trim()
+        : null;
+
+    if (!country && rawNotes) {
+      if (rawNotes.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(rawNotes) as { country?: string; contactRole?: string };
+          if (typeof parsed.country === 'string' && parsed.country.trim()) country = parsed.country.trim();
+          if (typeof parsed.contactRole === 'string' && parsed.contactRole.trim() && !contactRole) {
+            contactRole = parsed.contactRole.trim();
+          }
+        } catch {
+          country = rawNotes.trim();
+        }
+      } else {
+        country = rawNotes.trim();
+      }
+    }
+
+    const source = typeof row['source'] === 'string' && row['source'].trim() ? row['source'].trim() : null;
+    const sector = typeof row['sector'] === 'string' && row['sector'].trim()
+      ? row['sector'].trim()
+      : source;
+
     return {
       id: String(row['id'] ?? ''),
       name: String(row['name'] ?? ''),
       companyName: typeof row['companyName'] === 'string' ? row['companyName']
         : typeof row['company_name'] === 'string' ? row['company_name'] : null,
       contactName: typeof row['contactName'] === 'string' ? row['contactName']
-        : typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
-      contactRole: typeof row['contactRole'] === 'string' ? row['contactRole']
-        : typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
+        : typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
+      contactRole,
       email: typeof row['email'] === 'string' ? row['email'] : null,
       phone: typeof row['phone'] === 'string' ? row['phone'] : null,
-      country: typeof row['country'] === 'string' ? row['country'] : null,
-      sector: typeof row['sector'] === 'string' ? row['sector'] : null,
+      country,
+      sector,
       status: String(row['status'] ?? 'new'),
       assignedTo: typeof row['assignedTo'] === 'string' ? row['assignedTo']
         : typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,

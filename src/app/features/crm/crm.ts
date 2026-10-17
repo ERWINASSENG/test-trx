@@ -18,9 +18,10 @@ import type { QuoteStatus } from '../../core/models/quote.model';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { CrmService } from '../../core/services/crm.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
-import { ProspectsComponent } from '../prospects/prospects';
+import { getCountryFlagUrl } from '../../core/utils/country-flag.util';
 
 type CrmTab = 'pipeline' | 'clients' | 'activities' | 'campaigns';
+export type ClientSortField = 'client' | 'country' | 'sector' | 'contact' | 'phone' | 'email' | 'status';
 type CrmDialog = 'client' | 'opportunity' | 'activity' | 'campaign' | 'win' | 'dossier' | 'contact' | null;
 interface OpportunityDraft {
   title: string;
@@ -91,7 +92,7 @@ const EMPTY_OPPORTUNITY: OpportunityDraft = {
 
 @Component({
   selector: 'app-crm-commercial',
-  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel, RouterLink, ProspectsComponent],
+  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel, RouterLink],
   templateUrl: './crm.html',
   styleUrl: './crm.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -254,6 +255,111 @@ export class CrmComponent {
     this.crmService.contacts().filter((contact) => contact.prospectId === this.selectedClientId())
   );
 
+  // Gestion du tri et de la sélection du tableau Clients (style Odoo)
+  public readonly clientSortField = signal<ClientSortField>('client');
+  public readonly clientSortDirection = signal<'asc' | 'desc'>('asc');
+  public readonly selectedClientIds = signal<Set<string>>(new Set());
+
+  public toggleClientSort(field: ClientSortField): void {
+    if (this.clientSortField() === field) {
+      this.clientSortDirection.update((dir) => (dir === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.clientSortField.set(field);
+      this.clientSortDirection.set('asc');
+    }
+  }
+
+  public getClientSortIcon(field: ClientSortField): string {
+    if (this.clientSortField() !== field) return 'unfold_more';
+    return this.clientSortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward';
+  }
+
+  public getClientAriaSort(field: ClientSortField): 'ascending' | 'descending' | 'none' {
+    if (this.clientSortField() !== field) return 'none';
+    return this.clientSortDirection() === 'asc' ? 'ascending' : 'descending';
+  }
+
+  public readonly sortedClients = computed(() => {
+    const list = this.visibleClients();
+    const field = this.clientSortField();
+    if (!field) return list;
+
+    const multiplier = this.clientSortDirection() === 'asc' ? 1 : -1;
+
+    return [...list].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      switch (field) {
+        case 'client':
+          valA = a.companyName || a.name || '';
+          valB = b.companyName || b.name || '';
+          break;
+        case 'country':
+          valA = a.country || '';
+          valB = b.country || '';
+          break;
+        case 'sector':
+          valA = a.sector || '';
+          valB = b.sector || '';
+          break;
+        case 'contact':
+          valA = a.contactName || '';
+          valB = b.contactName || '';
+          break;
+        case 'phone':
+          valA = a.phone || '';
+          valB = b.phone || '';
+          break;
+        case 'email':
+          valA = a.email || '';
+          valB = b.email || '';
+          break;
+        case 'status':
+          valA = this.getDisplayStatus(a.status).label;
+          valB = this.getDisplayStatus(b.status).label;
+          break;
+      }
+
+      return valA.localeCompare(valB, 'fr', { sensitivity: 'base', numeric: true }) * multiplier;
+    });
+  });
+
+  public readonly isAllClientsSelected = computed(() => {
+    const list = this.sortedClients();
+    if (list.length === 0) return false;
+    const selected = this.selectedClientIds();
+    return list.every((client) => selected.has(client.id));
+  });
+
+  public toggleSelectAllClients(): void {
+    const current = this.selectedClientIds();
+    const list = this.sortedClients();
+    if (this.isAllClientsSelected()) {
+      this.selectedClientIds.set(new Set());
+    } else {
+      const next = new Set(current);
+      for (const item of list) {
+        next.add(item.id);
+      }
+      this.selectedClientIds.set(next);
+    }
+  }
+
+  public toggleSelectClient(id: string): void {
+    const current = new Set(this.selectedClientIds());
+    if (current.has(id)) {
+      current.delete(id);
+    } else {
+      current.add(id);
+    }
+    this.selectedClientIds.set(current);
+  }
+
+  public isClientSelected(id: string): boolean {
+    return this.selectedClientIds().has(id);
+  }
+
   public constructor() {
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
       const requestedTab = params.get('view');
@@ -329,6 +435,47 @@ export class CrmComponent {
 
   public clientStatusLabel(status: string): string {
     return CLIENT_STATUS_LABELS[status] || status;
+  }
+
+  public getCountryFlag(country: string | null | undefined): string | null {
+    return getCountryFlagUrl(country);
+  }
+
+  public getMonogram(name: string | null | undefined): string {
+    if (!name) return 'CL';
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      return words[0].slice(0, 2).toUpperCase();
+    }
+    if (words.length === 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return (words[0][0] + words[1][0] + words[2][0]).toUpperCase().slice(0, 3);
+  }
+
+  public getAvatarBg(name: string | null | undefined): string {
+    const palettes = [
+      '#0a3d62', '#1e3799', '#0c2461', '#1e272e',
+      '#079992', '#38ada9', '#0097e6', '#273c75',
+    ];
+    let hash = 0;
+    const str = name || 'transmex';
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    const index = Math.abs(hash) % palettes.length;
+    return palettes[index];
+  }
+
+  public getDisplayStatus(status: string | null | undefined): { label: string; class: string } {
+    if (status === 'converted' || status === 'qualified') {
+      return { label: 'Actif', class: 'status-badge-active' };
+    }
+    if (status === 'lost') {
+      return { label: 'Perdu', class: 'status-badge-lost' };
+    }
+    return { label: 'Prospect', class: 'status-badge-prospect' };
   }
 
   public activityLabel(type: CrmActivityType): string {

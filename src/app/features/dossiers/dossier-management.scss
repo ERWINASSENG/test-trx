@@ -22,6 +22,39 @@
     var(--dossiers-bg);
 }
 
+.dossiers-control-search {
+  min-height: 32px;
+  padding: 4px 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dossiers-control-search:focus-within {
+  border-color: var(--dossiers-accent);
+  box-shadow: 0 0 0 1px var(--dossiers-accent);
+}
+
+.dossiers-control-search button:focus-visible,
+.dossiers-view-switch button:focus-visible,
+.dossiers-pagination button:focus-visible {
+  outline: 2px solid var(--dossiers-accent);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.dossiers-control-end {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.dossiers-pagination-label {
+  color: var(--dossiers-secondary);
+}
+
+.dossiers-pagination button {
+  min-width: 28px;
+  min-height: 28px;
+}
+
 .dossier-modal > header,
 .modal-actions {
   display: flex;

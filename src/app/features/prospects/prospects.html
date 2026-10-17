@@ -2,10 +2,6 @@
   @if (!embedded()) {
     <app-module-control-panel>
       <div controlPanelStart class="prospects-title-group">
-        <div>
-          <p class="prospects-eyebrow">Développement commercial</p>
-          <h1 id="prospects-title">Contacts</h1>
-        </div>
         @if (canCreate()) {
           <button
             type="button"
@@ -16,6 +12,32 @@
             <mat-icon>add</mat-icon><span>Nouveau</span>
           </button>
         }
+        <div>
+          <p class="prospects-eyebrow">Développement commercial</p>
+          <h1 id="prospects-title">Contacts</h1>
+        </div>
+      </div>
+
+      <div controlPanelCenter class="w-full">
+        <form
+          class="prospects-control-search flex w-full min-w-0 items-center gap-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]"
+          (submit)="$event.preventDefault(); applyFilters()">
+          <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
+          <input
+            type="search"
+            aria-label="Rechercher dans les contacts"
+            placeholder="Nom, société ou contact"
+            [value]="searchDraft()"
+            (input)="searchDraft.set($any($event.target).value)"
+            class="min-w-[60px] flex-1 bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white" />
+          <button
+            type="submit"
+            class="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[#0b5ed7] dark:hover:bg-white/10 dark:hover:text-[#8cc2ff]"
+            aria-label="Lancer la recherche"
+            title="Rechercher">
+            <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-base">arrow_forward</mat-icon>
+          </button>
+        </form>
       </div>
 
       <div controlPanelEnd class="prospects-control-end">
