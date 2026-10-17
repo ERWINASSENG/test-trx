@@ -1,4 +1,4 @@
-<main class="crm-page" aria-labelledby="crm-title">
+<main class="crm-page" aria-label="CRM Commercial">
   <app-module-control-panel>
     <div controlPanelStart class="flex items-center gap-2 sm:gap-3">
       @if (canCreateCurrentItem()) {
@@ -42,16 +42,6 @@
   </app-module-control-panel>
 
   <div class="crm-content">
-    <header class="crm-heading">
-      <div>
-        <p class="crm-eyebrow">Espace commercial</p>
-        <h1 id="crm-title">CRM Commercial</h1>
-        <p class="crm-subtitle">Du premier contact au dossier d’expédition, sans ressaisie client.</p>
-      </div>
-      @if (crmService.canManageTeam()) {
-        <span class="team-access">Vue équipe</span>
-      }
-    </header>
 
     @if (feedback()) { <p class="crm-feedback" role="status">{{ feedback() }}</p> }
     @if (crmService.error()) { <p class="crm-error" role="alert">{{ crmService.error() }}</p> }
@@ -82,53 +72,77 @@
             @for (opportunity of column.opportunities; track opportunity.id) {
               <article class="opportunity-card">
                 <div class="card-topline">
-                  <span class="transport-chip">{{ modeLabel(opportunity.transportMode) }}</span>
-                  @if (opportunity.direction) { <span class="direction-label">{{ directionLabel(opportunity.direction) }}</span> }
+                  <div class="card-badges">
+                    <span class="tag-badge mode">{{ modeLabel(opportunity.transportMode) }}</span>
+                    @if (opportunity.direction) {
+                      <span class="tag-badge direction">{{ directionLabel(opportunity.direction) }}</span>
+                    }
+                  </div>
                   @if (canUpdate()) {
-                    <label class="sr-only" [for]="'stage-' + opportunity.id">Modifier l’étape de {{ opportunity.title }}</label>
-                    <select class="stage-select" [id]="'stage-' + opportunity.id" [value]="opportunity.stage"
-                      (change)="changeStage(opportunity, $any($event.target).value)">
-                      @for (stage of stages; track stage) { <option [value]="stage">{{ stageLabel(stage) }}</option> }
-                    </select>
+                    <div class="card-stage-control">
+                      <label class="sr-only" [for]="'stage-' + opportunity.id">Modifier l’étape de {{ opportunity.title }}</label>
+                      <select class="stage-select" [id]="'stage-' + opportunity.id" [value]="opportunity.stage"
+                        (change)="changeStage(opportunity, $any($event.target).value)">
+                        @for (stage of stages; track stage) { <option [value]="stage">{{ stageLabel(stage) }}</option> }
+                      </select>
+                    </div>
                   }
                 </div>
-                <h3>{{ opportunity.client.companyName || opportunity.client.name }}</h3>
+                <h3 class="client-company-title">{{ opportunity.client.companyName || opportunity.client.name }}</h3>
                 <p class="opportunity-title">{{ opportunity.title }}</p>
                 @if (opportunity.origin || opportunity.destination) {
-                  <p class="route-line">{{ opportunity.origin || 'Origine à définir' }} <span>→</span> {{ opportunity.destination || 'Destination à définir' }}</p>
+                  <div class="trade-lane-route">
+                    <mat-icon aria-hidden="true">route</mat-icon>
+                    <span>{{ opportunity.origin || 'Origine à définir' }}</span>
+                    <span class="route-arrow">→</span>
+                    <span>{{ opportunity.destination || 'Destination à définir' }}</span>
+                  </div>
                 }
                 <div class="opportunity-value">{{ formatAmount(opportunity.estimatedValue, opportunity.currency) }}</div>
                 <div class="card-meta">
-                  <span>{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
+                  <span class="meta-item"><mat-icon aria-hidden="true">person</mat-icon>{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
                   @if (opportunity.expectedCloseDate) {
-                    <span>{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
+                    <span class="meta-item"><mat-icon aria-hidden="true">event</mat-icon>{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
                   }
-                  @if (opportunity.assignedToName) { <span>{{ opportunity.assignedToName }}</span> }
+                  @if (opportunity.assignedToName) {
+                    <span class="meta-item"><mat-icon aria-hidden="true">badge</mat-icon>{{ opportunity.assignedToName }}</span>
+                  }
                 </div>
                 <div class="card-links">
                   @if (opportunity.quoteNumber) {
                     <a class="linked-record" [routerLink]="['/quotes']"
-                      [queryParams]="{ quoteId: opportunity.quoteId }">{{ opportunity.quoteNumber }}</a>
+                      [queryParams]="{ quoteId: opportunity.quoteId }">
+                      <mat-icon aria-hidden="true">receipt_long</mat-icon>
+                      {{ opportunity.quoteNumber }}
+                    </a>
                     @if (opportunity.quoteStatus) {
                       <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
                     }
                   } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
                     <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
+                      <mat-icon aria-hidden="true">add</mat-icon>
                       Créer une cotation
                     </a>
                   }
                   @if (opportunity.dossierNumber) {
                     <a class="linked-record" [routerLink]="['/dossiers']"
-                      [queryParams]="{ dossierId: opportunity.dossierId }">{{ opportunity.dossierNumber }}</a>
+                      [queryParams]="{ dossierId: opportunity.dossierId }">
+                      <mat-icon aria-hidden="true">folder</mat-icon>
+                      {{ opportunity.dossierNumber }}
+                    </a>
                   } @else if (opportunity.stage === 'won' && canCreate()) {
                     <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
+                      <mat-icon aria-hidden="true">folder_open</mat-icon>
                       Créer le dossier
                     </button>
                   }
                 </div>
                 <footer class="card-actions">
                   @if (canCreate()) {
-                    <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">Ajouter un rappel</button>
+                    <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">
+                      <mat-icon aria-hidden="true">add_alert</mat-icon>
+                      Ajouter un rappel
+                    </button>
                   }
                   <span class="sr-only">Étape : {{ column.label }}</span>
                 </footer>
@@ -143,54 +157,164 @@
     }
 
     @if (tab() === 'clients') {
-    @if (filteredClients().length === 0) {
-      <section class="crm-empty"><h2>Aucune société trouvée</h2><p>Créez ou recherchez une fiche dans ce fichier clients/prospects unique.</p></section>
-    } @else {
-      <div class="client-workspace">
-        <section class="client-list" aria-label="Sociétés et prospects">
-          @for (client of visibleClients(); track client.id) {
-            <button type="button" class="client-row" [class.selected]="selectedClientId() === client.id"
-              (click)="selectedClientId.set(client.id)">
-              <span class="client-monogram">{{ (client.companyName || client.name).slice(0, 1).toUpperCase() }}</span>
-              <span class="client-row-info"><strong>{{ client.companyName || client.name }}</strong><small>{{ client.country || 'Pays à renseigner' }} · {{ client.sector || 'Service à définir' }}</small></span>
-              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
-            </button>
-          }
-        </section>
-        @if (selectedClient(); as client) {
-          <article class="client-profile">
-            <header>
-              <div><p class="crm-eyebrow">Fiche société unique</p><h2>{{ client.companyName || client.name }}</h2>
-                <a class="text-link" [routerLink]="['/prospects']" [queryParams]="{ prospectId: client.id }">Ouvrir la fiche Contact</a>
+      @if (selectedClient(); as client) {
+        <article class="client-profile-full" aria-label="Fiche détaillée de la société">
+          <header class="client-profile-header">
+            <div class="client-header-main">
+              <button
+                type="button"
+                class="back-to-grid-btn"
+                (click)="selectedClientId.set(null)"
+                aria-label="Retour à la liste des sociétés">
+                <mat-icon aria-hidden="true">arrow_back</mat-icon>
+                <span>Retour aux sociétés</span>
+              </button>
+              <div class="client-profile-title">
+                <span class="client-profile-avatar" aria-hidden="true">
+                  {{ (client.companyName || client.name).slice(0, 2).toUpperCase() }}
+                </span>
+                <div>
+                  <h2>{{ client.companyName || client.name }}</h2>
+                  <span class="client-status" [class]="'status-' + (client.status || 'prospect')">
+                    {{ clientStatusLabel(client.status) }}
+                  </span>
+                </div>
               </div>
-              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
-            </header>
-            <dl class="client-details">
-              <div><dt>Contact principal</dt><dd>{{ client.contactName || 'À renseigner' }}@if (client.contactRole) { <small>{{ client.contactRole }}</small> }</dd></div>
-              <div><dt>E-mail</dt><dd>{{ client.email || 'Non renseigné' }}</dd></div>
-              <div><dt>Téléphone</dt><dd>{{ client.phone || 'Non renseigné' }}</dd></div>
-              <div><dt>Pays / service</dt><dd>{{ client.country || 'À renseigner' }} · {{ client.sector || 'À définir' }}</dd></div>
-            </dl>
-            <div class="contacts-heading"><div><h3>Autres contacts</h3><span>{{ selectedClientContacts().length }}</span></div>
-              @if (canCreate()) { <button type="button" class="secondary-action" (click)="openContactDialog(client)">Ajouter un contact</button> }
             </div>
-            @if (selectedClientContacts().length > 0) {
-              <div class="contact-list">
-                @for (contact of selectedClientContacts(); track contact.id) {
-                  <div class="contact-row" [class.focused-contact]="focusedContactId() === contact.id"><div><strong>{{ contact.fullName }}</strong><span>{{ contact.jobTitle || 'Fonction non précisée' }}</span></div><div class="contact-reach"><span>{{ contact.email || 'E-mail non renseigné' }}</span><span>{{ contact.phone || 'Téléphone non renseigné' }}</span></div></div>
-                }
+            <div class="client-header-actions">
+              @if (canCreate()) {
+                <button type="button" class="primary-action" (click)="openOpportunityDialog(client.id)">
+                  <mat-icon aria-hidden="true">add</mat-icon>
+                  <span>Créer une opportunité</span>
+                </button>
+                <button type="button" class="secondary-action" (click)="openContactDialog(client)">
+                  <mat-icon aria-hidden="true">person_add</mat-icon>
+                  <span>Ajouter un contact</span>
+                </button>
+              }
+            </div>
+          </header>
+
+          <dl class="client-details">
+            <div>
+              <dt><mat-icon aria-hidden="true">person</mat-icon>Contact principal</dt>
+              <dd>{{ client.contactName || 'À renseigner' }}@if (client.contactRole) { <small>({{ client.contactRole }})</small> }</dd>
+            </div>
+            <div>
+              <dt><mat-icon aria-hidden="true">email</mat-icon>E-mail</dt>
+              <dd>{{ client.email || 'Non renseigné' }}</dd>
+            </div>
+            <div>
+              <dt><mat-icon aria-hidden="true">phone</mat-icon>Téléphone</dt>
+              <dd>{{ client.phone || 'Non renseigné' }}</dd>
+            </div>
+            <div>
+              <dt><mat-icon aria-hidden="true">public</mat-icon>Pays</dt>
+              <dd>{{ client.country || 'Non précisé' }}</dd>
+            </div>
+            <div>
+              <dt><mat-icon aria-hidden="true">category</mat-icon>Secteur d'activité</dt>
+              <dd>{{ client.sector || 'Général' }}</dd>
+            </div>
+          </dl>
+
+          <section class="contacts-section" aria-label="Contacts associés">
+            <header class="section-heading">
+              <div>
+                <p class="crm-eyebrow">Interlocuteurs</p>
+                <h3>Contacts de la société</h3>
               </div>
+              <span class="contacts-badge">{{ selectedClientContacts().length }}</span>
+            </header>
+            @if (selectedClientContacts().length === 0) {
+              <p class="column-empty">Aucun contact additionnel enregistré pour cette société.</p>
             } @else {
-              <p class="inline-empty">Ajoutez les interlocuteurs achats, opérations, finance ou douane de cette société.</p>
+              <div class="matrix-table-wrapper">
+                <table class="matrix-table" aria-label="Liste des contacts">
+                  <thead>
+                    <tr>
+                      <th scope="col">Nom complet</th>
+                      <th scope="col">Fonction</th>
+                      <th scope="col">E-mail</th>
+                      <th scope="col">Téléphone</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (contact of selectedClientContacts(); track contact.id) {
+                      <tr>
+                        <td class="font-semibold">{{ contact.fullName }}</td>
+                        <td>{{ contact.jobTitle || 'Non précisée' }}</td>
+                        <td>{{ contact.email || '—' }}</td>
+                        <td>{{ contact.phone || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
             }
-            <footer class="profile-actions">
-              @if (canCreate()) { <button type="button" class="primary-action" (click)="openOpportunityDialog(client.id)">Nouvelle opportunité</button> }
-              <a class="secondary-action" [routerLink]="['/crm-commercial']" [queryParams]="{ view: 'pipeline' }">Voir dans le pipeline</a>
-            </footer>
-          </article>
+          </section>
+        </article>
+      } @else {
+        @if (crmService.clients().length === 0) {
+          <section class="crm-empty">
+            <h2>Aucune société enregistrée</h2>
+            <p>Une société ne possède qu’une fiche partagée entre prospects, cotations, CRM et dossiers.</p>
+            @if (canCreate()) {
+              <button type="button" class="primary-action" (click)="openClientDialog()">Créer une fiche société</button>
+            }
+          </section>
+        } @else {
+          <section class="clients-cards-grid" aria-label="Liste des sociétés clientes">
+            @for (client of visibleClients(); track client.id) {
+              <article class="client-grid-card">
+                <div class="client-card-top">
+                  <div class="client-identity">
+                    <span class="client-monogram" aria-hidden="true">{{ (client.companyName || client.name).slice(0, 2).toUpperCase() }}</span>
+                    <div class="client-names">
+                      <h3 class="client-company-name">{{ client.companyName || client.name }}</h3>
+                      @if (client.contactName) {
+                        <span class="client-contact-sub"><mat-icon aria-hidden="true">person</mat-icon>{{ client.contactName }}@if (client.contactRole) { · {{ client.contactRole }} }</span>
+                      }
+                    </div>
+                  </div>
+                  <span class="client-status" [class]="'status-' + (client.status || 'prospect')">{{ clientStatusLabel(client.status) }}</span>
+                </div>
+
+                <div class="client-card-meta">
+                  @if (client.country) {
+                    <span class="meta-tag"><mat-icon aria-hidden="true">public</mat-icon>{{ client.country }}</span>
+                  }
+                  @if (client.sector) {
+                    <span class="meta-tag"><mat-icon aria-hidden="true">category</mat-icon>{{ client.sector }}</span>
+                  }
+                  @if (client.email) {
+                    <span class="meta-tag"><mat-icon aria-hidden="true">email</mat-icon>{{ client.email }}</span>
+                  }
+                </div>
+
+                <footer class="client-card-footer">
+                  <button type="button" class="client-select-btn" (click)="selectedClientId.set(client.id)">
+                    <mat-icon aria-hidden="true">visibility</mat-icon>
+                    <span>Voir la fiche</span>
+                  </button>
+                  @if (canCreate()) {
+                    <button
+                      type="button"
+                      class="client-quick-opportunity-btn"
+                      (click)="openOpportunityDialog(client.id)"
+                      title="Créer une opportunité pour cette société"
+                      aria-label="Créer une opportunité">
+                      <mat-icon aria-hidden="true">add</mat-icon>
+                    </button>
+                  }
+                </footer>
+              </article>
+            } @empty {
+              <p class="column-empty">Aucune société trouvée pour cette recherche.</p>
+            }
+          </section>
         }
-      </div>
-    }
+      }
     }
 
     @if (tab() === 'activities') {

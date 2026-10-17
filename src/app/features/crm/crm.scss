@@ -682,86 +682,389 @@
 .status-badge.won { background: #d1e7dd; color: #0f5132; border-color: #badbcc; }
 .status-badge.pending { background: #fff3cd; color: #664d03; border-color: #ffecb5; }
 
-/* Fiches Clients 360° */
-.client-workspace {
+/* Grille de cartes Sociétés & Prospects (Chaque élément a sa propre carte autonome) */
+.clients-cards-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 2fr);
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
-  align-items: start;
+  width: 100%;
+  align-items: stretch;
 }
 
-.client-list {
+/* Carte Société individuelle */
+.client-grid-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 75vh;
-  overflow-y: auto;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
   border: 1px solid var(--crm-border);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 10px;
+  padding: 16px;
   background: var(--crm-surface);
-}
-
-.client-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border: 1px solid var(--crm-border);
-  border-radius: 6px;
-  padding: 10px;
-  background: var(--crm-surface);
-  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   text-align: left;
-  transition: all 0.12s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--crm-action);
+    box-shadow: 0 6px 16px rgba(11, 94, 215, 0.1);
+  }
 }
 
-.client-item:hover,
-.client-item.selected {
-  border-color: var(--crm-action);
-  background: var(--crm-hover);
+.client-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
 }
 
-.client-item h3 {
+.client-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.client-monogram {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--crm-action) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--crm-action) 25%, transparent);
+  color: var(--crm-action);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.client-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.client-company-name {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--crm-text);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.client-profile {
+.client-contact-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--crm-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    color: var(--crm-subtle);
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+}
+
+.client-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--crm-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.69rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--crm-muted);
+  color: var(--crm-subtle);
+
+  &.status-active,
+  &.status-won,
+  &.status-client {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: #bbf7d0;
+  }
+
+  &.status-lead,
+  &.status-qualified,
+  &.status-prospect {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+  }
+
+  &.status-inactive,
+  &.status-lost {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+  }
+}
+
+.client-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--crm-border);
+  width: 100%;
+
+  .meta-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    color: var(--crm-subtle);
+    background: var(--crm-muted);
+    border: 1px solid var(--crm-border);
+    border-radius: 4px;
+    padding: 2px 7px;
+
+    mat-icon {
+      font-size: 13px;
+      width: 13px;
+      height: 13px;
+      color: var(--crm-subtle);
+      opacity: 0.85;
+      flex-shrink: 0;
+    }
+  }
+}
+
+.client-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--crm-border);
+  margin-top: auto;
+}
+
+.client-select-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--crm-border);
+  background: var(--crm-surface);
+  color: var(--crm-action);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+  }
+
+  &:hover {
+    background: var(--crm-action);
+    color: #fff;
+    border-color: var(--crm-action);
+  }
+}
+
+.client-quick-opportunity-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--crm-border);
+  background: var(--crm-surface);
+  color: var(--crm-subtle);
+  cursor: pointer;
+  transition: all 0.12s ease;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: #10b981;
+    color: #fff;
+    border-color: #10b981;
+  }
+}
+
+/* Fiche Société Pleine Page (Vue autonome sans section de liste étriquée) */
+.client-profile-full {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   border: 1px solid var(--crm-border);
-  border-radius: 8px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 24px;
   background: var(--crm-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  width: 100%;
+}
+
+.client-profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--crm-border);
+}
+
+.client-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.back-to-grid-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--crm-border);
+  background: var(--crm-surface);
+  color: var(--crm-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+  transition: all 0.12s ease;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    transition: transform 0.12s ease;
+  }
+
+  &:hover {
+    background: var(--crm-hover);
+    color: var(--crm-action);
+    border-color: var(--crm-action);
+
+    mat-icon {
+      transform: translateX(-2px);
+    }
+  }
+}
+
+.client-profile-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--crm-text);
+  }
+}
+
+.client-profile-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--crm-action) 12%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--crm-action) 30%, transparent);
+  color: var(--crm-action);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.client-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contacts-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--crm-muted);
+  color: var(--crm-subtle);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .client-details {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
   border-bottom: 1px solid var(--crm-border);
-  padding-bottom: 16px;
-}
+  padding-bottom: 18px;
 
-.detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 
-.detail-item .label {
-  font-size: 0.72rem;
-  color: var(--crm-subtle);
-  font-weight: 500;
-}
+    dt {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--crm-subtle);
 
-.detail-item .value {
-  font-size: 0.85rem;
-  color: var(--crm-text);
-  font-weight: 600;
+      mat-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+        opacity: 0.8;
+      }
+    }
+
+    dd {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--crm-text);
+
+      small {
+        margin-left: 6px;
+        font-size: 0.75rem;
+        font-weight: normal;
+        color: var(--crm-subtle);
+      }
+    }
+  }
 }
 
 /* Modales / Dialogues */

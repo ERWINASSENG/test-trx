@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { A11yModule } from '@angular/cdk/a11y';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,6 +21,7 @@ export type SortDirection = 'asc' | 'desc';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProspectsComponent {
+  public readonly embedded = input<boolean>(false);
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
   private readonly route = inject(ActivatedRoute);

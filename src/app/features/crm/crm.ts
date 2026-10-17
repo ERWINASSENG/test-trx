@@ -18,6 +18,7 @@ import type { QuoteStatus } from '../../core/models/quote.model';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { CrmService } from '../../core/services/crm.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
+import { ProspectsComponent } from '../prospects/prospects';
 
 type CrmTab = 'pipeline' | 'clients' | 'activities' | 'campaigns';
 type CrmDialog = 'client' | 'opportunity' | 'activity' | 'campaign' | 'win' | 'dossier' | 'contact' | null;
@@ -90,7 +91,7 @@ const EMPTY_OPPORTUNITY: OpportunityDraft = {
 
 @Component({
   selector: 'app-crm-commercial',
-  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel, RouterLink],
+  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel, RouterLink, ProspectsComponent],
   templateUrl: './crm.html',
   styleUrl: './crm.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

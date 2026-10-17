@@ -1,43 +1,45 @@
-<main class="prospects-page" aria-labelledby="prospects-title">
-  <app-module-control-panel>
-    <div controlPanelStart class="prospects-title-group">
-      <div>
-        <p class="prospects-eyebrow">Développement commercial</p>
-        <h1 id="prospects-title">Contacts</h1>
-      </div>
-      @if (canCreate()) {
-        <button
-          type="button"
-          class="primary-action h-9 w-28 shrink-0 justify-center"
-          aria-label="Nouveau prospect"
-          title="Nouveau prospect"
-          (click)="openCreate()">
-          <mat-icon>add</mat-icon><span>Nouveau</span>
-        </button>
-      }
-    </div>
-
-    <div controlPanelEnd class="prospects-control-end">
-      <div class="view-switch" role="group" aria-label="Vue des prospects">
-        <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
-          <mat-icon>reorder</mat-icon>
-        </button>
-        <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
-          <mat-icon>view_kanban</mat-icon>
-        </button>
+<main class="prospects-page" [class.embedded-prospects]="embedded()" aria-labelledby="prospects-title">
+  @if (!embedded()) {
+    <app-module-control-panel>
+      <div controlPanelStart class="prospects-title-group">
+        <div>
+          <p class="prospects-eyebrow">Développement commercial</p>
+          <h1 id="prospects-title">Contacts</h1>
+        </div>
+        @if (canCreate()) {
+          <button
+            type="button"
+            class="primary-action h-9 w-28 shrink-0 justify-center"
+            aria-label="Nouveau prospect"
+            title="Nouveau prospect"
+            (click)="openCreate()">
+            <mat-icon>add</mat-icon><span>Nouveau</span>
+          </button>
+        }
       </div>
 
-      <div class="pagination" aria-label="Pagination des prospects">
-        <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
-        <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
-          <mat-icon>chevron_right</mat-icon>
-        </button>
+      <div controlPanelEnd class="prospects-control-end">
+        <div class="view-switch" role="group" aria-label="Vue des prospects">
+          <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
+            <mat-icon>reorder</mat-icon>
+          </button>
+          <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
+            <mat-icon>view_kanban</mat-icon>
+          </button>
+        </div>
+
+        <div class="pagination" aria-label="Pagination des prospects">
+          <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
+          <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
       </div>
-    </div>
-  </app-module-control-panel>
+    </app-module-control-panel>
+  }
 
   @if (feedback()) {
     <p class="feedback" role="status">{{ feedback() }}</p>
