@@ -28,37 +28,6 @@ export interface LoadedAccessRules {
   hasActiveRoleAssignments?: boolean;
 }
 
-const LEGACY_MODULE_VISIBILITY_BY_ROLE: Readonly<Record<string, readonly string[]>> = {
-  manager: [
-    'module.dashboard.view',
-    'module.accounting.view',
-    'module.hr.view',
-    'module.prospects.view',
-    'module.quotes.view',
-    'module.crm.view',
-    'module.dossiers.view',
-  ],
-  commercial: [
-    'module.dashboard.view',
-    'module.prospects.view',
-    'module.quotes.view',
-    'module.crm.view',
-    'module.dossiers.view',
-  ],
-  tresorier: [
-    'module.dashboard.view',
-    'module.accounting.view',
-    'module.configuration.view',
-  ],
-  comptable: [
-    'module.dashboard.view',
-    'module.accounting.view',
-    'module.configuration.view',
-  ],
-  caissiere: ['module.dashboard.view', 'module.accounting.view'],
-  employe: ['module.dashboard.view', 'module.hr.view'],
-};
-
 export const MODULE_CAPABILITY_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   'module.dashboard.view': ['dashboard.'],
   'module.accounting.view': ['cashier.', 'journals.', 'journal_entries.'],
@@ -71,8 +40,10 @@ export const MODULE_CAPABILITY_PREFIXES: Readonly<Record<string, readonly string
   'module.access_control.view': ['access.'],
 };
 
-export const legacyModuleVisibilityPermissions = (roleKeys: readonly string[]): string[] =>
-  [...new Set(roleKeys.flatMap((roleKey) => LEGACY_MODULE_VISIBILITY_BY_ROLE[roleKey] || []))];
+export const legacyModuleVisibilityPermissions = (roleKeys?: readonly string[]): string[] => {
+  void roleKeys;
+  return [];
+};
 
 export const deriveModuleVisibilityFromCapabilities = (
   grantedPermissions: readonly string[]
@@ -299,12 +270,6 @@ export const resolveEffectivePermissions = async (
   if (!effective.some((p) => p.permissionKey === 'apps.view')) {
     effective.push({ permissionKey: 'apps.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
   }
-  if (!effective.some((p) => p.permissionKey === 'dashboard.view')) {
-    effective.push({ permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
-  }
-  if (!effective.some((p) => p.permissionKey === 'module.dashboard.view')) {
-    effective.push({ permissionKey: 'module.dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
-  }
   if (!effective.some((p) => p.permissionKey === 'profile.read')) {
     effective.push({ permissionKey: 'profile.read', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
   }
@@ -318,18 +283,6 @@ export const resolveEffectivePermissions = async (
     if (!effective.some((p) => p.permissionKey === moduleKey)) {
       effective.push({
         permissionKey: moduleKey,
-        scope: { type: 'all', version: 1 },
-        effect: 'allow',
-        sourceRoleKey: primaryRole,
-      });
-    }
-  }
-
-  // Repli de visibilité de module pour les rôles historiques / canoniques
-  for (const permissionKey of legacyModuleVisibilityPermissions(accessRules.roleKeys)) {
-    if (!effective.some((permission) => permission.permissionKey === permissionKey)) {
-      effective.push({
-        permissionKey,
         scope: { type: 'all', version: 1 },
         effect: 'allow',
         sourceRoleKey: primaryRole,
@@ -353,7 +306,7 @@ const evaluatePermission = (
   }
 
   // 2. Accès garanti aux modules universels pour tout collaborateur actif
-  if (['apps.view', 'dashboard.view', 'module.dashboard.view', 'profile.read'].includes(permissionKey)) {
+  if (['apps.view', 'profile.read'].includes(permissionKey)) {
     return true;
   }
 
@@ -382,10 +335,6 @@ const evaluatePermission = (
     .filter((r) => !r.isUserOverride && r.effect === 'allow')
     .map((r) => r.permissionKey);
   if (deriveModuleVisibilityFromCapabilities(grantedRoleKeys).includes(permissionKey)) {
-    return true;
-  }
-
-  if (legacyModuleVisibilityPermissions(accessRules.roleKeys).includes(permissionKey)) {
     return true;
   }
 

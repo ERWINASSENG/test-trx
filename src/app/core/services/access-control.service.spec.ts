@@ -131,14 +131,16 @@ describe('AccessControlService', () => {
     expect(service.hasPermission('users.read')).toBe(false);
   });
 
-  it('does not grant collaborator-list access or unassigned data permissions to the legacy employee role', () => {
+  it('does not grant collaborator-list access or unassigned module permissions without explicit assignments', () => {
     currentRole.set('employe');
     currentUser.update((user) => user ? { ...user, role: 'employe', customRole: null } : null);
 
-    // Module visibility is allowed
-    expect(service.hasPermission('module.hr.view')).toBe(true);
-    expect(service.hasPermission('module.dashboard.view')).toBe(true);
-    // Unassigned operational data permissions are denied
+    // Universal permissions are allowed
+    expect(service.hasPermission('apps.view')).toBe(true);
+    expect(service.hasPermission('profile.read')).toBe(true);
+    // Unassigned modules and data permissions are strictly denied
+    expect(service.hasPermission('module.hr.view')).toBe(false);
+    expect(service.hasPermission('module.dashboard.view')).toBe(false);
     expect(service.hasPermission('hr.read')).toBe(false);
     expect(service.hasPermission('users.read')).toBe(false);
   });
@@ -315,7 +317,7 @@ describe('AccessControlService', () => {
     expect(service.hasPermission('module.hr.view')).toBe(false);
   });
 
-  it('préserve la visibilité des modules canoniques pour le rôle manager', () => {
+  it('strictly denies unassigned modules to a manager without explicit permissions', () => {
     currentUser.set({
       id: 'manager-user',
       email: 'manager@example.test',
@@ -328,8 +330,9 @@ describe('AccessControlService', () => {
     });
     currentRole.set('manager');
 
-    expect(service.hasPermission('module.dossiers.view')).toBe(true);
-    expect(service.hasPermission('module.dashboard.view')).toBe(true);
-    expect(service.hasPermission('module.accounting.view')).toBe(true);
+    expect(service.hasPermission('module.dossiers.view')).toBe(false);
+    expect(service.hasPermission('module.dashboard.view')).toBe(false);
+    expect(service.hasPermission('module.accounting.view')).toBe(false);
+    expect(service.hasPermission('apps.view')).toBe(true);
   });
 });

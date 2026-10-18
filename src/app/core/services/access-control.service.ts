@@ -139,7 +139,7 @@ export class AccessControlService {
     if (!currentUser || currentUser.isActive === false) {
       return false;
     }
-    const permissionsBelongToCurrentUser = this.permissionsUserId === currentUser.id;
+    const permissionsBelongToCurrentUser = this.permissionsLoadedUserId === currentUser.id;
 
     // 1. Règle d'or : l'administrateur système actif possède tous les droits
     if (this.authService.isAdmin() || currentUser.role === 'admin') {
@@ -147,7 +147,7 @@ export class AccessControlService {
     }
 
     // 2. Accès universel garanti aux espaces communs pour tout utilisateur authentifié et actif
-    if (['apps.view', 'dashboard.view', 'module.dashboard.view', 'profile.read'].includes(permissionKey)) {
+    if (['apps.view', 'profile.read'].includes(permissionKey)) {
       return true;
     }
 
@@ -167,58 +167,14 @@ export class AccessControlService {
     }
 
     // 3b. Si la permission demandée est une visibilité de module (module.*.view),
-    // autoriser dès que le rôle (dynamique ou système) possède une permission métier active du module.
+    // autoriser uniquement si l'utilisateur possède une permission métier active de ce module précis.
     if (this.hasGrantedModuleCapability(permissionKey, effectivePermissions)) {
       return true;
     }
 
-    // Les rôles dynamiques personnalisés (ex: 'daf' normalisé en 'employe') ne doivent jamais hériter
-    // des permissions de secours du rôle legacy normalisé. En revanche, si customRole === role (rôle canonique),
-    // le repli canonique reste applicable.
-    if (currentUser.customRole && currentUser.customRole !== currentUser.role) {
-      return false;
-    }
-
-    // 4. Repli de visibilité de module canonique pour les rôles historiques
-    // Strict alignement avec le principe du moindre privilège :
-    // Aucune action opérationnelle (create, write, update, delete, status_update) n'est accordée implicitement !
-    const userRole = this.authService.currentRole();
-    if (!userRole) return false;
-
-    if (userRole === 'admin') return true;
-
-    const legacyModuleVisibility: Record<string, string[]> = {
-      manager: [
-        'module.dashboard.view',
-        'module.accounting.view',
-        'module.hr.view',
-        'module.prospects.view',
-        'module.quotes.view',
-        'module.crm.view',
-        'module.dossiers.view',
-      ],
-      commercial: [
-        'module.dashboard.view',
-        'module.prospects.view',
-        'module.quotes.view',
-        'module.crm.view',
-        'module.dossiers.view',
-      ],
-      tresorier: [
-        'module.dashboard.view',
-        'module.accounting.view',
-        'module.configuration.view',
-      ],
-      comptable: [
-        'module.dashboard.view',
-        'module.accounting.view',
-        'module.configuration.view',
-      ],
-      caissiere: ['module.dashboard.view', 'module.accounting.view'],
-      employe: ['module.dashboard.view', 'module.hr.view'],
-    };
-
-    return Boolean(legacyModuleVisibility[userRole]?.includes(permissionKey));
+    // 4. Souveraineté stricte de l'administrateur :
+    // Aucun repli implicite sur d'anciens rôles ou modules non expressément attribués.
+    return false;
   }
   
   public hasPermissionForResource(
@@ -238,7 +194,8 @@ export class AccessControlService {
 
     const actorId = currentUser.id;
     if (!actorId) return false;
-    const matchingPermissions = this._effectivePermissions().filter(
+    const effectivePermissions = this.permissionsLoadedUserId === currentUser.id ? this._effectivePermissions() : [];
+    const matchingPermissions = effectivePermissions.filter(
       (permission) => permission.permissionKey === permissionKey
     );
     const scopeMatches = (scope: EffectivePermission['scope']): boolean => {

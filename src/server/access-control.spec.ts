@@ -21,9 +21,11 @@ describe('hasPermission (Server Access Control - Least Privilege)', () => {
     const roleKeys = resolveEffectiveRoleKeys([], 'employe');
 
     expect(roleKeys).toEqual(['employe']);
-    // Universal module permissions are always granted to active users
-    await expect(hasPermission('legacy-user', 'module.dashboard.view', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
-    // Unassigned operational permissions are strictly denied
+    // Universal permissions are granted to active users (apps.view, profile.read)
+    await expect(hasPermission('legacy-user', 'apps.view', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
+    await expect(hasPermission('legacy-user', 'profile.read', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
+    // Unassigned operational and module permissions are strictly denied
+    await expect(hasPermission('legacy-user', 'module.dashboard.view', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
     await expect(hasPermission('legacy-user', 'hr.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
     await expect(hasPermission('legacy-user', 'users.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
   });
@@ -65,10 +67,9 @@ describe('hasPermission (Server Access Control - Least Privilege)', () => {
     await expect(hasPermission('admin-user', 'any.arbitrary.permission', undefined, adminRules)).resolves.toBe(true);
   });
 
-  it('keeps legacy module visibility separate from the underlying data permissions', async () => {
+  it('does not grant implicit module visibility permissions from legacy role names', async () => {
     const visibilityPermissions = legacyModuleVisibilityPermissions(['employe']);
-    expect(visibilityPermissions).toContain('module.hr.view');
-    expect(visibilityPermissions).not.toContain('users.read');
+    expect(visibilityPermissions).toEqual([]);
 
     const rules = {
       roleKeys: ['daf'],
@@ -352,10 +353,10 @@ describe('hasPermission (Server Access Control - Least Privilege)', () => {
     expect(allowed).toBe(true);
   });
 
-  it('accorde universellement module.dashboard.view à tout utilisateur actif', async () => {
+  it('accorde universellement apps.view à tout utilisateur actif', async () => {
     const allowed = await hasPermission(
       'user-any',
-      'module.dashboard.view',
+      'apps.view',
       undefined,
       {
         roleKeys: ['custom_new_role'],
