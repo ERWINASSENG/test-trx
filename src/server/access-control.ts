@@ -34,6 +34,15 @@ const LEGACY_MODULE_VISIBILITY_BY_ROLE: Readonly<Record<string, readonly string[
     'module.accounting.view',
     'module.hr.view',
     'module.prospects.view',
+    'module.quotes.view',
+    'module.crm.view',
+    'module.dossiers.view',
+  ],
+  commercial: [
+    'module.dashboard.view',
+    'module.prospects.view',
+    'module.quotes.view',
+    'module.crm.view',
     'module.dossiers.view',
   ],
   tresorier: [
@@ -50,8 +59,37 @@ const LEGACY_MODULE_VISIBILITY_BY_ROLE: Readonly<Record<string, readonly string[
   employe: ['module.dashboard.view', 'module.hr.view'],
 };
 
+export const MODULE_CAPABILITY_PREFIXES: Readonly<Record<string, readonly string[]>> = {
+  'module.dashboard.view': ['dashboard.'],
+  'module.accounting.view': ['cashier.', 'journals.', 'journal_entries.'],
+  'module.hr.view': ['hr.', 'users.'],
+  'module.prospects.view': ['prospects.'],
+  'module.quotes.view': ['quotes.'],
+  'module.crm.view': ['crm.'],
+  'module.dossiers.view': ['dossiers.'],
+  'module.configuration.view': ['configuration.', 'journals.create', 'journals.update', 'journals.delete'],
+  'module.access_control.view': ['access.'],
+};
+
 export const legacyModuleVisibilityPermissions = (roleKeys: readonly string[]): string[] =>
   [...new Set(roleKeys.flatMap((roleKey) => LEGACY_MODULE_VISIBILITY_BY_ROLE[roleKey] || []))];
+
+export const deriveModuleVisibilityFromCapabilities = (
+  grantedPermissions: readonly string[]
+): string[] => {
+  const visibleModules: string[] = [];
+  for (const [moduleKey, prefixes] of Object.entries(MODULE_CAPABILITY_PREFIXES)) {
+    const hasCapability = prefixes.some((prefix) =>
+      prefix.endsWith('.')
+        ? grantedPermissions.some((perm) => perm.startsWith(prefix))
+        : grantedPermissions.includes(prefix)
+    );
+    if (hasCapability && !visibleModules.includes(moduleKey)) {
+      visibleModules.push(moduleKey);
+    }
+  }
+  return visibleModules;
+};
 
 type ScopeEvaluator = (
   scope: AccessScope,
@@ -172,7 +210,20 @@ const loadAccessRulesFromDatabase = async (
   const roleAssignments = (assignmentsResult.data || []).filter((assignment) =>
     isUnexpired(assignment.expires_at, currentTime)
   );
-  const roleIds = [...new Set(roleAssignments.map((assignment) => String(assignment.role_id)))];
+  let roleIds = [...new Set(roleAssignments.map((assignment) => String(assignment.role_id)))];
+
+  if (roleIds.length === 0 && profile.role) {
+    const roleLookupResult = await adminClient
+      .from('access_roles')
+      .select('id, role_key')
+      .eq('role_key', profile.role)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (roleLookupResult.data?.id) {
+      roleIds = [String(roleLookupResult.data.id)];
+    }
+  }
+
   const roleRowsResult = roleIds.length > 0
     ? await adminClient
         .from('access_roles')
@@ -223,7 +274,11 @@ const loadAccessRulesFromDatabase = async (
   };
 };
 
-const loadAccessRules = createAccessRulesLoader(loadAccessRulesFromDatabase);
+export const clearAccessRulesCache = (userId?: string): void => {
+  void userId;
+};
+
+export const loadAccessRules = createAccessRulesLoader(loadAccessRulesFromDatabase);
 
 export const resolveEffectivePermissions = async (
   userId: string,
@@ -247,19 +302,38 @@ export const resolveEffectivePermissions = async (
   if (!effective.some((p) => p.permissionKey === 'dashboard.view')) {
     effective.push({ permissionKey: 'dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
   }
+  if (!effective.some((p) => p.permissionKey === 'module.dashboard.view')) {
+    effective.push({ permissionKey: 'module.dashboard.view', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
+  }
   if (!effective.some((p) => p.permissionKey === 'profile.read')) {
     effective.push({ permissionKey: 'profile.read', scope: { type: 'all', version: 1 }, effect: 'allow', sourceRoleKey: primaryRole });
   }
-  if (accessRules.hasActiveRoleAssignments === false) {
-    for (const permissionKey of legacyModuleVisibilityPermissions(accessRules.roleKeys)) {
-      if (!effective.some((permission) => permission.permissionKey === permissionKey)) {
-        effective.push({
-          permissionKey,
-          scope: { type: 'all', version: 1 },
-          effect: 'allow',
-          sourceRoleKey: primaryRole,
-        });
-      }
+
+  // Déduire automatiquement la visibilité de module pour tout rôle ayant au moins une capacité métier
+  const grantedPermissionKeys = effective
+    .filter((p) => p.effect === 'allow')
+    .map((p) => p.permissionKey);
+  const derivedModules = deriveModuleVisibilityFromCapabilities(grantedPermissionKeys);
+  for (const moduleKey of derivedModules) {
+    if (!effective.some((p) => p.permissionKey === moduleKey)) {
+      effective.push({
+        permissionKey: moduleKey,
+        scope: { type: 'all', version: 1 },
+        effect: 'allow',
+        sourceRoleKey: primaryRole,
+      });
+    }
+  }
+
+  // Repli de visibilité de module pour les rôles historiques / canoniques
+  for (const permissionKey of legacyModuleVisibilityPermissions(accessRules.roleKeys)) {
+    if (!effective.some((permission) => permission.permissionKey === permissionKey)) {
+      effective.push({
+        permissionKey,
+        scope: { type: 'all', version: 1 },
+        effect: 'allow',
+        sourceRoleKey: primaryRole,
+      });
     }
   }
 
@@ -279,7 +353,7 @@ const evaluatePermission = (
   }
 
   // 2. Accès garanti aux modules universels pour tout collaborateur actif
-  if (['apps.view', 'dashboard.view', 'profile.read'].includes(permissionKey)) {
+  if (['apps.view', 'dashboard.view', 'module.dashboard.view', 'profile.read'].includes(permissionKey)) {
     return true;
   }
 
@@ -303,79 +377,22 @@ const evaluatePermission = (
     return false;
   }
 
-  if (
-    accessRules.hasActiveRoleAssignments === false &&
-    legacyModuleVisibilityPermissions(accessRules.roleKeys).includes(permissionKey)
-  ) {
+  // Déduction automatique de module.*.view depuis les capacités accordées au rôle
+  const grantedRoleKeys = accessRules.rules
+    .filter((r) => !r.isUserOverride && r.effect === 'allow')
+    .map((r) => r.permissionKey);
+  if (deriveModuleVisibilityFromCapabilities(grantedRoleKeys).includes(permissionKey)) {
     return true;
   }
 
-  // 3. Repli métier par rôle canonique côté serveur
-  const hasRole = (role: string) => accessRules.roleKeys.includes(role);
-  if (hasRole('manager') && [
-    'cashier.read',
-    'cashier.write',
-    'dossiers.read',
-    'dossiers.create',
-    'hr.read',
-    'hr.write',
-    'users.read',
-    'prospects.read',
-    'prospects.write',
-  ].includes(permissionKey)) {
-    return true;
-  }
-  if (hasRole('tresorier') && [
-    'cashier.read',
-    'cashier.write',
-    'dossiers.read',
-    'cashier.update',
-    'cashier.status_update',
-    'cashier.duplicate',
-    'journals.read',
-    'journals.write',
-    'journals.create',
-    'journals.update',
-    'journals.delete',
-    'journal_entries.read',
-    'journal_entries.chart_read',
-    'journal_entries.create',
-    'journal_entries.update',
-    'journal_entries.delete',
-  ].includes(permissionKey)) {
-    return true;
-  }
-  if (hasRole('comptable') && [
-    'cashier.read',
-    'cashier.write',
-    'dossiers.read',
-    'cashier.duplicate',
-    'journals.read',
-    'journals.write',
-    'journals.create',
-    'journals.update',
-    'journals.delete',
-    'journal_entries.read',
-    'journal_entries.chart_read',
-    'journal_entries.create',
-    'journal_entries.update',
-    'journal_entries.delete',
-  ].includes(permissionKey)) {
-    return true;
-  }
-  if (hasRole('caissiere') && [
-    'cashier.read',
-    'cashier.write',
-    'dossiers.read',
-    'cashier.status_update',
-    'cashier.update',
-  ].includes(permissionKey)) {
-    return true;
-  }
-  if (hasRole('employe') && ['hr.read'].includes(permissionKey)) {
+  if (legacyModuleVisibilityPermissions(accessRules.roleKeys).includes(permissionKey)) {
     return true;
   }
 
+  // 3. Souveraineté stricte des choix de l'administrateur :
+  // Si la permission n'est ni universelle, ni dérivée pour la visibilité du module,
+  // ni expressément accordée dans les règles de rôle ou surcharges configurées par l'administrateur,
+  // elle est STRICTEMENT refusée (aucun repli permissif implicite).
   return false;
 };
 

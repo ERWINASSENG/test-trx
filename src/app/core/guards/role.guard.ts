@@ -26,7 +26,10 @@ export const roleGuard: CanActivateFn = async (route) => {
   const currentUser = authService.currentUser();
 
   // 1. Accès universel garanti aux espaces partagés pour tout collaborateur connecté
-  if (currentUser && ['apps.view', 'dashboard.view', 'profile.read'].includes(requiredPermission)) {
+  if (
+    currentUser &&
+    ['apps.view', 'dashboard.view', 'module.dashboard.view', 'profile.read'].includes(requiredPermission)
+  ) {
     return true;
   }
 

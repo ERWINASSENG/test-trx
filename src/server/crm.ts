@@ -433,12 +433,18 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     return;
   }
   const teamRead = await canSeeTeam(actor.id);
-  let opportunitiesQuery = admin.from('sales_opportunities').select('*').order('updated_at', { ascending: false }).limit(500);
+  let opportunitiesQuery = admin.from('sales_opportunities')
+    .select('id, prospect_id, assigned_to, title, stage, transport_mode, direction, origin, destination, goods_description, weight_kg, volume_m3, incoterm, estimated_value, currency, expected_close_date, won_reason, contract_reference, notes, updated_at')
+    .order('updated_at', { ascending: false }).limit(500);
   let clientsQuery = admin.from('prospects')
     .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, notes, source, status, assigned_to')
     .order('company_name').limit(500);
-  let activitiesQuery = admin.from('sales_activities').select('*').order('due_at', { ascending: true }).limit(500);
-  let campaignsQuery = admin.from('sales_campaigns').select('*').order('starts_at', { ascending: false }).limit(200);
+  let activitiesQuery = admin.from('sales_activities')
+    .select('id, prospect_id, opportunity_id, contact_id, assigned_to, activity_type, title, due_at, status, notes')
+    .order('due_at', { ascending: true }).limit(500);
+  let campaignsQuery = admin.from('sales_campaigns')
+    .select('id, name, status, starts_at, ends_at, filters, notes')
+    .order('starts_at', { ascending: false }).limit(200);
   if (!teamRead) {
     opportunitiesQuery = opportunitiesQuery.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
     clientsQuery = clientsQuery.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
@@ -492,7 +498,11 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   const clientById = new Map(clients.map((client) => [client.id, client]));
   const [contactsResult, dossierResult, quoteResult, profilesResult] = await Promise.all([
     clientIds.length
-      ? admin.from('prospect_contacts').select('*').in('prospect_id', clientIds).order('is_primary', { ascending: false }).order('full_name')
+      ? admin.from('prospect_contacts')
+          .select('id, prospect_id, full_name, job_title, email, phone, is_primary')
+          .in('prospect_id', clientIds)
+          .order('is_primary', { ascending: false })
+          .order('full_name')
       : Promise.resolve({ data: [], error: null }),
     visibleOpportunityRows.length
       ? admin.from('dossiers').select('id, opportunity_id, no_dossier').in('opportunity_id', visibleOpportunityRows.map((row) => String(row.id)))

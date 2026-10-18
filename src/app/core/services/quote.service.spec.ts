@@ -92,4 +92,40 @@ describe('QuoteService', () => {
       phone: '+237600000000',
     }]);
   });
+
+  it('keeps the business error returned by the Quotes API', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: 'Cette cotation ne peut pas être modifiée à ce stade.' }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    )));
+
+    const loaded = await service.loadQuotes();
+
+    expect(loaded).toBe(false);
+    expect(service.error()).toBe('Cette cotation ne peut pas être modifiée à ce stade.');
+  });
+
+  it('distinguishes a network failure from an HTTP error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const loaded = await service.loadQuotes();
+
+    expect(loaded).toBe(false);
+    expect(service.error()).toBe(
+      'Connexion au service Cotations impossible pour charger les cotations. Vérifiez votre connexion puis réessayez.'
+    );
+  });
+
+  it('reports an invalid successful API response instead of treating it as an empty result', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('null', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const loaded = await service.loadQuotes();
+
+    expect(loaded).toBe(false);
+    expect(service.quotes()).toEqual([]);
+    expect(service.error()).toBe('Le service Cotations a renvoyé une réponse invalide.');
+  });
 });

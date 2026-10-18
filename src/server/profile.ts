@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSupabaseAdmin } from './auth';
+import { clearServerProfileCache, getSupabaseAdmin } from './auth';
 
 interface AccessRoleAssignment {
   created_at: string;
@@ -7,6 +7,28 @@ interface AccessRoleAssignment {
   access_roles: { role_key: string; label: string; is_active: boolean } |
     { role_key: string; label: string; is_active: boolean }[] | null;
 }
+
+export const USER_PROFILE_RESPONSE_CACHE_TTL_MS = 60_000;
+
+interface CachedProfilePayload {
+  profile: Record<string, unknown>;
+  customRole: string | null;
+  roleLabel: string | null;
+  cachedAt: number;
+}
+
+const profilePayloadCache = new Map<string, CachedProfilePayload>();
+const inFlightProfileLoads = new Map<string, Promise<CachedProfilePayload | null>>();
+
+export const clearUserProfileResponseCache = (userId?: string): void => {
+  if (userId) {
+    profilePayloadCache.delete(userId);
+    inFlightProfileLoads.delete(userId);
+  } else {
+    profilePayloadCache.clear();
+    inFlightProfileLoads.clear();
+  }
+};
 
 export function getActiveAccessRole(assignments: AccessRoleAssignment[], now = Date.now()): {
   customRole: string;
@@ -44,48 +66,87 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
   }
 
   try {
-    const { data: profile, error } = await adminClient
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Échec de lecture du profil utilisateur:', error.message);
-      res.status(500).json({ error: 'Impossible de récupérer votre profil.' });
+    const now = Date.now();
+    const cached = profilePayloadCache.get(userId);
+    if (cached && now - cached.cachedAt < USER_PROFILE_RESPONSE_CACHE_TTL_MS) {
+      res.json({
+        profile: cached.profile,
+        role: user.role || cached.profile['role'],
+        customRole: cached.customRole,
+        roleLabel: cached.roleLabel,
+      });
       return;
     }
 
-    if (!profile) {
+    let pending = inFlightProfileLoads.get(userId);
+    if (!pending) {
+      pending = (async (): Promise<CachedProfilePayload | null> => {
+        const [profileResult, roleAssignmentsResult] = await Promise.all([
+          adminClient
+            .from('profiles')
+            .select('id, email, first_name, last_name, role, department, phone, avatar_url, is_active, must_change_password, user_code, last_login_at, created_at, updated_at')
+            .eq('id', userId)
+            .maybeSingle(),
+          adminClient
+            .from('access_user_roles')
+            .select('created_at, expires_at, access_roles!inner(role_key, label, is_active)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (profileResult.error) {
+          throw new Error(`PROFILE_READ_ERROR:${profileResult.error.message}`);
+        }
+        if (roleAssignmentsResult.error) {
+          throw new Error(`ROLE_READ_ERROR:${roleAssignmentsResult.error.message}`);
+        }
+        if (!profileResult.data) {
+          return null;
+        }
+
+        const activeAccessRole = getActiveAccessRole(
+          (roleAssignmentsResult.data || []) as AccessRoleAssignment[],
+          Date.now()
+        );
+
+        const entry: CachedProfilePayload = {
+          profile: profileResult.data as Record<string, unknown>,
+          customRole: activeAccessRole?.customRole || null,
+          roleLabel: activeAccessRole?.roleLabel || null,
+          cachedAt: Date.now(),
+        };
+        profilePayloadCache.set(userId, entry);
+        return entry;
+      })().finally(() => {
+        inFlightProfileLoads.delete(userId);
+      });
+      inFlightProfileLoads.set(userId, pending);
+    }
+
+    const loaded = await pending;
+    if (!loaded) {
       res.status(404).json({ error: 'Profil utilisateur introuvable.' });
       return;
     }
 
-    const { data: roleAssignmentsData, error: roleAssignmentsError } = await adminClient
-      .from('access_user_roles')
-      .select('created_at, expires_at, access_roles!inner(role_key, label, is_active)')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (roleAssignmentsError) {
-      console.error('Échec de lecture du rôle attribué à l’utilisateur:', roleAssignmentsError.message);
+    res.json({
+      profile: loaded.profile,
+      role: user.role || loaded.profile['role'],
+      customRole: loaded.customRole,
+      roleLabel: loaded.roleLabel,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith('PROFILE_READ_ERROR:')) {
+      console.error('Échec de lecture du profil utilisateur:', message);
+      res.status(500).json({ error: 'Impossible de récupérer votre profil.' });
+      return;
+    }
+    if (message.startsWith('ROLE_READ_ERROR:')) {
+      console.error('Échec de lecture du rôle attribué à l’utilisateur:', message);
       res.status(500).json({ error: 'Impossible de récupérer le rôle attribué.' });
       return;
     }
-
-    const now = Date.now();
-    const activeAccessRole = getActiveAccessRole(
-      (roleAssignmentsData || []) as AccessRoleAssignment[],
-      now
-    );
-
-    res.json({
-      profile,
-      role: user.role || profile.role,
-      customRole: activeAccessRole?.customRole || null,
-      roleLabel: activeAccessRole?.roleLabel || null,
-    });
-  } catch (err: unknown) {
     console.error('Erreur getCurrentUserProfileHandler:', err);
     res.status(500).json({ error: 'Erreur interne lors de la récupération du profil.' });
   }
@@ -107,6 +168,9 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
   }
 
   try {
+    clearUserProfileResponseCache(userId);
+    clearServerProfileCache(userId);
+
     const profileUpdates: Record<string, unknown> = {
       id: userId,
       updated_at: new Date().toISOString(),
@@ -161,6 +225,7 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
       }
     }
 
+    clearUserProfileResponseCache(userId);
     res.json({ success: true, message: 'Profil mis à jour avec succès' });
   } catch (err: unknown) {
     console.error('Erreur updateCurrentUserProfileHandler:', err);

@@ -14,6 +14,7 @@ import {
   generateDefaultDossierDescription,
 } from '../models/crm.model';
 import { AuthService } from './auth.service';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface CrmResult<T> {
   success: boolean;
@@ -277,6 +278,21 @@ export class CrmService {
       this.authService.handleUnauthorizedSession();
       return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
     }
+    const action = method === 'GET'
+      ? 'charger les données CRM'
+      : path.includes('/prepare')
+        ? 'préparer l’audience de la campagne'
+        : path.endsWith('/dossier')
+          ? 'créer le dossier depuis le CRM'
+          : path.includes('/contacts')
+            ? 'créer le contact'
+            : path.includes('/opportunities')
+              ? method === 'POST' ? 'créer l’opportunité' : 'modifier l’opportunité'
+              : path.includes('/activities')
+                ? method === 'POST' ? 'créer la tâche' : 'modifier la tâche'
+                : path.includes('/campaigns')
+                  ? 'créer la campagne'
+                  : 'enregistrer le client';
     if (showLoading) this._isLoading.set(true);
     try {
       const response = await fetch(`/api/crm${path}`, {
@@ -288,14 +304,26 @@ export class CrmService {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
-      if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur CRM Commercial est injoignable.' };
+      if (!response.ok) {
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
+      }
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service CRM a renvoyé une réponse invalide.' };
+      }
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service CRM:', requestError);
+      const message = requestError instanceof TypeError
+        ? `Connexion au service CRM impossible pour ${action}. Vérifiez votre connexion puis réessayez.`
+        : `Impossible de traiter la demande CRM pour ${action}. Réessayez.`;
+      return { success: false, error: message };
     } finally {
       if (showLoading) this._isLoading.set(false);
     }

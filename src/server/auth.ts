@@ -30,12 +30,42 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   return client;
 }
 
+export const AUTH_TOKEN_CACHE_TTL_MS = 60_000;
+export const SERVER_PROFILE_CACHE_TTL_MS = 60_000;
+
+interface CachedUserLookup {
+  result: Awaited<ReturnType<SupabaseClient['auth']['getUser']>>;
+  cachedAt: number;
+}
+
+const verifiedTokenCache = new Map<string, CachedUserLookup>();
+
+export const clearVerifiedTokenCache = (): void => {
+  verifiedTokenCache.clear();
+};
+
+interface CachedServerProfile {
+  profile: ServerUserProfile | null;
+  cachedAt: number;
+}
+
+const serverProfileCache = new Map<string, CachedServerProfile>();
+
+export const clearServerProfileCache = (userId?: string): void => {
+  if (userId) {
+    serverProfileCache.delete(userId);
+  } else {
+    serverProfileCache.clear();
+  }
+};
+
 export async function updateExistingUserProfileRole(
   adminClient: SupabaseClient,
   userId: string,
   role: UserRole,
   email?: string | null
 ) {
+  clearServerProfileCache(userId);
   const profileUpdates: { role: UserRole; email?: string; updated_at: string } = {
     role,
     updated_at: new Date().toISOString(),
@@ -52,14 +82,36 @@ export interface ServerUserProfile {
 
 export async function loadServerUserProfile(
   supabaseAdmin: SupabaseClient,
-  userId: string
+  userId: string,
+  skipCache = false
 ): Promise<ServerUserProfile | null> {
+  const now = Date.now();
+  const cached = serverProfileCache.get(userId);
+  if (!skipCache) {
+    if (cached && now - cached.cachedAt < SERVER_PROFILE_CACHE_TTL_MS) {
+      return cached.profile;
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('role, is_active')
     .eq('id', userId)
     .maybeSingle();
-  return error || !data ? null : data;
+
+  if (error) {
+    // Si une erreur transitoire survient (ex. coupure réseau, timeout DB)
+    // et qu'un profil valide était déjà en cache, on le préserve pour éviter
+    // une déconnexion intempestive ou un faux 403.
+    if (cached?.profile) {
+      return cached.profile;
+    }
+    return null;
+  }
+
+  const profile = !data ? null : data;
+  serverProfileCache.set(userId, { profile, cachedAt: now });
+  return profile;
 }
 
 export const createInFlightTokenLookup = <T>(
@@ -78,11 +130,30 @@ export const createInFlightTokenLookup = <T>(
   };
 };
 
-const lookupVerifiedUser = createInFlightTokenLookup((token: string) => {
+const rawLookupVerifiedUser = createInFlightTokenLookup((token: string) => {
   const supabaseAdmin = getSupabaseAdmin();
   if (!supabaseAdmin) throw new Error('Service d’authentification indisponible.');
   return supabaseAdmin.auth.getUser(token);
 });
+
+export const lookupVerifiedUser = async (
+  token: string,
+  skipCache = false
+): Promise<Awaited<ReturnType<SupabaseClient['auth']['getUser']>>> => {
+  const now = Date.now();
+  if (!skipCache) {
+    const cached = verifiedTokenCache.get(token);
+    if (cached && now - cached.cachedAt < AUTH_TOKEN_CACHE_TTL_MS) {
+      return cached.result;
+    }
+  }
+
+  const result = await rawLookupVerifiedUser(token);
+  if (!result.error && result.data?.user) {
+    verifiedTokenCache.set(token, { result, cachedAt: now });
+  }
+  return result;
+};
 
 const getAdminEmailsFromEnv = (): string[] => {
   return (process.env['ADMIN_EMAILS'] || '')
@@ -192,7 +263,7 @@ export async function requireAdmin(req: express.Request, res: express.Response, 
   }
 
   try {
-    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: authData, error: authError } = await lookupVerifiedUser(token);
     const user = authData?.user;
     if (authError || !user) {
       res.status(401).json({ error: 'Session invalide ou expirée' });

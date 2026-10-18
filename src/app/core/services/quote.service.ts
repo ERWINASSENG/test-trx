@@ -11,6 +11,7 @@ import {
 } from '../models/quote.model';
 import { Prospect } from '../models/prospect.model';
 import { AuthService } from './auth.service';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface QuoteInput {
   prospectId: string;
@@ -286,6 +287,22 @@ export class QuoteService {
       }
     }
 
+    const action = method === 'GET'
+      ? path.endsWith('/prospects')
+        ? 'charger les clients des cotations'
+        : path.endsWith('/assignees')
+          ? 'charger les commerciaux'
+          : path.includes('/contacts?')
+            ? 'charger les contacts du client'
+            : path.endsWith('/templates')
+              ? 'charger les modèles de cotation'
+              : 'charger les cotations'
+      : method === 'POST'
+        ? 'créer la cotation'
+        : method === 'PATCH'
+          ? 'modifier la cotation'
+          : 'supprimer la cotation';
+
     if (showLoading) this._isLoading.set(true);
     try {
       const response = await fetch(path, {
@@ -297,16 +314,28 @@ export class QuoteService {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
-      if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
+      if (!response.ok) {
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
+      }
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service Cotations a renvoyé une réponse invalide.' };
+      }
       if (method === 'GET') this.getCache.set(cacheKey, { cachedAt: Date.now(), data: payload });
       else this.getCache.clear();
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur Cotations est injoignable.' };
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service Cotations:', requestError);
+      const message = requestError instanceof TypeError
+        ? `Connexion au service Cotations impossible pour ${action}. Vérifiez votre connexion puis réessayez.`
+        : `Impossible de traiter la demande pour ${action}. Réessayez.`;
+      return { success: false, error: message };
     } finally {
       if (showLoading) this._isLoading.set(false);
     }

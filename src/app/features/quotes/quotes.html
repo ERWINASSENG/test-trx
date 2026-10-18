@@ -703,8 +703,9 @@
               <label for="field-inland">Transport intérieur requis ? / Need inland transport? :</label>
               <select
                 id="field-inland"
-                [value]="seaNeedInlandTransport() ? 'yes' : 'no'"
-                (change)="seaNeedInlandTransport.set($any($event.target).value === 'yes')">
+                [value]="seaNeedInlandTransport() === null ? '' : seaNeedInlandTransport() ? 'yes' : 'no'"
+                (change)="seaNeedInlandTransport.set($any($event.target).value === '' ? null : $any($event.target).value === 'yes')">
+                <option value="">Choisir une option</option>
                 <option value="no">Non / No</option>
                 <option value="yes">Oui / Yes (Post/Pré-acheminement terrestre)</option>
               </select>

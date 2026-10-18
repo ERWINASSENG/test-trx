@@ -29,11 +29,8 @@
   padding: 20px clamp(12px, 2vw, 24px) 36px;
 }
 
-.crm-heading,
 .section-heading,
 .dialog-header,
-.client-profile > header,
-.contacts-heading,
 .card-topline,
 .card-actions,
 .card-links,
@@ -44,12 +41,6 @@
   gap: 12px;
 }
 
-.crm-heading {
-  align-items: flex-start;
-}
-
-.crm-heading h1,
-.client-profile h2,
 .section-heading h2,
 .dialog-header h2 {
   margin: 0;
@@ -57,12 +48,6 @@
   font-size: clamp(1.3rem, 2vw, 1.7rem);
   font-weight: 700;
   letter-spacing: -0.02em;
-}
-
-.crm-subtitle {
-  margin: 4px 0 0;
-  color: var(--crm-subtle);
-  font-size: 0.88rem;
 }
 
 .crm-eyebrow {
@@ -74,7 +59,6 @@
   text-transform: uppercase;
 }
 
-.team-access,
 .section-heading > span {
   display: inline-flex;
   align-items: center;
@@ -83,16 +67,7 @@
   font-size: 0.82rem;
 }
 
-.team-access {
-  border: 1px solid var(--crm-border);
-  border-radius: 999px;
-  padding: 5px 10px;
-  color: var(--crm-accent);
-  font-weight: 600;
-}
-
-.column-count,
-.contacts-heading > div > span {
+.column-count {
   display: inline-grid;
   min-width: 22px;
   height: 22px;
@@ -112,8 +87,7 @@
 /* Actions primaires et secondaires */
 .primary-action,
 .secondary-action,
-.complete-action,
-.outline-action {
+.complete-action {
   display: inline-flex;
   min-height: 34px;
   align-items: center;
@@ -145,17 +119,6 @@
 
 .secondary-action:hover {
   background: var(--crm-hover);
-}
-
-.outline-action {
-  border-color: var(--crm-border);
-  color: var(--crm-text);
-  background: var(--crm-surface);
-}
-
-.outline-action:hover {
-  background: var(--crm-hover);
-  border-color: var(--crm-action);
 }
 
 .complete-action {
@@ -428,305 +391,9 @@
   padding: 20px 0;
 }
 
-/* TIROIR LATÉRAL 360° (SLIDE-OVER ODOO) */
-.crm-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(2px);
-  z-index: 1000;
-  display: flex;
-  justify-content: flex-end;
-  animation: fadeIn 0.15s ease-out;
-}
-
-.crm-drawer {
-  width: min(640px, 100vw);
-  height: 100%;
-  background: var(--crm-surface);
-  border-left: 1px solid var(--crm-border);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-.drawer-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--crm-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--crm-surface);
-}
-
-.drawer-title-group h2 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--crm-text);
-}
-
-.drawer-client-name {
-  font-size: 0.82rem;
-  color: var(--crm-action);
-  font-weight: 600;
-  margin-top: 2px;
-}
-
-.drawer-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--crm-border);
-  background: transparent;
-  color: var(--crm-subtle);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.drawer-close-btn:hover {
-  background: var(--crm-hover);
-  color: var(--crm-text);
-}
-
-/* Barre de progression des étapes Odoo */
-.drawer-stages-bar {
-  display: flex;
-  background: var(--crm-muted);
-  border-bottom: 1px solid var(--crm-border);
-  overflow-x: auto;
-}
-
-.stage-step-btn {
-  flex: 1 0 auto;
-  border: none;
-  background: transparent;
-  padding: 8px 12px;
-  font-size: 0.73rem;
-  font-weight: 600;
-  color: var(--crm-subtle);
-  cursor: pointer;
-  text-align: center;
-  border-right: 1px solid var(--crm-border);
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.stage-step-btn:last-child {
-  border-right: none;
-}
-
-.stage-step-btn.active {
-  background: var(--crm-action);
-  color: #fff;
-}
-
-.stage-step-btn:not(.active):hover {
-  background: var(--crm-hover);
-  color: var(--crm-text);
-}
-
-.drawer-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.drawer-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border: 1px solid var(--crm-border);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--crm-surface);
-}
-
-.drawer-section-heading {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--crm-text);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.drawer-data-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.drawer-data-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.drawer-data-item .label {
-  font-size: 0.72rem;
-  color: var(--crm-subtle);
-  font-weight: 500;
-}
-
-.drawer-data-item .value {
-  font-size: 0.84rem;
-  color: var(--crm-text);
-  font-weight: 600;
-}
-
-.drawer-interconnect-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px dashed var(--crm-border);
-  border-radius: 6px;
-  padding: 12px;
-  background: var(--crm-muted);
-}
-
-.drawer-footer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--crm-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--crm-surface);
-  gap: 10px;
-}
-
-/* MATRICE OPÉRATIONNELLE SUIVI COTATIONS & DOSSIERS */
-.matrix-container {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.matrix-table-wrapper {
-  overflow-x: auto;
-  border: 1px solid var(--crm-border);
-  border-radius: 8px;
-  background: var(--crm-surface);
-}
-
-.matrix-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-  text-align: left;
-}
-
-.matrix-table th {
-  background: var(--crm-muted);
-  color: var(--crm-subtle);
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--crm-border);
-  white-space: nowrap;
-}
-
-.matrix-table td {
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--crm-border);
-  color: var(--crm-text);
-  vertical-align: middle;
-}
-
-.matrix-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.matrix-table tbody tr:hover {
-  background: var(--crm-hover);
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-}
-
-.status-badge.draft { background: #e9ecef; color: #495057; border-color: #ced4da; }
-.status-badge.sent { background: #e7f1ff; color: #0b5ed7; border-color: #b6d4fe; }
-.status-badge.accepted { background: #d1e7dd; color: #0f5132; border-color: #badbcc; }
-.status-badge.rejected { background: #f8d7da; color: #842029; border-color: #f5c2c7; }
-.status-badge.won { background: #d1e7dd; color: #0f5132; border-color: #badbcc; }
-.status-badge.pending { background: #fff3cd; color: #664d03; border-color: #ffecb5; }
-
-/* Grille de cartes Sociétés & Prospects (Chaque élément a sa propre carte autonome) */
-.clients-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-  width: 100%;
-  align-items: stretch;
-}
-
-/* Carte Société individuelle */
-.client-grid-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  border: 1px solid var(--crm-border);
-  border-radius: 10px;
-  padding: 16px;
-  background: var(--crm-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  text-align: left;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-    border-color: var(--crm-action);
-    box-shadow: 0 6px 16px rgba(11, 94, 215, 0.1);
-  }
-}
-
-.client-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-}
-
-.client-identity {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
 }
 
 .company-avatar {
@@ -784,347 +451,8 @@
   border: 1px solid #fecaca;
 }
 
-.client-monogram {
-  display: inline-grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--crm-action) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--crm-action) 25%, transparent);
-  color: var(--crm-action);
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.client-names {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.client-company-name {
-  margin: 0;
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--crm-text);
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.client-contact-sub {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.74rem;
-  color: var(--crm-subtle);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  mat-icon {
-    font-size: 14px;
-    width: 14px;
-    height: 14px;
-    color: var(--crm-subtle);
-    opacity: 0.8;
-    flex-shrink: 0;
-  }
-}
-
-.client-status {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--crm-border);
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 0.69rem;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-  background: var(--crm-muted);
-  color: var(--crm-subtle);
-
-  &.status-active,
-  &.status-won,
-  &.status-client {
-    background: #f0fdf4;
-    color: #166534;
-    border-color: #bbf7d0;
-  }
-
-  &.status-lead,
-  &.status-qualified,
-  &.status-prospect {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-  }
-
-  &.status-inactive,
-  &.status-lost {
-    background: #fef2f2;
-    color: #991b1b;
-    border-color: #fecaca;
-  }
-}
-
-.client-card-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--crm-border);
-  width: 100%;
-
-  .meta-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.72rem;
-    color: var(--crm-subtle);
-    background: var(--crm-muted);
-    border: 1px solid var(--crm-border);
-    border-radius: 4px;
-    padding: 2px 7px;
-
-    mat-icon {
-      font-size: 13px;
-      width: 13px;
-      height: 13px;
-      color: var(--crm-subtle);
-      opacity: 0.85;
-      flex-shrink: 0;
-    }
-  }
-}
-
-.client-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--crm-border);
-  margin-top: auto;
-}
-
-.client-select-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--crm-border);
-  background: var(--crm-surface);
-  color: var(--crm-action);
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.12s ease;
-
-  mat-icon {
-    font-size: 15px;
-    width: 15px;
-    height: 15px;
-  }
-
-  &:hover {
-    background: var(--crm-action);
-    color: #fff;
-    border-color: var(--crm-action);
-  }
-}
-
-.client-quick-opportunity-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid var(--crm-border);
-  background: var(--crm-surface);
-  color: var(--crm-subtle);
-  cursor: pointer;
-  transition: all 0.12s ease;
-
-  mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-  }
-
-  &:hover {
-    background: #10b981;
-    color: #fff;
-    border-color: #10b981;
-  }
-}
-
-/* Fiche Société Pleine Page (Vue autonome sans section de liste étriquée) */
-.client-profile-full {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  border: 1px solid var(--crm-border);
-  border-radius: 12px;
-  padding: 24px;
-  background: var(--crm-surface);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  width: 100%;
-}
-
-.client-profile-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--crm-border);
-}
-
-.client-header-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.back-to-grid-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--crm-border);
-  background: var(--crm-surface);
-  color: var(--crm-text);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  width: fit-content;
-  transition: all 0.12s ease;
-
-  mat-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    transition: transform 0.12s ease;
-  }
-
-  &:hover {
-    background: var(--crm-hover);
-    color: var(--crm-action);
-    border-color: var(--crm-action);
-
-    mat-icon {
-      transform: translateX(-2px);
-    }
-  }
-}
-
-.client-profile-title {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-
-  h2 {
-    margin: 0;
-    font-size: 1.35rem;
-    font-weight: 700;
-    color: var(--crm-text);
-  }
-}
-
-.client-profile-avatar {
-  display: inline-grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-  border-radius: 10px;
-  color: #fff;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-}
-
-.client-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.contacts-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--crm-muted);
-  color: var(--crm-subtle);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.client-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  border-bottom: 1px solid var(--crm-border);
-  padding-bottom: 18px;
-
-  div {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    dt {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.74rem;
-      font-weight: 600;
-      color: var(--crm-subtle);
-
-      mat-icon {
-        font-size: 14px;
-        width: 14px;
-        height: 14px;
-        opacity: 0.8;
-      }
-    }
-
-    dd {
-      margin: 0;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--crm-text);
-
-      small {
-        margin-left: 6px;
-        font-size: 0.75rem;
-        font-weight: normal;
-        color: var(--crm-subtle);
-      }
-    }
-  }
-}
-
 /* Modales / Dialogues */
-.crm-backdrop,
-.crm-dialog-backdrop {
+.crm-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.55);
@@ -1292,70 +620,6 @@
   max-width: 460px;
 }
 
-.client-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid var(--crm-border);
-  border-radius: 6px;
-  padding: 10px;
-  background: var(--crm-surface);
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.12s ease;
-}
-
-.client-row:hover,
-.client-row.selected {
-  border-color: var(--crm-action);
-  background: var(--crm-hover);
-}
-
-.client-monogram {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--crm-muted);
-  color: var(--crm-action);
-  font-weight: 700;
-  font-size: 0.85rem;
-  flex-shrink: 0;
-}
-
-.client-row-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.client-row-info strong {
-  font-size: 0.85rem;
-  color: var(--crm-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.client-row-info small {
-  font-size: 0.74rem;
-  color: var(--crm-subtle);
-}
-
-.client-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: var(--crm-muted);
-  color: var(--crm-action);
-}
-
 .activity-section,
 .campaign-section {
   display: flex;
@@ -1364,16 +628,14 @@
 }
 
 .activity-list,
-.campaign-list,
-.contact-list {
+.campaign-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
 .activity-row,
-.campaign-card,
-.contact-row {
+.campaign-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1416,12 +678,6 @@
   --crm-action: #2563eb;
 }
 
-:host-context(html.dark) .status-badge.draft { background: #1e293b; color: #94a3b8; border-color: #334155; }
-:host-context(html.dark) .status-badge.sent { background: #172554; color: #60a5fa; border-color: #1e40af; }
-:host-context(html.dark) .status-badge.accepted { background: #064e3b; color: #6ee7b7; border-color: #047857; }
-:host-context(html.dark) .status-badge.rejected { background: #450a0a; color: #fca5a5; border-color: #991b1b; }
-:host-context(html.dark) .status-badge.won { background: #064e3b; color: #6ee7b7; border-color: #047857; }
-:host-context(html.dark) .status-badge.pending { background: #451a03; color: #fcd34d; border-color: #78350f; }
 :host-context(html.dark) .status-badge-active { background-color: #064e3b; color: #6ee7b7; border-color: #047857; }
 :host-context(html.dark) .status-badge-prospect { background-color: #172554; color: #93c5fd; border-color: #1e40af; }
 :host-context(html.dark) .status-badge-lost { background-color: #450a0a; color: #fca5a5; border-color: #991b1b; }
@@ -1430,25 +686,14 @@
   .pipeline-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .client-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .client-details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 640px) {
   .pipeline-summary {
     grid-template-columns: 1fr;
   }
-  .crm-drawer {
-    width: 100vw;
-  }
   .form-two,
-  .form-three,
-  .drawer-data-grid,
-  .client-details {
+  .form-three {
     grid-template-columns: 1fr;
   }
 }
@@ -1738,4 +983,3 @@
     color: #60a5fa;
   }
 }
-

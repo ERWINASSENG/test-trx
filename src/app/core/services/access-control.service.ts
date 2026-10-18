@@ -12,6 +12,7 @@ import {
   PermissionEffect,
 } from '../models/access-control.model';
 import { AuthService } from './auth.service';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 interface ApiSuccess<T> {
   success?: boolean;
@@ -22,6 +23,7 @@ export interface AccessApiResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  preserveData?: boolean;
 }
 
 export interface UserAccessDetails {
@@ -50,7 +52,7 @@ export interface AccessControlUser {
 
 @Injectable({ providedIn: 'root' })
 export class AccessControlService {
-  private static readonly PERMISSIONS_CACHE_TTL_MS = 30_000;
+  private static readonly PERMISSIONS_CACHE_TTL_MS = 300_000;
   private static readonly GET_CACHE_TTL_MS = 30_000;
   private readonly authService = inject(AuthService);
   private permissionsUserId: string | null | undefined;
@@ -97,93 +99,126 @@ export class AccessControlService {
     });
   }
 
+  private static readonly MODULE_PERMISSION_PREFIXES: Readonly<Record<string, readonly string[]>> = {
+    'module.dashboard.view': ['dashboard.'],
+    'module.accounting.view': ['cashier.', 'journals.', 'journal_entries.'],
+    'module.hr.view': ['hr.', 'users.'],
+    'module.prospects.view': ['prospects.'],
+    'module.quotes.view': ['quotes.'],
+    'module.crm.view': ['crm.'],
+    'module.dossiers.view': ['dossiers.'],
+    'module.configuration.view': ['configuration.', 'journals.create', 'journals.update', 'journals.delete'],
+    'module.access_control.view': ['access.'],
+  };
+
+  private isSupportedPermissionScope(scope: EffectivePermission['scope'] | undefined): boolean {
+    return Boolean(scope && ['all', 'owner', 'self', 'department'].includes(scope.type));
+  }
+
+  private hasGrantedModuleCapability(
+    modulePermissionKey: string,
+    permissions: readonly EffectivePermission[]
+  ): boolean {
+    const prefixes = AccessControlService.MODULE_PERMISSION_PREFIXES[modulePermissionKey];
+    if (!prefixes || prefixes.length === 0) return false;
+
+    return permissions.some(
+      (permission) =>
+        permission.effect === 'allow' &&
+        this.isSupportedPermissionScope(permission.scope) &&
+        prefixes.some((prefix) =>
+          prefix.endsWith('.')
+            ? permission.permissionKey.startsWith(prefix)
+            : permission.permissionKey === prefix
+        )
+    );
+  }
+
   public hasPermission(permissionKey: string): boolean {
     const currentUser = this.authService.currentUser();
-    const permissionsBelongToCurrentUser = this.permissionsUserId === (currentUser?.id ?? null);
+    if (!currentUser || currentUser.isActive === false) {
+      return false;
+    }
+    const permissionsBelongToCurrentUser = this.permissionsUserId === currentUser.id;
 
-    // 1. Règle d'or : l'administrateur système possède tous les droits
-    if (this.authService.isAdmin() || currentUser?.role === 'admin') {
+    // 1. Règle d'or : l'administrateur système actif possède tous les droits
+    if (this.authService.isAdmin() || currentUser.role === 'admin') {
       return true;
     }
 
-    // 2. Accès universel garanti aux espaces communs pour tout utilisateur authentifié
-    if (['apps.view', 'dashboard.view', 'profile.read'].includes(permissionKey)) {
+    // 2. Accès universel garanti aux espaces communs pour tout utilisateur authentifié et actif
+    if (['apps.view', 'dashboard.view', 'module.dashboard.view', 'profile.read'].includes(permissionKey)) {
       return true;
     }
 
-    // 3. Évaluation granulaire issue de l'API /api/access-control/me
-    const matchingPermissions = permissionsBelongToCurrentUser
-      ? this._effectivePermissions().filter((permission) => permission.permissionKey === permissionKey)
-      : [];
-    if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope.type === 'all')) return false;
-    if (matchingPermissions.some((permission) => permission.effect === 'allow' && permission.scope.type === 'all')) return true;
-    if (matchingPermissions.length > 0) return false;
+    // 3. Évaluation granulaire issue de l'API /api/access-control/me (rôles dynamiques, système et exceptions)
+    const effectivePermissions = permissionsBelongToCurrentUser ? this._effectivePermissions() : [];
+    const matchingPermissions = effectivePermissions.filter(
+      (permission) => permission.permissionKey === permissionKey
+    );
+    if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope?.type === 'all')) {
+      return false;
+    }
+    if (matchingPermissions.some((permission) => permission.effect === 'allow' && this.isSupportedPermissionScope(permission.scope))) {
+      return true;
+    }
+    if (matchingPermissions.length > 0) {
+      return false;
+    }
 
-    // Dynamic roles must not inherit privileges from their normalized legacy role.
-    if (currentUser?.customRole) return false;
+    // 3b. Si la permission demandée est une visibilité de module (module.*.view),
+    // autoriser dès que le rôle (dynamique ou système) possède une permission métier active du module.
+    if (this.hasGrantedModuleCapability(permissionKey, effectivePermissions)) {
+      return true;
+    }
 
-    // 4. Repli canonique robuste selon le rôle Transmex du collaborateur
+    // Les rôles dynamiques personnalisés (ex: 'daf' normalisé en 'employe') ne doivent jamais hériter
+    // des permissions de secours du rôle legacy normalisé. En revanche, si customRole === role (rôle canonique),
+    // le repli canonique reste applicable.
+    if (currentUser.customRole && currentUser.customRole !== currentUser.role) {
+      return false;
+    }
+
+    // 4. Repli de visibilité de module canonique pour les rôles historiques
+    // Strict alignement avec le principe du moindre privilège :
+    // Aucune action opérationnelle (create, write, update, delete, status_update) n'est accordée implicitement !
     const userRole = this.authService.currentRole();
     if (!userRole) return false;
 
-    switch (userRole) {
-      case 'admin':
-        return true;
-      case 'manager':
-        return [
-          'cashier.read',
-          'cashier.write',
-          'users.read',
-          'dossiers.read',
-          'dossiers.create',
-          'hr.read',
-          'hr.write',
-          'prospects.read',
-          'prospects.write',
-        ].includes(permissionKey);
-      case 'tresorier':
-        return [
-          'cashier.read',
-          'cashier.write',
-          'dossiers.read',
-          'cashier.update',
-          'cashier.status_update',
-          'cashier.duplicate',
-          'journals.read',
-          'journals.write',
-          'journals.create',
-          'journals.update',
-          'journals.delete',
-          'journal_entries.read',
-          'journal_entries.chart_read',
-          'journal_entries.create',
-          'journal_entries.update',
-          'journal_entries.delete',
-        ].includes(permissionKey);
-      case 'comptable':
-        return [
-          'cashier.read',
-          'cashier.write',
-          'dossiers.read',
-          'cashier.duplicate',
-          'journals.read',
-          'journals.write',
-          'journals.create',
-          'journals.update',
-          'journals.delete',
-          'journal_entries.read',
-          'journal_entries.chart_read',
-          'journal_entries.create',
-          'journal_entries.update',
-          'journal_entries.delete',
-        ].includes(permissionKey);
-      case 'caissiere':
-        return ['cashier.read', 'cashier.write', 'dossiers.read', 'cashier.status_update', 'cashier.update'].includes(permissionKey);
-      case 'employe':
-        return ['hr.read'].includes(permissionKey);
-      default:
-        return false;
-    }
+    if (userRole === 'admin') return true;
+
+    const legacyModuleVisibility: Record<string, string[]> = {
+      manager: [
+        'module.dashboard.view',
+        'module.accounting.view',
+        'module.hr.view',
+        'module.prospects.view',
+        'module.quotes.view',
+        'module.crm.view',
+        'module.dossiers.view',
+      ],
+      commercial: [
+        'module.dashboard.view',
+        'module.prospects.view',
+        'module.quotes.view',
+        'module.crm.view',
+        'module.dossiers.view',
+      ],
+      tresorier: [
+        'module.dashboard.view',
+        'module.accounting.view',
+        'module.configuration.view',
+      ],
+      comptable: [
+        'module.dashboard.view',
+        'module.accounting.view',
+        'module.configuration.view',
+      ],
+      caissiere: ['module.dashboard.view', 'module.accounting.view'],
+      employe: ['module.dashboard.view', 'module.hr.view'],
+    };
+
+    return Boolean(legacyModuleVisibility[userRole]?.includes(permissionKey));
   }
   
   public hasPermissionForResource(
@@ -192,11 +227,16 @@ export class AccessControlService {
   ): boolean {
     this.resetForAccountChange();
 
-    if (this.authService.isAdmin() || this.authService.currentUser()?.role === 'admin') {
+    const currentUser = this.authService.currentUser();
+    if (!currentUser || currentUser.isActive === false) {
+      return false;
+    }
+
+    if (this.authService.isAdmin() || currentUser.role === 'admin') {
       return true;
     }
 
-    const actorId = this.authService.currentUser()?.id;
+    const actorId = currentUser.id;
     if (!actorId) return false;
     const matchingPermissions = this._effectivePermissions().filter(
       (permission) => permission.permissionKey === permissionKey
@@ -216,8 +256,9 @@ export class AccessControlService {
 
   public loadMyPermissions(forceRefresh = false): Promise<boolean> {
     this.resetForAccountChange();
-    const requestedUserId = this.authService.currentUser()?.id ?? null;
-    if (!requestedUserId) return Promise.resolve(false);
+    const currentUser = this.authService.currentUser();
+    const requestedUserId = currentUser?.id ?? null;
+    if (!requestedUserId || currentUser?.isActive === false) return Promise.resolve(false);
 
     if (
       !forceRefresh &&
@@ -239,11 +280,25 @@ export class AccessControlService {
         requestVersion !== this.permissionsRequestVersion
       ) return false;
 
-      this._effectivePermissions.set(result.success ? result.data?.permissions || [] : []);
-      this._error.set(result.success ? null : result.error || 'Impossible de charger les permissions.');
       if (result.success) {
+        this._effectivePermissions.set(result.data?.permissions || []);
         this.permissionsLoadedUserId = requestedUserId;
         this.permissionsLoadedAt = Date.now();
+        this._error.set(null);
+      } else {
+        // Sécurité : si l'échec n'est pas une simple indisponibilité transitoire (ex. 401/403)
+        // ou qu'aucune permission validée n'appartient à cet utilisateur, on purge immédiatement.
+        const canPreserveExistingPermissions =
+          result.preserveData === true &&
+          this.permissionsLoadedUserId === requestedUserId &&
+          this._effectivePermissions().length > 0;
+
+        if (!canPreserveExistingPermissions) {
+          this._effectivePermissions.set([]);
+          this.permissionsLoadedUserId = null;
+          this.permissionsLoadedAt = 0;
+        }
+        this._error.set(result.error || 'Impossible de charger les permissions.');
       }
       return result.success;
     })();
@@ -563,27 +618,80 @@ export class AccessControlService {
     this.activeRequests.add(requestId);
     this._isLoading.set(true);
     try {
-      const response = await fetch(`/api/access-control${path}`, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      const sendRequest = (accessToken: string) =>
+        fetch(`/api/access-control${path}`, {
+          method,
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+
+      let response = await sendRequest(token);
+      if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
+        return { success: false, error: 'La session a changé pendant la requête.' };
+      }
+
+      if (
+        response.status === 401 &&
+        typeof this.authService.refreshAccessTokenAfterUnauthorized === 'function'
+      ) {
+        const refresh = await this.authService.refreshAccessTokenAfterUnauthorized();
+        if (refresh.status === 'refreshed') {
+          response = await sendRequest(refresh.accessToken);
+        } else if (refresh.status === 'unavailable') {
+          return {
+            success: false,
+            error: 'La vérification de session est temporairement indisponible. Réessayez.',
+            preserveData: true,
+          };
+        }
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
       if (!response.ok) {
-        return { success: false, error: payload.error || `Échec de la requête (${response.status}).` };
+        if (response.status === 401) {
+          this._effectivePermissions.set([]);
+          this.permissionsLoadedUserId = null;
+          this.permissionsLoadedAt = 0;
+          this.getResponseCache.clear();
+          this.authService.handleUnauthorizedSession?.();
+          return {
+            success: false,
+            error: getApiErrorMessage(payload, 'Session expirée. Veuillez vous reconnecter.'),
+          };
+        }
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `La requête d’autorisations a échoué (HTTP ${response.status}).`),
+          preserveData: response.status >= 500 || response.status === 429,
+        };
       }
-      const result: AccessApiResult<T> = { success: true, data: payload };
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+        return { success: false, error: 'Le serveur d’autorisations a renvoyé une réponse invalide.' };
+      }
+      const result: AccessApiResult<T> = { success: true, data: payload as T };
       if (cacheKey) this.getResponseCache.set(cacheKey, { cachedAt: Date.now(), result });
       return result;
-    } catch {
-      return { success: false, error: 'Le serveur d’autorisations est injoignable.' };
+    } catch (error: unknown) {
+      const networkUnavailable = error instanceof TypeError;
+      return {
+        success: false,
+        error: networkUnavailable
+          ? 'Connexion au service d’autorisations impossible. Vérifiez votre connexion puis réessayez.'
+          : 'Une erreur est survenue lors du traitement de la requête d’autorisations.',
+        preserveData: networkUnavailable,
+      };
     } finally {
       this.activeRequests.delete(requestId);
       this._isLoading.set(this.activeRequests.size > 0);

@@ -10,6 +10,7 @@ import { UserProfile } from '../../core/models/auth.model';
 describe('Dashboard Component', () => {
   let component: Dashboard;
   const currentUserMock = signal<UserProfile | null>(null);
+  let hasPermissionMock: (perm: string) => boolean;
 
   const authServiceMock = {
     currentUser: currentUserMock,
@@ -22,12 +23,14 @@ describe('Dashboard Component', () => {
   };
 
   beforeEach(() => {
+    hasPermissionMock = () => false;
+
     TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: authServiceMock },
-        { provide: AccessControlService, useValue: { hasPermission: () => false } },
+        { provide: AccessControlService, useValue: { hasPermission: (perm: string) => hasPermissionMock(perm) } },
         { provide: UserService, useValue: userServiceMock },
       ],
     });
@@ -110,22 +113,19 @@ describe('Dashboard Component', () => {
     expect(component.dashboardView()).toBe('commercial');
   });
 
-  it('devrait permettre aux rôles privilégiés de basculer manuellement vers la vue commercial', () => {
+  it('devrait orienter vers la vue commercial pour un rôle personnalisé ayant les permissions CRM', () => {
     currentUserMock.set({
-      id: 'admin-id',
-      email: 'admin@transimex.cm',
-      firstName: 'Admin',
-      lastName: 'Transimex',
-      role: 'admin',
+      id: 'agent-id',
+      email: 'agent@transimex.cm',
+      firstName: 'Agent',
+      lastName: 'Ventes',
+      role: 'employe',
+      customRole: 'commercial_junior',
       isActive: true,
       createdAt: new Date().toISOString(),
     });
 
-    expect(component.isPrivileged()).toBe(true);
-    component.setManualView('commercial');
+    hasPermissionMock = (perm: string) => perm === 'module.crm.view';
     expect(component.dashboardView()).toBe('commercial');
-
-    component.setManualView(null);
-    expect(component.dashboardView()).toBe('admin');
   });
 });

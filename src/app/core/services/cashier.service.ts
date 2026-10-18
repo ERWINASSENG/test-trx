@@ -12,6 +12,7 @@ import {
   normalizePieceComptable,
   toStandardIsoDateString,
 } from '../utils/cashier-duplicate.util';
+import { getApiErrorMessage } from '../utils/api-error.util';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AccessControlService } from './access-control.service';
@@ -731,14 +732,17 @@ export class CashierService implements OnDestroy {
           const resJson = await response.json();
           bankEntryResult = resJson.entry;
         } else {
-          const errJson = await response.json().catch(() => ({}));
-          const serverError = errJson.error || `Erreur serveur ${response.status}`;
+          const errorPayload: unknown = await response.json().catch(() => null);
+          const serverError = getApiErrorMessage(
+            errorPayload,
+            `Impossible d’enregistrer l’écriture dans ce journal (erreur HTTP ${response.status}).`
+          );
           this.setError(serverError);
           return { success: false, error: serverError };
         }
       } catch (apiErr) {
         console.error('Erreur API journal entries POST:', apiErr);
-        const errMsg = apiErr instanceof Error ? apiErr.message : 'Erreur de connexion';
+        const errMsg = 'Impossible de joindre le service du journal. Vérifiez votre connexion puis réessayez.';
         this.setError(errMsg);
         return { success: false, error: errMsg };
       }
@@ -814,25 +818,18 @@ export class CashierService implements OnDestroy {
         const resJson = await response.json();
         savedRow = (resJson.operation || resJson.transaction) as CashierDbRow;
       } else {
-        const errJson = await response.json().catch(() => ({}));
-        const serverError = errJson.error || `Erreur serveur ${response.status}`;
-
-        if (response.status === 409 || response.status === 400 || response.status === 403) {
-          this.setError(serverError);
-          return { success: false, error: serverError };
-        }
-
-        throw new Error(serverError);
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const serverError = getApiErrorMessage(
+          errorPayload,
+          `Impossible d’enregistrer l’opération (erreur HTTP ${response.status}).`
+        );
+        this.setError(serverError);
+        return { success: false, error: serverError };
       }
     } catch (apiErr: unknown) {
-      const errMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
-      if (errMsg.includes('doublon') || errMsg.includes('409') || errMsg.includes('interdite') || errMsg.includes('pièce')) {
-        this.setError(errMsg);
-        return { success: false, error: errMsg };
-      }
-
       console.warn('Appel API /api/cahier/operations échoué, aucune écriture directe Supabase autorisée:', apiErr);
-      this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
+      const errMsg = 'Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.';
+      this.setError(errMsg);
       return { success: false, error: this._error()! };
     }
 
@@ -1074,8 +1071,11 @@ export class CashierService implements OnDestroy {
         if (response.ok) {
           updatedViaApi = true;
         } else {
-          const errJson = await response.json().catch(() => null);
-          apiErrorMessage = errJson?.error || errJson?.message || `Erreur serveur (${response.status})`;
+          const errorPayload: unknown = await response.json().catch(() => null);
+          apiErrorMessage = getApiErrorMessage(
+            errorPayload,
+            `Impossible de modifier l’écriture du journal (erreur HTTP ${response.status}).`
+          );
         }
       } else {
         const bodyPayload: Record<string, unknown> = {};
@@ -1103,17 +1103,16 @@ export class CashierService implements OnDestroy {
         if (response.ok) {
           updatedViaApi = true;
         } else {
-          const errJson = await response.json().catch(() => null);
-          if (response.status === 403) {
-            apiErrorMessage = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
-          } else {
-            apiErrorMessage = errJson?.error || errJson?.message || `Erreur serveur (${response.status})`;
-          }
+          const errorPayload: unknown = await response.json().catch(() => null);
+          apiErrorMessage = getApiErrorMessage(
+            errorPayload,
+            `Impossible de modifier l’opération (erreur HTTP ${response.status}).`
+          );
         }
       }
     } catch (apiErr) {
       console.warn('Appel API update opérations échoué:', apiErr);
-      apiErrorMessage = apiErr instanceof Error ? apiErr.message : 'Erreur réseau';
+      apiErrorMessage = 'Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.';
     }
 
     if (!updatedViaApi) {
@@ -1237,8 +1236,11 @@ export class CashierService implements OnDestroy {
           });
           if (!response.ok) {
             allOk = false;
-            const errJson = await response.json().catch(() => null);
-            failureReason = errJson?.error || `Erreur d'annulation (${response.status})`;
+            const errorPayload: unknown = await response.json().catch(() => null);
+            failureReason = getApiErrorMessage(
+              errorPayload,
+              `Impossible d’annuler l’écriture du journal (erreur HTTP ${response.status}).`
+            );
           }
         }
         if (allOk) {
@@ -1262,20 +1264,16 @@ export class CashierService implements OnDestroy {
         if (response.ok) {
           cancelledSuccessfully = true;
         } else {
-          const errJson = await response.json().catch(() => null);
-          if (response.status === 403) {
-            failureReason = errJson?.error || 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.';
-          } else {
-            failureReason = errJson?.error || errJson?.message || `Erreur serveur HTTP ${response.status}`;
-          }
+          const errorPayload: unknown = await response.json().catch(() => null);
+          failureReason = getApiErrorMessage(
+            errorPayload,
+            `Impossible d’annuler l’opération (erreur HTTP ${response.status}).`
+          );
         }
       }
     } catch (networkErr) {
       console.warn('Erreur réseau appel API Express PATCH, annulation impossible:', networkErr);
-    }
-
-    if (!cancelledSuccessfully && !failureReason) {
-      failureReason = 'Le service de caisse est temporairement indisponible. Veuillez réessayer.';
+      failureReason = 'Impossible de joindre le service de caisse pour annuler l’opération. Vérifiez votre connexion puis réessayez.';
     }
 
     if (!cancelledSuccessfully) {
@@ -1367,16 +1365,20 @@ export class CashierService implements OnDestroy {
         this.toggleSelectAll(false);
         return true;
       } else {
-        const errJson = await response.json().catch(() => ({}));
-        const serverError = errJson.error || `Erreur lors de la duplication (${response.status})`;
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const serverError = getApiErrorMessage(
+          errorPayload,
+          `Impossible de dupliquer les opérations (erreur HTTP ${response.status}).`
+        );
         this.setError(serverError);
         return false;
       }
     } catch (netErr) {
       console.warn('Erreur réseau lors de la duplication API:', netErr);
+      this.setError('Impossible de joindre le service de caisse pour dupliquer les opérations. Vérifiez votre connexion puis réessayez.');
+      return false;
     }
 
-    this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
     return false;
   }
 
@@ -1401,33 +1403,41 @@ export class CashierService implements OnDestroy {
       }
     }
 
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch('/api/cahier/operations/status', {
+    let response: Response;
+    try {
+      response = await fetch('/api/cahier/operations/status', {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ ids: selectedIds, status: 'draft' }),
       });
-
-      if (response.ok) {
-        this._transactions.update((items) =>
-          items.map((it) => (selectedIds.includes(it.id) ? { ...it, status: 'draft', selected: false } : it))
-        );
-        this.recalculateRunningBalances();
-        void this.loadCashierSummary();
-        return true;
-      }
-    } catch {
-      // Ignorer
+    } catch (networkError: unknown) {
+      console.warn('Erreur réseau lors du retour en brouillon:', networkError);
+      this.setError('Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.');
+      return false;
     }
 
-    this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
-    return false;
+    if (!response.ok) {
+      const errorPayload: unknown = await response.json().catch(() => null);
+      const serverMessage = getApiErrorMessage(
+        errorPayload,
+        `Impossible de remettre les opérations en brouillon (erreur HTTP ${response.status}).`
+      );
+      this.setError(serverMessage);
+      return false;
+    }
+
+    this._transactions.update((items) =>
+      items.map((it) => (selectedIds.includes(it.id) ? { ...it, status: 'draft', selected: false } : it))
+    );
+    this.recalculateRunningBalances();
+    void this.loadCashierSummary();
+    return true;
   }
 
   /**

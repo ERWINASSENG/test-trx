@@ -24,6 +24,8 @@ describe('AuthService', () => {
       getUser: vi.fn().mockResolvedValue(userResult),
       onAuthStateChange: vi.fn(),
       refreshSession: vi.fn().mockResolvedValue({ data: { session: null }, error: { status: 400 } }),
+      signInWithPassword: vi.fn(),
+      signUp: vi.fn(),
       signOut: vi.fn().mockResolvedValue({ error: null }),
     };
     supabaseServiceMock.supabase = { auth };
@@ -111,6 +113,59 @@ describe('AuthService', () => {
 
     expect(result.success).toBe(false);
     expect(service.authError()).toBeTruthy();
+  });
+
+  it('indique une indisponibilité réseau lors de la connexion', async () => {
+    const auth = configureSupabaseAuth(null, { data: { user: null }, error: null });
+    auth.signInWithPassword = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const result = await service.login({
+      email: 'test@transmex.com',
+      password: 'password123',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Connexion au service d’authentification impossible. Vérifiez votre connexion puis réessayez.',
+    });
+    expect(service.authError()).toBe(result.error);
+  });
+
+  it('refuse l’inscription lorsque Supabase n’est pas configuré', async () => {
+    const result = await service.signUp('test@transmex.com', 'password123', {});
+
+    expect(result).toEqual({
+      success: false,
+      error: 'L’inscription est indisponible : le service Supabase n’est pas configuré.',
+    });
+    expect(service.isLoading()).toBe(false);
+  });
+
+  it('affiche le motif métier renvoyé par le service de profil pendant la connexion', async () => {
+    const auth = configureSupabaseAuth(null, { data: { user: null }, error: null });
+    auth.signInWithPassword = vi.fn().mockResolvedValue({
+      data: {
+        user: { id: 'usr-123', email: 'test@transmex.com' },
+        session: { access_token: 'valid-token' },
+      },
+      error: null,
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Le profil est temporairement verrouillé.' }),
+    }));
+
+    const result = await service.login({
+      email: 'test@transmex.com',
+      password: 'password123',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Le profil est temporairement verrouillé.',
+    });
+    expect(service.authError()).toBe(result.error);
   });
 
   it('devrait vider la session en mémoire et rediriger vers le login lors de la déconnexion', async () => {

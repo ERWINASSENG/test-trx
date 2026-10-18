@@ -248,8 +248,8 @@ export class QuotesComponent {
   public readonly contactId = signal('');
   public readonly opportunityId = signal<string | null>(null);
   public readonly assignedTo = signal('');
-  public readonly title = signal('Cotation Fret Maritime Transimex');
-  public readonly currency = signal('XAF');
+  public readonly title = signal('');
+  public readonly currency = signal('');
   public readonly status = signal<QuoteStatus>('draft');
   public readonly validUntil = signal('');
 
@@ -271,7 +271,7 @@ export class QuotesComponent {
   public readonly seaPortOfLoading = signal('');
   public readonly seaPortOfDischarge = signal('');
   public readonly seaIncoterm = signal('');
-  public readonly seaNeedInlandTransport = signal(false);
+  public readonly seaNeedInlandTransport = signal<boolean | null>(null);
   public readonly seaEstimatedDepartureDate = signal<string | null>(null);
   public readonly seaEstimatedArrivalDate = signal<string | null>(null);
 
@@ -517,8 +517,8 @@ export class QuotesComponent {
     this.opportunityId.set(this.linkedOpportunityId || null);
     this.clientSearch.set('');
     this.assignedTo.set(this.canAssign() ? '' : (this.currentUserId() || ''));
-    this.title.set('Cotation Fret Maritime Transimex');
-    this.currency.set('XAF');
+    this.title.set('');
+    this.currency.set('');
     this.status.set('draft');
     this.validUntil.set('');
 
@@ -533,10 +533,10 @@ export class QuotesComponent {
     this.seaTotalVolumeM3.set(null);
     this.seaPackagesCount.set(null);
     this.seaPackagingType.set('');
-    this.seaPortOfLoading.set('Douala Port (CMDLA)');
+    this.seaPortOfLoading.set('');
     this.seaPortOfDischarge.set('');
-    this.seaIncoterm.set('FOB');
-    this.seaNeedInlandTransport.set(false);
+    this.seaIncoterm.set('');
+    this.seaNeedInlandTransport.set(null);
     this.seaEstimatedDepartureDate.set(null);
     this.seaEstimatedArrivalDate.set(null);
     this.serviceFcl.set(false);
@@ -561,6 +561,9 @@ export class QuotesComponent {
     this.saveTemplate.set(false);
     this.templateName.set('');
     this.showNewProspect.set(false);
+    this.newProspectContact.set('');
+    this.newProspectEmail.set('');
+    this.newProspectPhone.set('');
     this.error.set(null);
     this.isEditorOpen.set(true);
   }
@@ -637,34 +640,13 @@ export class QuotesComponent {
   public initializeDefaultColumns(): void {
     const colDesignation: QuoteColumn = { id: generateSecureUUID(), label: 'Rubrique / Prestation', type: 'text' };
     const colQty: QuoteColumn = { id: generateSecureUUID(), label: 'Quantité', type: 'number' };
-    const colUnitPrice: QuoteColumn = { id: generateSecureUUID(), label: 'Prix Unitaire (XAF)', type: 'amount' };
+    const colUnitPrice: QuoteColumn = { id: generateSecureUUID(), label: 'Prix Unitaire', type: 'amount' };
     const colTotal: QuoteColumn = { id: generateSecureUUID(), label: 'Total HT', type: 'amount' };
 
     this.columns.set([colDesignation, colQty, colUnitPrice, colTotal]);
     this.totalColumnId.set(colTotal.id);
 
-    const row1: QuoteRow = {
-      id: generateSecureUUID(),
-      [colDesignation.id]: 'Fret maritime standard (Port de départ -> Douala)',
-      [colQty.id]: 1,
-      [colUnitPrice.id]: 1500000,
-      [colTotal.id]: 1500000,
-    };
-    const row2: QuoteRow = {
-      id: generateSecureUUID(),
-      [colDesignation.id]: 'Manutention portuaire & Débarquement',
-      [colQty.id]: 1,
-      [colUnitPrice.id]: 250000,
-      [colTotal.id]: 250000,
-    };
-    const row3: QuoteRow = {
-      id: generateSecureUUID(),
-      [colDesignation.id]: 'Formalités douanières & Transit import',
-      [colQty.id]: 1,
-      [colUnitPrice.id]: 300000,
-      [colTotal.id]: 300000,
-    };
-    this.rows.set([row1, row2, row3]);
+    this.rows.set([this.createEmptyRow([colDesignation, colQty, colUnitPrice, colTotal])]);
   }
 
   public onTemplateChange(templateId: string): void {
@@ -730,7 +712,7 @@ export class QuotesComponent {
     if (column.type === 'checkbox') {
       val = target.checked;
     } else if (column.type === 'number' || column.type === 'amount') {
-      val = target.value === '' ? 0 : Number(target.value);
+      val = target.value === '' ? null : Number(target.value);
     }
     this.rows.update((current) => {
       const updated = [...current];
@@ -742,10 +724,10 @@ export class QuotesComponent {
   }
 
   private createEmptyRow(columns: QuoteColumn[]): QuoteRow {
-    const row: QuoteRow = { id: generateSecureUUID() };
+    const row: QuoteRow = {};
     for (const column of columns) {
       if (column.type === 'amount' || column.type === 'number') {
-        row[column.id] = 0;
+        row[column.id] = null;
       } else if (column.type === 'checkbox') {
         row[column.id] = false;
       } else {
@@ -769,6 +751,12 @@ export class QuotesComponent {
       return;
     }
 
+    const currency = this.currency().trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      this.error.set('Veuillez renseigner un code devise de trois lettres (ex. XAF).');
+      return;
+    }
+
     const seaFreightPayload: SeaFreightDetails = {
       contactName: this.seaContactName().trim() || undefined,
       phone: this.seaPhone().trim() || undefined,
@@ -783,7 +771,7 @@ export class QuotesComponent {
       portOfLoading: this.seaPortOfLoading().trim() || undefined,
       portOfDischarge: this.seaPortOfDischarge().trim() || undefined,
       incoterm: this.seaIncoterm().trim() || undefined,
-      needInlandTransport: this.seaNeedInlandTransport(),
+      needInlandTransport: this.seaNeedInlandTransport() ?? undefined,
       estimatedDepartureDate: this.seaEstimatedDepartureDate(),
       estimatedArrivalDate: this.seaEstimatedArrivalDate(),
       serviceTypes: {
@@ -815,7 +803,7 @@ export class QuotesComponent {
       contactId: this.contactId() || null,
       ...(this.assignedTo() ? { assignedTo: this.assignedTo() } : {}),
       title: this.title().trim(),
-      currency: this.currency().trim().toUpperCase(),
+      currency,
       columns: this.columns(),
       rows: this.rows(),
       totalColumnId: this.totalColumnId(),

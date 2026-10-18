@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import ExcelJS from 'exceljs';
+import type { CellValue } from 'exceljs';
 import {
   CASHIER_SERVICES,
   Service,
@@ -41,10 +41,16 @@ export interface ParsedImportResult {
   providedIn: 'root',
 })
 export class ImportService {
+  private async getExcelJs() {
+    const excelModule = await import('exceljs');
+    return excelModule.default || excelModule;
+  }
+
   /**
    * Lit et analyse un fichier Excel (.xlsx, .xls) ou CSV
    */
   public async parseExcelOrCsvFile(file: File): Promise<ParsedImportResult> {
+    const ExcelJS = await this.getExcelJs();
     const dataBuffer = await file.arrayBuffer();
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(dataBuffer);
@@ -112,7 +118,7 @@ export class ImportService {
     };
   }
 
-  private extractExcelCellValue(value: ExcelJS.CellValue): unknown {
+  private extractExcelCellValue(value: CellValue): unknown {
     if (value instanceof Date) return value;
     if (value && typeof value === 'object' && 'result' in value) {
       return value.result;
@@ -417,6 +423,7 @@ export class ImportService {
     ];
 
     // Modèle vierge sans données de démonstration (uniquement les en-têtes)
+    const ExcelJS = await this.getExcelJs();
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Modèle Caisse');
     worksheet.addRow(headers);

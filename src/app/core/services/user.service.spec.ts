@@ -123,6 +123,17 @@ describe('UserService', () => {
     expect(localStorage.getItem('transmex_users_store')).toBeNull();
   });
 
+  it('distingue une panne réseau lors du chargement des utilisateurs', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await service.loadInitialUsers();
+
+    expect(service.users()).toEqual([]);
+    expect(service.error()).toBe(
+      'Connexion au service de gestion des utilisateurs impossible. Vérifiez votre connexion puis réessayez.'
+    );
+  });
+
   it('devrait créer un nouvel utilisateur avec succès et lui assigner un mot de passe temporaire', async () => {
     const initialCount = service.users().length;
     const result = await service.createUser({
@@ -150,6 +161,50 @@ describe('UserService', () => {
 
     expect(result.success).toBe(false);
     expect(service.error()).toBeTruthy();
+  });
+
+  it('conserve le motif métier de l’API quand la création échoue', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: () => Promise.resolve({ message: 'Cette adresse e-mail est déjà associée à un compte.' }),
+    }));
+
+    const result = await service.createUser({
+      email: 'nouveau@transmex.com',
+      firstName: 'Nouveau',
+      lastName: 'Compte',
+      role: 'employe',
+      tempPassword: 'Password123!',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Cette adresse e-mail est déjà associée à un compte.',
+    });
+  });
+
+  it('signale une réponse de création invalide au lieu de créer un utilisateur incomplet', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ user: { id: 'new-id' } }),
+    }));
+    const initialCount = service.users().length;
+
+    const result = await service.createUser({
+      email: 'nouveau@transmex.com',
+      firstName: 'Nouveau',
+      lastName: 'Compte',
+      role: 'employe',
+      tempPassword: 'Password123!',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Réponse invalide du serveur de synchronisation.',
+    });
+    expect(service.users()).toHaveLength(initialCount);
   });
 
   it('devrait modifier les informations et le rôle d\'un utilisateur', async () => {

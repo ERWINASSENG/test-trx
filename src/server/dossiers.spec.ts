@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response as ExpressResponse } from 'express';
 import { createDossierHandler, listDossiersHandler } from './dossiers';
+import { clearServerProfileCache } from './auth';
 
 const createResponse = (): ExpressResponse & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> } => {
   const response = {
@@ -24,6 +25,7 @@ describe('dossier handlers', () => {
   let testProjectNumber = 0;
 
   beforeEach(() => {
+    clearServerProfileCache();
     testProjectNumber += 1;
     vi.stubEnv('SUPABASE_URL', `https://test-project-${testProjectNumber}.supabase.co`);
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key');
@@ -84,6 +86,21 @@ describe('dossier handlers', () => {
       }
       if (url.pathname.endsWith('/access_user_roles') || url.pathname.endsWith('/access_user_overrides')) {
         return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.pathname.endsWith('/access_roles')) {
+        return new Response(JSON.stringify([{ id: 'role-mgr', role_key: role }]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.pathname.endsWith('/access_role_permissions')) {
+        const grants = role === 'manager'
+          ? [{ role_id: 'role-mgr', permission_key: 'prospects.read', scope: { type: 'all', version: 1 } }]
+          : [];
+        return new Response(JSON.stringify(grants), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
       if (url.pathname.endsWith('/prospects')) {
         const prospects = prospectExists ? [{

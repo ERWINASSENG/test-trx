@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  clearServerProfileCache,
   createInFlightTokenLookup,
   getSupabaseAdmin,
   resolveServerRole,
@@ -23,6 +24,10 @@ const createSupabaseMock = (profile: unknown, queryError: unknown = null) => {
 };
 
 describe('resolveServerRole', () => {
+  beforeEach(() => {
+    clearServerProfileCache();
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });

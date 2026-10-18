@@ -1,8 +1,9 @@
 import express from 'express';
-import { isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
-import { getSupabaseAdmin } from './auth';
+import { clearAccessRulesCache, isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
+import { clearServerProfileCache, getSupabaseAdmin } from './auth';
 import type { ServerUserProfile } from './auth';
 import { isCanonicalAccessRoleKey } from './access-role-sync';
+import { clearUserProfileResponseCache } from './profile';
 
 const actorIdFromRequest = (req: express.Request): string | null => {
   const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
@@ -63,6 +64,11 @@ const runAccessMutation = async (
           return;
         }
       }
+
+      // Invalidation immédiate des caches serveur
+      clearAccessRulesCache();
+      clearServerProfileCache();
+      clearUserProfileResponseCache();
 
       res.status(200).json({ success: true, data });
       return;
@@ -158,6 +164,11 @@ const runAccessMutation = async (
         console.error('Échec de synchronisation finale en repli direct:', cleanupError);
       }
     }
+
+    // Invalidation immédiate des caches serveur
+    clearAccessRulesCache();
+    clearServerProfileCache();
+    clearUserProfileResponseCache();
 
     res.status(200).json({ success: true, data: fallbackData });
   } catch (error) {

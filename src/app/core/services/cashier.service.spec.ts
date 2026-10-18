@@ -356,6 +356,91 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.currentBalance()).toBe(0);
   });
 
+  it('devrait afficher le motif serveur quand une opération annulée ne peut pas revenir en brouillon', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-cancelled',
+      date: '2026-10-01',
+      libelle: 'Opération annulée',
+      category: 'sortie',
+      status: 'cancelled',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: 'Une opération annulée ne peut pas être réactivée ou modifiée.',
+    }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(false);
+    expect(service.error()).toBe('Une opération annulée ne peut pas être réactivée ou modifiée.');
+    expect(service.allTransactions()[0].status).toBe('cancelled');
+  });
+
+  it('devrait indiquer une erreur de connexion distincte si le retour en brouillon ne joint pas le serveur', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-posted-network',
+      date: '2026-10-01',
+      libelle: 'Opération comptabilisée',
+      category: 'sortie',
+      status: 'posted',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(false);
+    expect(service.error()).toBe(
+      'Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.'
+    );
+    expect(service.allTransactions()[0].status).toBe('posted');
+  });
+
+  it('devrait remettre en brouillon une opération sélectionnée après confirmation du serveur', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-posted',
+      date: '2026-10-01',
+      libelle: 'Opération comptabilisée',
+      category: 'sortie',
+      status: 'posted',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      count: 1,
+      data: [{ id: 'tx-posted', status: 'draft' }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(true);
+    expect(service.allTransactions()[0].status).toBe('draft');
+    expect(service.allTransactions()[0].selected).toBe(false);
+    expect(service.error()).toBeNull();
+  });
+
+  it('ne devrait pas appeler le serveur quand aucune opération n’est sélectionnée pour retour en brouillon', async () => {
+    const request = vi.fn();
+    globalThis.fetch = request as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('devrait filtrer les données réactivement avec les Signals de recherche', async () => {
     globalThis.fetch = (async () => {
       return new Response(

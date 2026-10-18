@@ -8,7 +8,7 @@ import {
   resolveEffectiveRoleKeys,
 } from './access-control';
 
-describe('hasPermission', () => {
+describe('hasPermission (Server Access Control - Least Privilege)', () => {
   it('uses assigned dynamic roles instead of inheriting the legacy profile role', async () => {
     const roleKeys = resolveEffectiveRoleKeys(['daf'], 'employe');
 
@@ -17,12 +17,52 @@ describe('hasPermission', () => {
     await expect(hasPermission('user-daf', 'users.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
   });
 
-  it('uses the legacy profile role only when there is no active role assignment', async () => {
+  it('resolves the legacy profile role when there is no active role assignment', async () => {
     const roleKeys = resolveEffectiveRoleKeys([], 'employe');
 
     expect(roleKeys).toEqual(['employe']);
-    await expect(hasPermission('legacy-user', 'hr.read', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
+    // Universal module permissions are always granted to active users
+    await expect(hasPermission('legacy-user', 'module.dashboard.view', undefined, { roleKeys, rules: [] })).resolves.toBe(true);
+    // Unassigned operational permissions are strictly denied
+    await expect(hasPermission('legacy-user', 'hr.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
     await expect(hasPermission('legacy-user', 'users.read', undefined, { roleKeys, rules: [] })).resolves.toBe(false);
+  });
+
+  it('strictly restricts users to granted permissions: manager with cashier.read cannot create transactions', async () => {
+    const managerReadonlyRules = {
+      roleKeys: ['manager'],
+      rules: [
+        {
+          permissionKey: 'cashier.read',
+          effect: 'allow' as const,
+          scope: { type: 'all', version: 1 } as const,
+          isUserOverride: false,
+          sourceRoleKey: 'manager',
+        },
+      ],
+      hasActiveRoleAssignments: true,
+    };
+
+    // Lecture autorisée
+    await expect(hasPermission('manager-user', 'cashier.read', undefined, managerReadonlyRules)).resolves.toBe(true);
+
+    // Création, modification et suppression strictement interdites
+    await expect(hasPermission('manager-user', 'cashier.create', undefined, managerReadonlyRules)).resolves.toBe(false);
+    await expect(hasPermission('manager-user', 'cashier.write', undefined, managerReadonlyRules)).resolves.toBe(false);
+    await expect(hasPermission('manager-user', 'cashier.update', undefined, managerReadonlyRules)).resolves.toBe(false);
+    await expect(hasPermission('manager-user', 'cashier.delete', undefined, managerReadonlyRules)).resolves.toBe(false);
+    await expect(hasPermission('manager-user', 'cashier.status_update', undefined, managerReadonlyRules)).resolves.toBe(false);
+  });
+
+  it('admin role retains universal bypass for any permission without explicit rules', async () => {
+    const adminRules = {
+      roleKeys: ['admin'],
+      rules: [],
+    };
+
+    await expect(hasPermission('admin-user', 'cashier.create', undefined, adminRules)).resolves.toBe(true);
+    await expect(hasPermission('admin-user', 'cashier.delete', undefined, adminRules)).resolves.toBe(true);
+    await expect(hasPermission('admin-user', 'any.arbitrary.permission', undefined, adminRules)).resolves.toBe(true);
   });
 
   it('keeps legacy module visibility separate from the underlying data permissions', async () => {
@@ -46,34 +86,6 @@ describe('hasPermission', () => {
     await expect(hasPermission('user-daf', 'users.read', undefined, rules)).resolves.toBe(false);
   });
 
-  it('preserves read-only collaborator listing for the canonical manager role', async () => {
-    await expect(hasPermission('manager-user', 'users.read', undefined, { roleKeys: ['manager'], rules: [] }))
-      .resolves.toBe(true);
-  });
-
-  it('does not treat HR page access as collaborator-list access for a custom role', async () => {
-    const rules = {
-      roleKeys: ['daf'],
-      rules: [{
-        permissionKey: 'hr.read',
-        effect: 'allow' as const,
-        scope: { type: 'all', version: 1 } as const,
-        isUserOverride: false,
-        sourceRoleKey: 'daf',
-      }],
-    };
-
-    await expect(hasPermission('user-daf', 'hr.read', undefined, rules)).resolves.toBe(true);
-    await expect(hasPermission('user-daf', 'users.read', undefined, rules)).resolves.toBe(false);
-  });
-
-  it('préserve la lecture et la création des dossiers pour le rôle historique manager', async () => {
-    const rules = { roleKeys: ['manager'], rules: [] };
-
-    await expect(hasPermission('manager-user', 'dossiers.read', undefined, rules)).resolves.toBe(true);
-    await expect(hasPermission('manager-user', 'dossiers.create', undefined, rules)).resolves.toBe(true);
-  });
-
   it('autorise un grant de rôle dont le scope all correspond', async () => {
     const allowed = await hasPermission(
       'user-1',
@@ -94,24 +106,7 @@ describe('hasPermission', () => {
     expect(allowed).toBe(true);
   });
 
-  it('autorise la caissière à modifier le statut d’une opération', async () => {
-    const allowed = await hasPermission(
-      'cashier-user',
-      'cashier.status_update',
-      undefined,
-      { roleKeys: ['caissiere'], rules: [] }
-    );
-
-    expect(allowed).toBe(true);
-    await expect(hasPermission(
-      'cashier-user',
-      'cashier.update',
-      undefined,
-      { roleKeys: ['caissiere'], rules: [] }
-    )).resolves.toBe(true);
-  });
-
-  it('refuse la modification de statut aux rôles sans ce droit', async () => {
+  it('refuse les actions de caisse aux utilisateurs sans droit explicite dans les règles', async () => {
     const allowed = await hasPermission(
       'accountant-user',
       'cashier.status_update',
@@ -126,43 +121,34 @@ describe('hasPermission', () => {
       undefined,
       { roleKeys: ['comptable'], rules: [] }
     )).resolves.toBe(false);
+    await expect(hasPermission(
+      'cashier-user',
+      'cashier.status_update',
+      undefined,
+      { roleKeys: ['caissiere'], rules: [] }
+    )).resolves.toBe(false);
   });
 
-  it('fait primer le refus individuel sur le fallback caissière', async () => {
+  it('autorise la caissière à modifier le statut d’une opération si accordé explicitement par l’administrateur', async () => {
     const allowed = await hasPermission(
       'cashier-user',
       'cashier.status_update',
       undefined,
       {
         roleKeys: ['caissiere'],
-        rules: [{
-          permissionKey: 'cashier.status_update',
-          effect: 'deny',
-          scope: { type: 'all', version: 1 },
-          isUserOverride: true,
-        }],
+        rules: [
+          {
+            permissionKey: 'cashier.status_update',
+            effect: 'allow',
+            scope: { type: 'all', version: 1 },
+            isUserOverride: false,
+            sourceRoleKey: 'caissiere',
+          },
+        ],
       }
     );
 
-    expect(allowed).toBe(false);
-  });
-
-  it('applique le scope owner uniquement à la ressource possédée', async () => {
-    const rules = {
-      roleKeys: ['tresorier'],
-      rules: [{
-        permissionKey: 'journal_entries.create',
-        effect: 'allow' as const,
-        scope: { type: 'owner', version: 1 },
-        isUserOverride: false,
-        sourceRoleKey: 'tresorier',
-      }],
-    };
-
-    await expect(hasPermission('user-1', 'journal_entries.create', { ownerUserId: 'user-1' }, rules))
-      .resolves.toBe(true);
-    await expect(hasPermission('user-1', 'journal_entries.create', { ownerUserId: 'user-2' }, rules))
-      .resolves.toBe(false);
+    expect(allowed).toBe(true);
   });
 
   it('fait primer un refus individuel sur un grant de rôle', async () => {
@@ -191,6 +177,24 @@ describe('hasPermission', () => {
     );
 
     expect(allowed).toBe(false);
+  });
+
+  it('applique le scope owner uniquement à la ressource possédée', async () => {
+    const rules = {
+      roleKeys: ['tresorier'],
+      rules: [{
+        permissionKey: 'journal_entries.create',
+        effect: 'allow' as const,
+        scope: { type: 'owner', version: 1 },
+        isUserOverride: false,
+        sourceRoleKey: 'tresorier',
+      }],
+    };
+
+    await expect(hasPermission('user-1', 'journal_entries.create', { ownerUserId: 'user-1' }, rules))
+      .resolves.toBe(true);
+    await expect(hasPermission('user-1', 'journal_entries.create', { ownerUserId: 'user-2' }, rules))
+      .resolves.toBe(false);
   });
 
   it('applique à une requête les mêmes refus prioritaires que hasPermission', () => {
@@ -320,6 +324,42 @@ describe('hasPermission', () => {
             sourceRoleKey: 'daf',
           },
         ],
+      }
+    );
+
+    expect(allowed).toBe(true);
+  });
+
+  it('déduit automatiquement module.accounting.view pour un rôle DAF ayant journals.read', async () => {
+    const allowed = await hasPermission(
+      'user-daf',
+      'module.accounting.view',
+      undefined,
+      {
+        roleKeys: ['daf'],
+        rules: [
+          {
+            permissionKey: 'journals.read',
+            effect: 'allow',
+            scope: { type: 'all', version: 1 },
+            isUserOverride: false,
+            sourceRoleKey: 'daf',
+          },
+        ],
+      }
+    );
+
+    expect(allowed).toBe(true);
+  });
+
+  it('accorde universellement module.dashboard.view à tout utilisateur actif', async () => {
+    const allowed = await hasPermission(
+      'user-any',
+      'module.dashboard.view',
+      undefined,
+      {
+        roleKeys: ['custom_new_role'],
+        rules: [],
       }
     );
 
