@@ -106,9 +106,9 @@ export class MainLayout {
   private readonly allMenuItems: NavOption[] = [
     {
       id: 'dashboard',
-      label: 'Tableau de bord',
+      label: 'Caisse',
       route: '/dashboard',
-      icon: 'dashboard',
+      icon: 'point_of_sale',
       permissionKey: 'module.dashboard.view',
     },
     {
@@ -144,7 +144,13 @@ export class MainLayout {
   public readonly visibleMenuItems = computed<NavOption[]>(() => {
     const user = this.currentUser();
     if (!user) return [];
-    return this.allMenuItems.filter((item) => this.accessControl.hasPermission(item.permissionKey));
+    const hasDashboard = this.accessControl.hasPermission('module.dashboard.view');
+    return this.allMenuItems.filter((item) => {
+      if (item.id === 'caisse' && hasDashboard) {
+        return false;
+      }
+      return this.accessControl.hasPermission(item.permissionKey);
+    });
   });
 
   public roleLabel(role: UserRole | undefined): string {
