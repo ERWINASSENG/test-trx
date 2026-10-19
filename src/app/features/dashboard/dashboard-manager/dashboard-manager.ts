@@ -458,6 +458,9 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
         intersect: false,
       },
       plugins: {
+        legend: {
+          display: false,
+        },
         tooltip: {
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           titleColor: '#cbd5e1',
