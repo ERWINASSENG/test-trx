@@ -281,13 +281,24 @@ export const createProspectHandler = async (req: express.Request, res: express.R
   }
   await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'CREATE_PROSPECT', entityType: 'prospect', entityId: data.id, details: { status: data.status }, ipAddress: req.ip || null });
   if (typeof data.assigned_to === 'string') {
+    const oppTitle = `Prise en charge — ${String(data.company_name || data.name)}`;
+    await adminClient.from('sales_opportunities').insert({
+      prospect_id: data.id,
+      assigned_to: data.assigned_to,
+      created_by: currentUser.id,
+      title: oppTitle,
+      stage: 'new',
+      estimated_value: typeof data.estimated_value === 'number' && data.estimated_value >= 0 ? data.estimated_value : 0,
+      currency: typeof data.currency === 'string' && data.currency ? data.currency : 'XAF',
+    });
+
     await createAppNotification(adminClient, {
       recipientId: data.assigned_to,
       actorId: currentUser.id,
       notificationType: 'assignment',
-      title: 'Nouveau client attribué',
-      message: `Le client ${String(data.company_name || data.name)} vous a été attribué.`,
-      href: `/prospects?prospectId=${data.id}`,
+      title: 'Nouveau prospect attribué',
+      message: `Le prospect ${String(data.company_name || data.name)} vous a été attribué et une opportunité a été créée dans votre pipeline.`,
+      href: `/crm-commercial?view=pipeline`,
       sourceType: 'prospect',
       sourceId: String(data.id),
       dedupeKey: `prospect:${data.id}:assigned:${data.assigned_to}:${data.updated_at}`,
@@ -366,18 +377,46 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
     return;
   }
   await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'UPDATE_PROSPECT', entityType: 'prospect', entityId: prospectId, details: { fields: Object.keys(updateData) }, ipAddress: req.ip || null });
-  if (typeof data.assigned_to === 'string' && data.assigned_to !== previousAssignee) {
-    await createAppNotification(adminClient, {
-      recipientId: data.assigned_to,
-      actorId: currentUser.id,
-      notificationType: 'assignment',
-      title: 'Client attribué',
-      message: `Le client ${String(data.company_name || data.name)} vous a été attribué.`,
-      href: `/prospects?prospectId=${data.id}`,
-      sourceType: 'prospect',
-      sourceId: prospectId,
-      dedupeKey: `prospect:${prospectId}:assigned:${data.assigned_to}:${data.updated_at}`,
-    });
+  if (typeof data.assigned_to === 'string') {
+    const { data: existingOpps } = await adminClient
+      .from('sales_opportunities')
+      .select('id')
+      .eq('prospect_id', prospectId)
+      .limit(1);
+
+    if (!existingOpps || existingOpps.length === 0) {
+      const oppTitle = `Prise en charge — ${String(data.company_name || data.name)}`;
+      await adminClient.from('sales_opportunities').insert({
+        prospect_id: prospectId,
+        assigned_to: data.assigned_to,
+        created_by: currentUser.id,
+        title: oppTitle,
+        stage: 'new',
+        estimated_value: typeof data.estimated_value === 'number' && data.estimated_value >= 0 ? data.estimated_value : 0,
+        currency: typeof data.currency === 'string' && data.currency ? data.currency : 'XAF',
+      });
+    } else if (data.assigned_to !== previousAssignee) {
+      await adminClient
+        .from('sales_opportunities')
+        .update({ assigned_to: data.assigned_to })
+        .eq('prospect_id', prospectId)
+        .neq('stage', 'won')
+        .neq('stage', 'lost');
+    }
+
+    if (data.assigned_to !== previousAssignee) {
+      await createAppNotification(adminClient, {
+        recipientId: data.assigned_to,
+        actorId: currentUser.id,
+        notificationType: 'assignment',
+        title: 'Prospect attribué',
+        message: `Le prospect ${String(data.company_name || data.name)} vous a été attribué et une opportunité est disponible dans votre pipeline.`,
+        href: `/crm-commercial?view=pipeline`,
+        sourceType: 'prospect',
+        sourceId: prospectId,
+        dedupeKey: `prospect:${prospectId}:assigned:${data.assigned_to}:${data.updated_at}`,
+      });
+    }
   }
   res.json({ prospect: data });
 };

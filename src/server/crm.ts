@@ -108,7 +108,7 @@ export const validateCrmClientPayload = (value: unknown): { data?: JsonRecord; e
   if (companyName.length < 2 || companyName.length > 200) {
     return { error: 'Le nom de la société doit comporter entre 2 et 200 caractères.' };
   }
-  const data: JsonRecord = { name: companyName, company_name: companyName, status: 'new' };
+  const data: JsonRecord = { name: companyName, company_name: companyName, status: 'converted' };
   const fields: [string, string, number][] = [
     ['contactName', 'contact_name', 200],
     ['contactRole', 'contact_role', 100],
@@ -477,7 +477,39 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     res.status(400).json({ error: 'Le filtre de l’étape commerciale est invalide.' });
     return;
   }
-  const filteredOpportunityRows = (opportunitiesResult.data || []).filter((row) => {
+  const clientRowsData = clientsResult.data || [];
+  const clientIdSet = new Set(clientRowsData.map((row) => String(row.id)));
+  const allOpportunityRows = [...(opportunitiesResult.data || [])];
+
+  // Auto-guérison : s'assurer que chaque prospect assigné dispose au moins d'une opportunité
+  // afin d'être visible dans le pipeline CRM du commercial assigné.
+  const existingOppProspectIds = new Set(allOpportunityRows.map((row) => String(row.prospect_id)));
+  const unlinkedAssignedClients = clientRowsData.filter((client) =>
+    typeof client.assigned_to === 'string' && client.assigned_to && !existingOppProspectIds.has(String(client.id))
+  );
+
+  if (unlinkedAssignedClients.length > 0) {
+    const oppsToInsert = unlinkedAssignedClients.map((client) => ({
+      prospect_id: client.id,
+      assigned_to: client.assigned_to,
+      created_by: client.assigned_to,
+      title: `Prise en charge — ${String(client.company_name || client.name || 'Prospect')}`,
+      stage: 'new',
+      estimated_value: 0,
+      currency: 'XAF',
+    }));
+
+    const { data: insertedOpps, error: insertError } = await admin
+      .from('sales_opportunities')
+      .insert(oppsToInsert)
+      .select('id, prospect_id, assigned_to, title, stage, transport_mode, direction, origin, destination, goods_description, weight_kg, volume_m3, incoterm, estimated_value, currency, expected_close_date, won_reason, contract_reference, notes, updated_at');
+
+    if (!insertError && insertedOpps) {
+      allOpportunityRows.push(...(insertedOpps as typeof allOpportunityRows));
+    }
+  }
+
+  const filteredOpportunityRows = allOpportunityRows.filter((row) => {
     if (typeof filterStage === 'string' && filterStage && row.stage !== filterStage) return false;
     if (!rawSearch) return true;
     return [row.title, row.origin, row.destination, row.goods_description, row.incoterm]
@@ -485,8 +517,6 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   });
   // Pas de second aller-retour DB : on réutilise directement clientsResult.data.
   // Les opportunités et activités liées à des prospects hors portée de l'acteur sont filtrées en JS.
-  const clientRowsData = clientsResult.data || [];
-  const clientIdSet = new Set(clientRowsData.map((row) => String(row.id)));
   const visibleOpportunityRows = filteredOpportunityRows.filter((row) =>
     clientIdSet.has(String(row.prospect_id))
   );

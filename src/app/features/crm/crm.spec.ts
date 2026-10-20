@@ -1,10 +1,11 @@
 import { Injector, runInInjectionContext, signal } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CrmService } from '../../core/services/crm.service';
-import { CrmComponent } from './crm';
+import { CrmComponent, PipelineStageColumn } from './crm';
 import { CrmOpportunity } from '../../core/models/crm.model';
 
 describe('CrmComponent (Refonte & Interconnexion)', () => {
@@ -229,5 +230,77 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
 
     await component.saveOpportunity();
     expect(component.formError()).toBe('Sélectionnez une société et donnez un titre à l’opportunité.');
+  });
+
+  it('exclut les prospects non convertis de la liste des clients et ne retient que les clients convertis', () => {
+    // mockOpportunities[0].client a le statut 'qualified' (prospect non converti)
+    // mockOpportunities[1].client a le statut 'converted' (client converti)
+    expect(component.filteredClients()).toHaveLength(1);
+    expect(component.filteredClients()[0].id).toBe('client-2');
+    expect(component.filteredClients()[0].status).toBe('converted');
+  });
+
+  function mockDragDropEvent(
+    previousStage: CrmOpportunity['stage'],
+    targetStage: CrmOpportunity['stage'],
+    opportunity: CrmOpportunity,
+    isSame = false
+  ): CdkDragDrop<PipelineStageColumn, PipelineStageColumn, CrmOpportunity> {
+    const previousContainer = { data: { stage: previousStage } };
+    const container = isSame ? previousContainer : { data: { stage: targetStage } };
+    return {
+      previousContainer,
+      container,
+      item: { data: opportunity },
+    } as unknown as CdkDragDrop<PipelineStageColumn, PipelineStageColumn, CrmOpportunity>;
+  }
+
+  it('déplace une opportunité vers une étape suivante via onOpportunityDrop', async () => {
+    const opp = mockOpportunities[0]; // stage: 'quote_sent'
+    const event = mockDragDropEvent('quote_sent', 'negotiation', opp);
+
+    component.onOpportunityDrop(event);
+    await Promise.resolve();
+
+    expect(component.crmService.updateOpportunity).toHaveBeenCalledWith('opp-1', { stage: 'negotiation' });
+  });
+
+  it('permet à un commercial de faire revenir une opportunité en arrière via onOpportunityDrop', async () => {
+    const opp = mockOpportunities[0]; // stage: 'quote_sent'
+    const event = mockDragDropEvent('quote_sent', 'qualified', opp);
+
+    component.onOpportunityDrop(event);
+    await Promise.resolve();
+
+    expect(component.crmService.updateOpportunity).toHaveBeenCalledWith('opp-1', { stage: 'qualified' });
+  });
+
+  it('ne fait rien lors d\'un drop dans la même colonne', () => {
+    const opp = mockOpportunities[0];
+    const event = mockDragDropEvent('quote_sent', 'quote_sent', opp, true);
+
+    const spy = vi.spyOn(component, 'changeStage');
+    component.onOpportunityDrop(event);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('bloque le déplacement d\'une opportunité déjà gagnée', async () => {
+    const wonOpp = mockOpportunities[1]; // stage: 'won'
+    const event = mockDragDropEvent('won', 'negotiation', wonOpp);
+
+    component.onOpportunityDrop(event);
+    await Promise.resolve();
+
+    expect(component.crmService.updateOpportunity).not.toHaveBeenCalled();
+    expect(component.feedback()).toBe('Une opportunité gagnée ne peut pas être déplacée vers une autre étape.');
+  });
+
+  it('ouvre la boîte de dialogue de validation du contrat lors du drop vers l\'étape gagnée', () => {
+    const opp = mockOpportunities[0]; // stage: 'quote_sent'
+    const event = mockDragDropEvent('quote_sent', 'won', opp);
+
+    component.onOpportunityDrop(event);
+    expect(component.dialog()).toBe('win');
+    expect(component.dialogOpportunityId()).toBe('opp-1');
   });
 });

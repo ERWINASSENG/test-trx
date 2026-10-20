@@ -62,15 +62,25 @@
         @if (canCreate()) { <button type="button" class="primary-action" (click)="openClientDialog()">Créer une fiche société</button> }
       </section>
     } @else {
-      <div class="pipeline-board" aria-label="Opportunités par étape">
+      <div class="pipeline-board" cdkDropListGroup aria-label="Opportunités par étape">
         @for (column of stageColumns(); track column.stage) {
-          <section class="pipeline-column" [class]="stageClass(column.stage)" [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
+          <section
+            class="pipeline-column"
+            cdkDropList
+            [cdkDropListData]="column"
+            (cdkDropListDropped)="onOpportunityDrop($event)"
+            [class]="stageClass(column.stage)"
+            [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
             <header class="pipeline-column-heading">
               <div><span class="stage-dot" aria-hidden="true"></span><h2>{{ column.label }}</h2></div>
               <span class="column-count">{{ column.opportunities.length }}</span>
             </header>
             @for (opportunity of column.opportunities; track opportunity.id) {
-              <article class="opportunity-card">
+              <article
+                class="opportunity-card"
+                cdkDrag
+                [cdkDragData]="opportunity"
+                [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()">
                 <div class="card-topline">
                   <div class="card-badges">
                     <span class="tag-badge mode">{{ modeLabel(opportunity.transportMode) }}</span>
@@ -78,15 +88,6 @@
                       <span class="tag-badge direction">{{ directionLabel(opportunity.direction) }}</span>
                     }
                   </div>
-                  @if (canUpdate()) {
-                    <div class="card-stage-control">
-                      <label class="sr-only" [for]="'stage-' + opportunity.id">Modifier l’étape de {{ opportunity.title }}</label>
-                      <select class="stage-select" [id]="'stage-' + opportunity.id" [value]="opportunity.stage"
-                        (change)="changeStage(opportunity, $any($event.target).value)">
-                        @for (stage of stages; track stage) { <option [value]="stage">{{ stageLabel(stage) }}</option> }
-                      </select>
-                    </div>
-                  }
                 </div>
                 <h3 class="client-company-title">{{ opportunity.client.companyName || opportunity.client.name }}</h3>
                 <p class="opportunity-title">{{ opportunity.title }}</p>

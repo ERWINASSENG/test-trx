@@ -1,5 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import {
+  CdkDrag,
+  CdkDragDrop,
+  CdkDropList,
+  CdkDropListGroup,
+} from '@angular/cdk/drag-drop';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,6 +25,12 @@ import { AccessControlService } from '../../core/services/access-control.service
 import { CrmService } from '../../core/services/crm.service';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
 import { getCountryFlagUrl } from '../../core/utils/country-flag.util';
+
+export interface PipelineStageColumn {
+  stage: CrmOpportunityStage;
+  label: string;
+  opportunities: CrmOpportunity[];
+}
 
 type CrmTab = 'pipeline' | 'clients' | 'activities' | 'campaigns';
 export type ClientSortField = 'client' | 'country' | 'sector' | 'contact' | 'phone' | 'email' | 'status';
@@ -92,7 +104,16 @@ const EMPTY_OPPORTUNITY: OpportunityDraft = {
 
 @Component({
   selector: 'app-crm-commercial',
-  imports: [DatePipe, FormsModule, MatIconModule, ModuleControlPanel, RouterLink],
+  imports: [
+    DatePipe,
+    FormsModule,
+    MatIconModule,
+    ModuleControlPanel,
+    RouterLink,
+    CdkDropListGroup,
+    CdkDropList,
+    CdkDrag,
+  ],
   templateUrl: './crm.html',
   styleUrl: './crm.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -176,11 +197,11 @@ export class CrmComponent {
   public readonly stageColumns = computed(() => this.stages.map((stage) => ({
     stage,
     label: STAGE_LABELS[stage],
-    opportunities: this.visibleOpportunities().filter((opportunity) => opportunity.stage === stage),
+    opportunities: this.filteredOpportunities().filter((opportunity) => opportunity.stage === stage),
   })));
   public readonly filteredClients = computed(() => {
     const query = this.search().trim().toLocaleLowerCase('fr');
-    const clients = this.crmService.clients();
+    const clients = this.crmService.clients().filter((client) => client.status === 'converted');
     if (!query) return clients;
     return clients.filter((client) =>
       `${client.companyName || client.name} ${client.contactName || ''} ${client.country || ''} ${client.email || ''}`
@@ -624,8 +645,24 @@ export class CrmComponent {
     if (result) this.feedback.set('Opportunité ajoutée au pipeline.');
   }
 
+  public onOpportunityDrop(event: CdkDragDrop<PipelineStageColumn, PipelineStageColumn, CrmOpportunity>): void {
+    if (event.previousContainer === event.container) {
+      return;
+    }
+    const targetStage = event.container.data.stage;
+    const opportunity = event.item.data;
+    if (!opportunity || opportunity.stage === targetStage) {
+      return;
+    }
+    void this.changeStage(opportunity, targetStage);
+  }
+
   public async changeStage(opportunity: CrmOpportunity, stage: CrmOpportunityStage): Promise<void> {
     if (!this.canUpdate() || stage === opportunity.stage) return;
+    if (opportunity.stage === 'won') {
+      this.setFeedback('Une opportunité gagnée ne peut pas être déplacée vers une autre étape.');
+      return;
+    }
     if (stage === 'won') {
       this.openWinDialog(opportunity);
       return;
