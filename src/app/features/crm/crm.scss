@@ -485,12 +485,20 @@
   color: var(--crm-subtle);
 }
 
+.card-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--crm-border);
+}
+
 .card-links {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  padding-top: 4px;
-  border-top: 1px dashed var(--crm-border);
 }
 
 .card-actions {
