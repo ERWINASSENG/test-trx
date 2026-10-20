@@ -541,8 +541,9 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
         await adminClient.auth.admin.updateUserById(userId, {
           app_metadata: {
             ...(authUser.user.app_metadata || {}),
-            role: legacyRole,
+            role: roleKey,
             custom_role: roleKey,
+            legacy_role: legacyRole,
           },
         });
       }

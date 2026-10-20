@@ -351,10 +351,14 @@ export class AuthService {
         return null;
       }
 
+      const customRole = typeof payload.customRole === 'string' && payload.customRole.trim()
+        ? payload.customRole.trim()
+        : undefined;
       const serverRole = typeof payload.role === 'string' ? payload.role : undefined;
-      const appRole = authUser?.app_metadata?.['role'] as UserRole | undefined;
+      const appRole = (authUser?.app_metadata?.['custom_role'] as string | undefined)
+        || (authUser?.app_metadata?.['role'] as UserRole | undefined);
       const profileRole = profile['role'] as UserRole | undefined;
-      const resolvedRole: UserRole = normalizeUserRole(serverRole || appRole || profileRole || 'employe');
+      const resolvedRole: UserRole = normalizeUserRole(customRole || serverRole || appRole || profileRole || 'employe');
 
       const userProfile: UserProfile = {
         id: userId,
@@ -363,7 +367,7 @@ export class AuthService {
         lastName: String(profile['last_name'] || authUser?.user_metadata?.['last_name'] || 'Transmex'),
         role: resolvedRole,
         roles: [resolvedRole],
-        customRole: typeof payload.customRole === 'string' ? payload.customRole : null,
+        customRole: customRole || (typeof payload.customRole === 'string' ? payload.customRole : null),
         roleLabel: typeof payload.roleLabel === 'string' ? payload.roleLabel : null,
         department: String(profile['department'] || 'Services Généraux'),
         phone: typeof profile['phone'] === 'string' ? profile['phone'] : undefined,
@@ -559,7 +563,7 @@ export class AuthService {
     if (current.role === 'admin') return true;
 
     const rolesArray = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
-    return rolesArray.includes(current.role);
+    return rolesArray.includes(current.role) || (current.customRole ? rolesArray.includes(current.customRole as UserRole) : false);
   }
 
   /**

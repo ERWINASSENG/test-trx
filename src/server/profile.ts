@@ -69,9 +69,16 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
     const now = Date.now();
     const cached = profilePayloadCache.get(userId);
     if (cached && now - cached.cachedAt < USER_PROFILE_RESPONSE_CACHE_TTL_MS) {
+      const effectiveRole = user.role === 'admin'
+        ? 'admin'
+        : (cached.customRole || user.role || (cached.profile['role'] as string) || 'employe');
+
       res.json({
-        profile: cached.profile,
-        role: user.role || cached.profile['role'],
+        profile: {
+          ...cached.profile,
+          role: effectiveRole,
+        },
+        role: effectiveRole,
         customRole: cached.customRole,
         roleLabel: cached.roleLabel,
       });
@@ -129,9 +136,16 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
       return;
     }
 
+    const effectiveRole = user.role === 'admin'
+      ? 'admin'
+      : (loaded.customRole || user.role || (loaded.profile['role'] as string) || 'employe');
+
     res.json({
-      profile: loaded.profile,
-      role: user.role || loaded.profile['role'],
+      profile: {
+        ...loaded.profile,
+        role: effectiveRole,
+      },
+      role: effectiveRole,
       customRole: loaded.customRole,
       roleLabel: loaded.roleLabel,
     });

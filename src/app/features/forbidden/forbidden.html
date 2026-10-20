@@ -5,15 +5,54 @@
     </div>
     
     <h1 class="text-xl font-bold text-slate-900 mb-2">Privilèges Insuffisants</h1>
-    <p class="text-xs text-slate-600 mb-6 leading-relaxed">
-      Votre rôle actuel ne vous permet pas d'accéder à ce module. Veuillez contacter l'administrateur système si vous pensez qu'il s'agit d'une erreur.
-    </p>
 
-    <a
-      routerLink="/dashboard"
-      class="inline-block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all text-center"
-      id="forbidden-back-btn">
-      Retourner au Tableau de Bord
-    </a>
+    @if (deniedModuleName()) {
+      <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+        Votre profil ne dispose pas des droits nécessaires pour accéder au module
+        <strong class="text-slate-900 font-semibold">{{ deniedModuleName() }}</strong>.
+      </p>
+    } @else {
+      <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+        Votre rôle actuel ne vous permet pas d'accéder à ce module. Veuillez contacter l'administrateur système si vous pensez qu'il s'agit d'une erreur.
+      </p>
+    }
+
+    @if (currentUser(); as user) {
+      <div class="mb-6 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-left text-xs text-slate-600 flex flex-col gap-2" id="forbidden-user-info">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Compte connecté :</span>
+          <span class="font-medium text-slate-900 truncate max-w-[220px]" [title]="user.email">{{ user.email }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Rôle actif :</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            {{ currentRoleLabel() }}
+          </span>
+        </div>
+        @if (deniedPermission(); as perm) {
+          <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-200/60">
+            <span>Code permission :</span>
+            <code class="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">{{ perm }}</code>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="flex flex-col gap-2.5">
+      <a
+        routerLink="/apps"
+        class="inline-block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all text-center"
+        id="forbidden-back-btn">
+        Retourner aux Applications
+      </a>
+
+      <button
+        type="button"
+        (click)="logout()"
+        class="inline-block w-full py-2 px-4 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded-xl border border-slate-200 transition-all text-center"
+        id="forbidden-logout-btn">
+        Changer d'utilisateur / Se déconnecter
+      </button>
+    </div>
   </div>
 </div>

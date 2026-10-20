@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { normalizeUserRole } from './role.utils';
 
 describe('normalizeUserRole', () => {
@@ -18,6 +19,13 @@ describe('normalizeUserRole', () => {
     expect(normalizeUserRole('CAISSIER')).toBe('caissiere');
   });
 
+  it('should map commercial and alias sales to commercial', () => {
+    expect(normalizeUserRole('commercial')).toBe('commercial');
+    expect(normalizeUserRole('commerciale')).toBe('commercial');
+    expect(normalizeUserRole('sales')).toBe('commercial');
+    expect(normalizeUserRole(' COMMERCIAL ')).toBe('commercial');
+  });
+
   it('should map employe, employee, agent, and rh to employe', () => {
     expect(normalizeUserRole('employe')).toBe('employe');
     expect(normalizeUserRole('employee')).toBe('employe');
@@ -25,11 +33,18 @@ describe('normalizeUserRole', () => {
     expect(normalizeUserRole('rh')).toBe('employe');
   });
 
-  it('should default to employe (least privilege) on unknown or invalid role', () => {
+  it('should preserve any custom role (present and future) without demoting to employe', () => {
+    expect(normalizeUserRole('daf')).toBe('daf');
+    expect(normalizeUserRole('DAF')).toBe('daf');
+    expect(normalizeUserRole('logisticien')).toBe('logisticien');
+    expect(normalizeUserRole('custom_role')).toBe('custom_role');
+  });
+
+  it('should default to employe (least privilege) on invalid or empty role', () => {
     expect(normalizeUserRole(null)).toBe('employe');
     expect(normalizeUserRole(undefined)).toBe('employe');
     expect(normalizeUserRole('')).toBe('employe');
-    expect(normalizeUserRole('unknown_role')).toBe('employe');
+    expect(normalizeUserRole('   ')).toBe('employe');
     expect(normalizeUserRole(123)).toBe('employe');
   });
 });

@@ -1,4 +1,13 @@
-export type UserRole = 'admin' | 'manager' | 'caissiere' | 'employe' | 'tresorier' | 'comptable' | 'commercial';
+export type CanonicalUserRole =
+  | 'admin'
+  | 'manager'
+  | 'caissiere'
+  | 'employe'
+  | 'tresorier'
+  | 'comptable'
+  | 'commercial';
+
+export type UserRole = CanonicalUserRole | (string & {});
 
 export interface RoleDefinition {
   id: UserRole;
@@ -68,7 +77,7 @@ export interface NavMenuItem {
   badgeVariant?: 'primary' | 'success' | 'warning' | 'neutral';
 }
 
-export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
+export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   admin: {
     id: 'admin',
     label: 'Administrateur',
@@ -112,3 +121,27 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
   },
 };
+
+export function getRoleDefinition(role: UserRole | undefined | null, roleLabel?: string | null): RoleDefinition {
+  if (!role) {
+    return {
+      id: 'employe',
+      label: 'Non défini',
+      description: 'Rôle non attribué',
+      badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    };
+  }
+
+  const existing = ROLE_DEFINITIONS[role as CanonicalUserRole];
+  if (existing) {
+    return roleLabel ? { ...existing, label: roleLabel } : existing;
+  }
+
+  const label = roleLabel || (role.charAt(0).toUpperCase() + role.slice(1));
+  return {
+    id: role,
+    label,
+    description: `Rôle personnalisé : ${label}`,
+    badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+  };
+}
