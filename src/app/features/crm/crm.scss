@@ -226,11 +226,60 @@
   padding: 10px;
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 
-  &.cdk-drop-list-receiving {
+  &.cdk-drop-list-receiving,
+  &:has(.pipeline-column-cards.cdk-drop-list-receiving) {
     border-color: var(--crm-action);
     background: color-mix(in srgb, var(--crm-action) 7%, var(--crm-muted));
     box-shadow: inset 0 0 0 1px var(--crm-action), 0 4px 12px rgba(11, 94, 215, 0.12);
   }
+}
+
+.pipeline-column-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 200px;
+  border-radius: 6px;
+  padding: 2px;
+  transition: background-color 0.15s ease;
+
+  &.cdk-drop-list-receiving {
+    background: color-mix(in srgb, var(--crm-action) 5%, transparent);
+  }
+
+  &.cdk-drop-list-dragging {
+    .opportunity-card:not(.cdk-drag-placeholder) {
+      transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+  }
+}
+
+.column-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 140px;
+  border: 1px dashed var(--crm-border);
+  border-radius: 6px;
+  color: var(--crm-subtle);
+  font-size: 0.8rem;
+  pointer-events: none;
+  user-select: none;
+  padding: 16px;
+
+  .column-empty-icon {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+    opacity: 0.45;
+  }
+}
+
+.pipeline-column-cards.cdk-drop-list-receiving .column-empty-state {
+  display: none;
 }
 
 .pipeline-column-heading {
@@ -348,10 +397,19 @@
   }
 }
 
-/* Masquage strict du marqueur visuel d'insertion (placeholder) selon demande */
+/* Style Trello / Odoo : marqueur visuel d'insertion fluide (placeholder) */
 :host ::ng-deep .cdk-drag-placeholder,
 .cdk-drag-placeholder {
-  display: none !important;
+  box-sizing: border-box;
+  min-height: 80px;
+  border-radius: 6px;
+  border: 2px dashed var(--crm-action, #0b5ed7) !important;
+  background: color-mix(in srgb, var(--crm-action, #0b5ed7) 12%, transparent) !important;
+  opacity: 0.85;
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+  margin-bottom: 2px;
+  visibility: visible !important;
+  display: block !important;
 }
 
 .cdk-drag-animating {

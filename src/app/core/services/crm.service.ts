@@ -120,6 +120,42 @@ export class CrmService {
       : { success: false, error: 'L’opportunité a été créée, mais son actualisation a échoué.' };
   }
 
+  /**
+   * Met à jour l'étape d'une opportunité de façon optimiste (immédiate dans l'UI style Trello/Odoo)
+   * avec rollback automatique si la requête serveur échoue.
+   */
+  public async updateOpportunityStageOptimistic(
+    id: string,
+    newStage: CrmOpportunityStage
+  ): Promise<CrmResult<CrmOpportunity>> {
+    const previous = this._opportunities().find((item) => item.id === id);
+    if (!previous) return { success: false, error: 'Opportunité introuvable.' };
+    const previousStage = previous.stage;
+
+    // 1. Mise à jour locale immédiate dans le signal pour supprimer tout temps d'attente visuel
+    this._opportunities.update((items) =>
+      items.map((item) => (item.id === id ? { ...item, stage: newStage } : item))
+    );
+
+    // 2. Persistance asynchrone sur le serveur
+    const result = await this.mutate<{ opportunity: Record<string, unknown> }>(
+      `/opportunities/${encodeURIComponent(id)}`,
+      'PATCH',
+      { stage: newStage }
+    );
+
+    // 3. Rollback en cas d'erreur réseau ou de rejet serveur
+    if (!result.success) {
+      this._opportunities.update((items) =>
+        items.map((item) => (item.id === id ? { ...item, stage: previousStage } : item))
+      );
+      return { success: false, error: result.error };
+    }
+
+    const updated = this._opportunities().find((item) => item.id === id);
+    return updated ? { success: true, data: updated } : { success: true };
+  }
+
   public async updateOpportunity(
     id: string,
     input: UpdateOpportunityInput

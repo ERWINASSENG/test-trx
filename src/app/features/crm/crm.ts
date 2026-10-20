@@ -667,7 +667,7 @@ export class CrmComponent {
       this.openWinDialog(opportunity);
       return;
     }
-    const result = await this.crmService.updateOpportunity(opportunity.id, { stage });
+    const result = await this.crmService.updateOpportunityStageOptimistic(opportunity.id, stage);
     this.setFeedback(result.success ? `Étape mise à jour : ${this.stageLabel(stage)}.` : result.error);
   }
 

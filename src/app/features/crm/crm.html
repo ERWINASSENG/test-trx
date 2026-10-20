@@ -66,90 +66,97 @@
         @for (column of stageColumns(); track column.stage) {
           <section
             class="pipeline-column"
-            cdkDropList
-            [cdkDropListData]="column"
-            (cdkDropListDropped)="onOpportunityDrop($event)"
-            [class]="stageClass(column.stage)"
-            [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
+            [class]="stageClass(column.stage)">
             <header class="pipeline-column-heading">
               <div><span class="stage-dot" aria-hidden="true"></span><h2>{{ column.label }}</h2></div>
               <span class="column-count">{{ column.opportunities.length }}</span>
             </header>
-            @for (opportunity of column.opportunities; track opportunity.id) {
-              <article
-                class="opportunity-card"
-                cdkDrag
-                [cdkDragData]="opportunity"
-                [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()">
-                <div class="card-topline">
-                  <div class="card-badges">
-                    <span class="tag-badge mode">{{ modeLabel(opportunity.transportMode) }}</span>
-                    @if (opportunity.direction) {
-                      <span class="tag-badge direction">{{ directionLabel(opportunity.direction) }}</span>
+            <div
+              class="pipeline-column-cards"
+              cdkDropList
+              [id]="'stage-' + column.stage"
+              [cdkDropListData]="column"
+              (cdkDropListDropped)="onOpportunityDrop($event)"
+              [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
+              @for (opportunity of column.opportunities; track opportunity.id) {
+                <article
+                  class="opportunity-card"
+                  cdkDrag
+                  [cdkDragData]="opportunity"
+                  [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()">
+                  <div class="card-topline">
+                    <div class="card-badges">
+                      <span class="tag-badge mode">{{ modeLabel(opportunity.transportMode) }}</span>
+                      @if (opportunity.direction) {
+                        <span class="tag-badge direction">{{ directionLabel(opportunity.direction) }}</span>
+                      }
+                    </div>
+                  </div>
+                  <h3 class="client-company-title">{{ opportunity.client.companyName || opportunity.client.name }}</h3>
+                  <p class="opportunity-title">{{ opportunity.title }}</p>
+                  @if (opportunity.origin || opportunity.destination) {
+                    <div class="trade-lane-route">
+                      <mat-icon aria-hidden="true">route</mat-icon>
+                      <span>{{ opportunity.origin || 'Origine à définir' }}</span>
+                      <span class="route-arrow">→</span>
+                      <span>{{ opportunity.destination || 'Destination à définir' }}</span>
+                    </div>
+                  }
+                  <div class="card-meta">
+                    <span class="meta-item">{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
+                    @if (opportunity.expectedCloseDate) {
+                      <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
+                    }
+                    @if (opportunity.assignedToName) {
+                      <span class="meta-item">{{ opportunity.assignedToName }}</span>
                     }
                   </div>
-                </div>
-                <h3 class="client-company-title">{{ opportunity.client.companyName || opportunity.client.name }}</h3>
-                <p class="opportunity-title">{{ opportunity.title }}</p>
-                @if (opportunity.origin || opportunity.destination) {
-                  <div class="trade-lane-route">
-                    <mat-icon aria-hidden="true">route</mat-icon>
-                    <span>{{ opportunity.origin || 'Origine à définir' }}</span>
-                    <span class="route-arrow">→</span>
-                    <span>{{ opportunity.destination || 'Destination à définir' }}</span>
-                  </div>
-                }
-                <div class="card-meta">
-                  <span class="meta-item">{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
-                  @if (opportunity.expectedCloseDate) {
-                    <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
-                  }
-                  @if (opportunity.assignedToName) {
-                    <span class="meta-item">{{ opportunity.assignedToName }}</span>
-                  }
-                </div>
-                <div class="card-links">
-                  @if (opportunity.quoteNumber) {
-                    <a class="linked-record" [routerLink]="['/quotes']"
-                      [queryParams]="{ quoteId: opportunity.quoteId }">
-                      <mat-icon aria-hidden="true">receipt_long</mat-icon>
-                      {{ opportunity.quoteNumber }}
-                    </a>
-                    @if (opportunity.quoteStatus) {
-                      <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                  <div class="card-links">
+                    @if (opportunity.quoteNumber) {
+                      <a class="linked-record" [routerLink]="['/quotes']"
+                        [queryParams]="{ quoteId: opportunity.quoteId }">
+                        <mat-icon aria-hidden="true">receipt_long</mat-icon>
+                        {{ opportunity.quoteNumber }}
+                      </a>
+                      @if (opportunity.quoteStatus) {
+                        <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                      }
+                    } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
+                      <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
+                        <mat-icon aria-hidden="true">add</mat-icon>
+                        Créer une cotation
+                      </a>
                     }
-                  } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
-                    <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
-                      <mat-icon aria-hidden="true">add</mat-icon>
-                      Créer une cotation
-                    </a>
-                  }
-                  @if (opportunity.dossierNumber) {
-                    <a class="linked-record" [routerLink]="['/dossiers']"
-                      [queryParams]="{ dossierId: opportunity.dossierId }">
-                      <mat-icon aria-hidden="true">folder</mat-icon>
-                      {{ opportunity.dossierNumber }}
-                    </a>
-                  } @else if (opportunity.stage === 'won' && canCreate()) {
-                    <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
-                      <mat-icon aria-hidden="true">folder_open</mat-icon>
-                      Créer le dossier
-                    </button>
-                  }
+                    @if (opportunity.dossierNumber) {
+                      <a class="linked-record" [routerLink]="['/dossiers']"
+                        [queryParams]="{ dossierId: opportunity.dossierId }">
+                        <mat-icon aria-hidden="true">folder</mat-icon>
+                        {{ opportunity.dossierNumber }}
+                      </a>
+                    } @else if (opportunity.stage === 'won' && canCreate()) {
+                      <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
+                        <mat-icon aria-hidden="true">folder_open</mat-icon>
+                        Créer le dossier
+                      </button>
+                    }
+                  </div>
+                  <footer class="card-actions">
+                    @if (canCreate()) {
+                      <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">
+                        <mat-icon aria-hidden="true">add_alert</mat-icon>
+                        Ajouter un rappel
+                      </button>
+                    }
+                    <span class="sr-only">Étape : {{ column.label }}</span>
+                  </footer>
+                </article>
+              } @empty {
+                <div class="column-empty-state" aria-hidden="true">
+                  <mat-icon class="column-empty-icon">inbox</mat-icon>
+                  <span>Aucune opportunité</span>
                 </div>
-                <footer class="card-actions">
-                  @if (canCreate()) {
-                    <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">
-                      <mat-icon aria-hidden="true">add_alert</mat-icon>
-                      Ajouter un rappel
-                    </button>
-                  }
-                  <span class="sr-only">Étape : {{ column.label }}</span>
-                </footer>
-              </article>
-            } @empty {
-              <p class="column-empty">Aucune opportunité</p>
-            }
+              }
+            </div>
           </section>
         }
       </div>
