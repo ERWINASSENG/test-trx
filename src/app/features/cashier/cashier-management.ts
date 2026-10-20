@@ -497,7 +497,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public ngOnInit(): void {
     void this.journalService.loadJournals();
     this.cashierService.loadTransactions();
-    void this.dossierService.loadAllDossiers();
 
     // Prise en compte du paramètre d'URL journalId (ex: depuis le Tableau de bord)
     this.route.queryParams.subscribe((params) => {
@@ -741,8 +740,15 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     this.cashierService.nextPage();
   }
 
+  private ensureDossiersLoaded(): void {
+    if (this.dossierService.dossiers().length === 0 && !this.dossierService.isLoading()) {
+      void this.dossierService.loadDossiers({ limit: 50 });
+    }
+  }
+
   public async startAddInline(): Promise<void> {
     if (!this.canEdit()) return;
+    this.ensureDossiersLoaded();
 
     // Règle d'or : fermer impérativement toute ligne existante en édition avant d'ouvrir la ligne d'ajout
     if (this.editingTxId()) {
@@ -918,6 +924,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public async startInlineEdit(tx: CashierTransaction): Promise<void> {
     if (!this.canEdit() || !this.canEditTransaction(tx)) return;
+    this.ensureDossiersLoaded();
     if (this.editingTxId() === tx.id) return;
 
     // Règle d'or : une seule ligne ouverte à la fois.

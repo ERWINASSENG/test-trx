@@ -377,16 +377,30 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     this.caisseChartInstance = new Chart(ctx, config);
   }
 
-  // Charge et affiche les graphiques pour tous les journaux bancaires/additionnels
+  // Charge et affiche les graphiques pour tous les journaux bancaires/additionnels en parallèle
   private async loadAllJournalCharts(journals: Journal[]): Promise<void> {
-    for (const journal of journals) {
-      const chartData = await this.journalEntryService.getChartData(journal.id);
-      if (chartData) {
-        this.journalChartDataMap.update((map) => ({
-          ...map,
-          [journal.id]: chartData,
-        }));
-        this.renderOrUpdateJournalChart(journal.id, chartData);
+    if (journals.length === 0) return;
+    const results = await Promise.all(
+      journals.map(async (journal) => {
+        const chartData = await this.journalEntryService.getChartData(journal.id);
+        return { journalId: journal.id, chartData };
+      })
+    );
+
+    const updates: Record<string, JournalChartData> = {};
+    for (const item of results) {
+      if (item.chartData) {
+        updates[item.journalId] = item.chartData;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      this.journalChartDataMap.update((map) => ({
+        ...map,
+        ...updates,
+      }));
+      for (const [journalId, chartData] of Object.entries(updates)) {
+        this.renderOrUpdateJournalChart(journalId, chartData);
       }
     }
   }

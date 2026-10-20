@@ -245,11 +245,52 @@ const loadAccessRulesFromDatabase = async (
   };
 };
 
+export const ACCESS_RULES_CACHE_TTL_MS = 60_000;
+
+interface CachedAccessRules {
+  rules: LoadedAccessRules | null;
+  cachedAt: number;
+}
+
+const accessRulesCache = new Map<string, CachedAccessRules>();
+
 export const clearAccessRulesCache = (userId?: string): void => {
-  void userId;
+  if (userId) {
+    accessRulesCache.delete(userId);
+  } else {
+    accessRulesCache.clear();
+  }
 };
 
-export const loadAccessRules = createAccessRulesLoader(loadAccessRulesFromDatabase);
+const rawLoadAccessRules = createAccessRulesLoader(loadAccessRulesFromDatabase);
+
+export const loadAccessRules = async (
+  userId: string,
+  profile?: ServerUserProfile | null,
+  skipCache = false
+): Promise<LoadedAccessRules | null> => {
+  const now = Date.now();
+  if (!skipCache) {
+    const cached = accessRulesCache.get(userId);
+    if (cached && now - cached.cachedAt < ACCESS_RULES_CACHE_TTL_MS) {
+      return cached.rules;
+    }
+  }
+
+  try {
+    const rules = await rawLoadAccessRules(userId, profile);
+    if (rules !== null) {
+      accessRulesCache.set(userId, { rules, cachedAt: Date.now() });
+    }
+    return rules;
+  } catch (error) {
+    const existing = accessRulesCache.get(userId);
+    if (existing?.rules) {
+      return existing.rules;
+    }
+    throw error;
+  }
+};
 
 export const resolveEffectivePermissions = async (
   userId: string,
@@ -422,3 +463,5 @@ export const requestHasPermission = (
 
   return evaluatePermission(actor.id, permissionKey, resource, accessRules);
 };
+
+
