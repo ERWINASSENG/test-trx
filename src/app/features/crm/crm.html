@@ -99,14 +99,13 @@
                     <span>{{ opportunity.destination || 'Destination à définir' }}</span>
                   </div>
                 }
-                <div class="opportunity-value">{{ formatAmount(opportunity.estimatedValue, opportunity.currency) }}</div>
                 <div class="card-meta">
-                  <span class="meta-item"><mat-icon aria-hidden="true">person</mat-icon>{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
+                  <span class="meta-item">{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
                   @if (opportunity.expectedCloseDate) {
-                    <span class="meta-item"><mat-icon aria-hidden="true">event</mat-icon>{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
+                    <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
                   }
                   @if (opportunity.assignedToName) {
-                    <span class="meta-item"><mat-icon aria-hidden="true">badge</mat-icon>{{ opportunity.assignedToName }}</span>
+                    <span class="meta-item">{{ opportunity.assignedToName }}</span>
                   }
                 </div>
                 <div class="card-links">
