@@ -54,11 +54,9 @@ export interface AccessControlUser {
 export class AccessControlService {
   private static readonly PERMISSIONS_CACHE_TTL_MS = 300_000;
   private static readonly GET_CACHE_TTL_MS = 30_000;
-  private static readonly PERMISSIONS_STORAGE_KEY_PREFIX = 'transmex_effective_permissions_';
   private readonly authService = inject(AuthService);
   private permissionsUserId: string | null | undefined;
   private permissionsLoadedUserId: string | null = null;
-  private permissionsCachedUserId: string | null = null;
   private permissionsLoadedAt = 0;
   private permissionsRequestVersion = 0;
   private permissionsRequest: {
@@ -99,36 +97,6 @@ export class AccessControlService {
       this.authService.currentUser();
       this.resetForAccountChange();
     });
-  }
-
-  private readCachedPermissions(userId: string | null): EffectivePermission[] | null {
-    if (!userId || typeof window === 'undefined' || !window.localStorage) return null;
-    try {
-      const raw = localStorage.getItem(`${AccessControlService.PERMISSIONS_STORAGE_KEY_PREFIX}${userId}`);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as EffectivePermission[]) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private writeCachedPermissions(userId: string, permissions: readonly EffectivePermission[]): void {
-    if (!userId || typeof window === 'undefined' || !window.localStorage) return;
-    try {
-      localStorage.setItem(`${AccessControlService.PERMISSIONS_STORAGE_KEY_PREFIX}${userId}`, JSON.stringify(permissions));
-    } catch {
-      // Ignorer les quotas ou indisponibilités de stockage
-    }
-  }
-
-  private clearCachedPermissions(userId: string | null): void {
-    if (!userId || typeof window === 'undefined' || !window.localStorage) return;
-    try {
-      localStorage.removeItem(`${AccessControlService.PERMISSIONS_STORAGE_KEY_PREFIX}${userId}`);
-    } catch {
-      // Ignorer les erreurs de stockage
-    }
   }
 
   private static readonly MODULE_PERMISSION_PREFIXES: Readonly<Record<string, readonly string[]>> = {
@@ -172,9 +140,7 @@ export class AccessControlService {
     if (!currentUser || currentUser.isActive === false) {
       return false;
     }
-    const permissionsBelongToCurrentUser =
-      this.permissionsLoadedUserId === currentUser.id ||
-      this.permissionsCachedUserId === currentUser.id;
+    const permissionsBelongToCurrentUser = this.permissionsLoadedUserId === currentUser.id;
 
     // 1. Règle d'or : l'administrateur système actif possède tous les droits
     if (this.authService.isAdmin() || currentUser.role === 'admin') {
@@ -273,13 +239,10 @@ export class AccessControlService {
       ) return false;
 
       if (result.success) {
-        const perms = result.data?.permissions || [];
-        this._effectivePermissions.set(perms);
+        this._effectivePermissions.set(result.data?.permissions || []);
         this.permissionsLoadedUserId = requestedUserId;
-        this.permissionsCachedUserId = requestedUserId;
         this.permissionsLoadedAt = Date.now();
         this._error.set(null);
-        this.writeCachedPermissions(requestedUserId, perms);
       } else {
         // Sécurité : si l'échec n'est pas une simple indisponibilité transitoire (ex. 401/403)
         // ou qu'aucune permission validée n'appartient à cet utilisateur, on purge immédiatement.
@@ -291,9 +254,7 @@ export class AccessControlService {
         if (!canPreserveExistingPermissions) {
           this._effectivePermissions.set([]);
           this.permissionsLoadedUserId = null;
-          this.permissionsCachedUserId = null;
           this.permissionsLoadedAt = 0;
-          this.clearCachedPermissions(requestedUserId);
         }
         this._error.set(result.error || 'Impossible de charger les permissions.');
       }
@@ -313,25 +274,15 @@ export class AccessControlService {
     if (this.permissionsUserId === userId) return;
 
     this.permissionsUserId = userId;
+    this.permissionsLoadedUserId = null;
+    this.permissionsLoadedAt = 0;
     this.permissionsRequestVersion += 1;
     this.permissionsRequest = null;
     this.getResponseCache.clear();
     this._roles.set([]);
     this._users.set([]);
     this._permissions.set([]);
-
-    // Restauration synchrone immédiate (0 ms) des permissions depuis le cache local (Stale-While-Revalidate)
-    const cachedPermissions = this.readCachedPermissions(userId);
-    if (cachedPermissions && cachedPermissions.length > 0) {
-      this._effectivePermissions.set(cachedPermissions);
-      this.permissionsCachedUserId = userId;
-    } else {
-      this._effectivePermissions.set([]);
-      this.permissionsCachedUserId = null;
-    }
-    this.permissionsLoadedUserId = null;
-    this.permissionsLoadedAt = 0;
-
+    this._effectivePermissions.set([]);
     this._roleGrants.set([]);
     this._selectedRole.set(null);
     this._selectedUserAccess.set(null);
