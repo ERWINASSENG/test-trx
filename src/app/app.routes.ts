@@ -54,6 +54,16 @@ export const routes: Routes = [
         title: 'Transmex - Tableau de Bord',
       },
       {
+        path: 'dashboard/crm',
+        loadComponent: () =>
+          import('./features/dashboard/dashboard-manager/crm-timing/crm-timing').then(
+            (m) => m.CrmTimingComponent
+          ),
+        canActivate: [roleGuard],
+        data: { permission: 'module.crm_performance.view' },
+        title: 'Transmex - CRM • Délais & Cotations',
+      },
+      {
         path: 'prospects',
         loadComponent: () =>
           import('./features/prospects/prospects').then((m) => m.ProspectsComponent),

@@ -6,6 +6,8 @@ import {
   QuoteRow,
   QuoteStatus,
   QuoteTemplate,
+  QuoteTimingAnalyticsResponse,
+  QuoteTimingFilter,
   SalesQuote,
   SeaFreightDetails,
 } from '../models/quote.model';
@@ -47,6 +49,9 @@ export class QuoteService {
   private readonly _templates = signal<QuoteTemplate[]>([]);
   private readonly _isLoading = signal(false);
   private readonly _error = signal<string | null>(null);
+  private readonly _timingAnalytics = signal<QuoteTimingAnalyticsResponse | null>(null);
+  private readonly _isTimingLoading = signal(false);
+  private readonly _timingError = signal<string | null>(null);
 
   public readonly quotes = computed(() => this._quotes());
   public readonly prospects = computed(() => this._prospects());
@@ -55,12 +60,46 @@ export class QuoteService {
   public readonly templates = computed(() => this._templates());
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
+  public readonly timingAnalytics = computed(() => this._timingAnalytics());
+  public readonly isTimingLoading = computed(() => this._isTimingLoading());
+  public readonly timingError = computed(() => this._timingError());
 
   constructor() {
     effect(() => {
       this.authService.currentUser();
       this.resetForAccountChange();
     });
+  }
+
+  public async loadTimingAnalytics(filter?: Partial<QuoteTimingFilter>): Promise<boolean> {
+    this.resetForAccountChange();
+    this._isTimingLoading.set(true);
+    this._timingError.set(null);
+
+    const query = new URLSearchParams();
+    if (filter?.period) query.set('period', filter.period);
+    if (filter?.date) query.set('date', filter.date);
+    if (filter?.repId && filter.repId !== 'all') query.set('repId', filter.repId);
+
+    const result = await this.request<QuoteTimingAnalyticsResponse>(
+      `/api/quotes/timing-analytics${query.size ? `?${query.toString()}` : ''}`,
+      'GET',
+      undefined,
+      false
+    );
+
+    this._isTimingLoading.set(false);
+
+    if (!this.isCurrentDataUser()) return false;
+    if (!result.success || !result.data) {
+      this._timingAnalytics.set(null);
+      this._timingError.set(result.error || 'Impossible de charger les métriques des cotations.');
+      return false;
+    }
+
+    this._timingAnalytics.set(result.data);
+    this._timingError.set(null);
+    return true;
   }
 
   public async loadQuotes(status = ''): Promise<boolean> {
@@ -374,6 +413,10 @@ export class QuoteService {
         : row['sea_freight'] && typeof row['sea_freight'] === 'object'
           ? row['sea_freight'] as import('../models/quote.model').SeaFreightDetails
           : undefined,
+      sentAt: typeof row['sentAt'] === 'string' ? row['sentAt']
+        : typeof row['sent_at'] === 'string' ? row['sent_at'] : null,
+      respondedAt: typeof row['respondedAt'] === 'string' ? row['respondedAt']
+        : typeof row['responded_at'] === 'string' ? row['responded_at'] : null,
       createdAt: String(row['createdAt'] ?? row['created_at'] ?? ''),
       updatedAt: String(row['updatedAt'] ?? row['updated_at'] ?? ''),
     };

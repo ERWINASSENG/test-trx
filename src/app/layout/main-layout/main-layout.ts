@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -37,7 +37,7 @@ type CrmView = 'pipeline' | 'clients' | 'activities' | 'campaigns';
     '(document:keydown.escape)': 'onEscape()',
   },
 })
-export class MainLayout {
+export class MainLayout implements OnInit {
   public readonly authService = inject(AuthService);
   public readonly accessControl = inject(AccessControlService);
   public readonly cashierService = inject(CashierService);
@@ -112,6 +112,12 @@ export class MainLayout {
       permissionKey: 'module.dashboard.view',
     },
     {
+      id: 'manager-crm',
+      label: 'CRM',
+      route: '/dashboard/crm',
+      permissionKey: 'module.crm_performance.view',
+    },
+    {
       id: 'caisse',
       label: 'Caisse',
       route: '/caisse',
@@ -152,6 +158,10 @@ export class MainLayout {
       return this.accessControl.hasPermission(item.permissionKey);
     });
   });
+
+  public ngOnInit(): void {
+    void this.accessControl.loadMyPermissions();
+  }
 
   public roleLabel(role: UserRole | undefined): string {
     if (!role) return 'Non défini';

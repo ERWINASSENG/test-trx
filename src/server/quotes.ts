@@ -34,6 +34,8 @@ interface QuoteMutation {
   status?: QuoteStatus;
   validUntil?: string | null;
   seaFreight?: SeaFreightDetails;
+  sentAt?: string | null;
+  respondedAt?: string | null;
 }
 
 interface QuoteActor {
@@ -431,6 +433,14 @@ const mapQuoteToDatabase = (data: QuoteMutation): Record<string, unknown> => {
   if (data.status !== undefined) result['status'] = data.status;
   if (data.validUntil !== undefined) result['valid_until'] = data.validUntil;
   if (data.seaFreight !== undefined) result['sea_freight'] = data.seaFreight;
+  if (data.sentAt !== undefined) result['sent_at'] = data.sentAt;
+  if (data.respondedAt !== undefined) result['responded_at'] = data.respondedAt;
+  if (data.status === 'sent' && result['sent_at'] === undefined) {
+    result['sent_at'] = new Date().toISOString();
+  }
+  if ((data.status === 'accepted' || data.status === 'rejected') && result['responded_at'] === undefined) {
+    result['responded_at'] = new Date().toISOString();
+  }
   if (data.columns && data.rows && data.totalColumnId) {
     const amountColumn = data.columns.find((column) => column.id === data.totalColumnId);
     if (amountColumn) {
@@ -515,6 +525,8 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   status: row['status'],
   validUntil: row['valid_until'],
   seaFreight: row['sea_freight'] ?? {},
+  sentAt: row['sent_at'] ?? null,
+  respondedAt: row['responded_at'] ?? null,
   createdAt: row['created_at'],
   updatedAt: row['updated_at'],
 });
@@ -1232,4 +1244,217 @@ export const deleteQuoteTemplateHandler = async (req: express.Request, res: expr
     return;
   }
   res.json({ deleted: true });
+};
+
+export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  if (!adminClient || !actor?.id) {
+    if (!actor?.id) res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+
+  // Contrôle de sécurité RBAC : permission obligatoire quotes.timing.read
+  const hasTimingPermission = await hasPermission(actor.id, 'quotes.timing.read', undefined);
+  if (!hasTimingPermission) {
+    res.status(403).json({ error: 'Permission quotes.timing.read requise pour consulter les délais des cotations.' });
+    return;
+  }
+
+  const period = typeof req.query['period'] === 'string' ? req.query['period'] : 'month';
+  const specificDate = typeof req.query['date'] === 'string' ? req.query['date'] : null;
+  const repFilter = typeof req.query['repId'] === 'string' && req.query['repId'] !== 'all' ? req.query['repId'] : null;
+
+  // Calcul des bornes temporelles
+  const now = new Date();
+  let startDate: Date;
+  let endDate: Date = now;
+
+  if (specificDate && /^\d{4}-\d{2}-\d{2}$/.test(specificDate)) {
+    startDate = new Date(`${specificDate}T00:00:00.000Z`);
+    endDate = new Date(`${specificDate}T23:59:59.999Z`);
+  } else if (period === '7d') {
+    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (period === 'quarter') {
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+  } else if (period === 'year') {
+    startDate = new Date(now.getFullYear(), 0, 1);
+  } else {
+    // Par défaut : mois courant
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  let query = adminClient
+    .from('sales_quotes')
+    .select('*')
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (repFilter) {
+    query = query.eq('assigned_to', repFilter);
+  }
+
+  const { data: quoteRows, error: quotesError } = await query;
+  if (quotesError) {
+    sendQuoteDatabaseError(res, quotesError);
+    return;
+  }
+
+  const prospectIds = [...new Set((quoteRows || []).map((q) => String(q.prospect_id)).filter(Boolean))];
+  const repIds = [...new Set((quoteRows || []).map((q) => String(q.assigned_to)).filter(Boolean))];
+
+  const [prospectsRes, repsRes] = await Promise.all([
+    prospectIds.length
+      ? adminClient.from('prospects').select('id, name, company_name').in('id', prospectIds)
+      : { data: [], error: null },
+    repIds.length
+      ? adminClient.from('profiles').select('id, first_name, last_name, email').in('id', repIds)
+      : { data: [], error: null },
+  ]);
+
+  const prospectMap = new Map((prospectsRes.data || []).map((p) => [String(p.id), String(p.company_name || p.name)]));
+  const repMap = new Map((repsRes.data || []).map((r) => [String(r.id), `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || 'Commercial']));
+
+  const formatMinutes = (totalMin: number): string => {
+    if (totalMin < 0 || !Number.isFinite(totalMin)) return '0m';
+    const hours = Math.floor(totalMin / 60);
+    const mins = Math.floor(totalMin % 60);
+    if (hours === 0) return `${mins}m`;
+    return `${hours}h ${mins.toString().padStart(2, '0')}m`;
+  };
+
+  let totalCommercialDelayMin = 0;
+  let delayCount = 0;
+  let slaCompliantCount = 0;
+  let inProgressCount = 0;
+  let overdueCount = 0;
+  let totalAmount = 0;
+  let acceptedCount = 0;
+
+  const repStats = new Map<string, {
+    repId: string;
+    repName: string;
+    totalQuotes: number;
+    totalDelayMin: number;
+    slaOkCount: number;
+    acceptedCount: number;
+    totalAmount: number;
+  }>();
+
+  const formattedQuotes = (quoteRows || []).map((row) => {
+    const createdAt = new Date(row.created_at).getTime();
+    const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : null;
+    const updatedAt = new Date(row.updated_at).getTime();
+    const respondedAt = row.responded_at ? new Date(row.responded_at).getTime() : null;
+    const status = String(row.status || 'draft');
+    const amount = Number(row.total_amount || 0);
+    const repId = row.assigned_to ? String(row.assigned_to) : 'unassigned';
+    const repName = repMap.get(repId) || 'Non assigné';
+    const clientName = prospectMap.get(String(row.prospect_id)) || 'Client';
+
+    let commercialMinutes: number;
+    if (sentAt) {
+      commercialMinutes = Math.max(0, Math.round((sentAt - createdAt) / 60000));
+    } else if (status === 'sent' || status === 'accepted' || status === 'rejected') {
+      commercialMinutes = Math.max(0, Math.round((updatedAt - createdAt) / 60000));
+    } else {
+      commercialMinutes = Math.max(0, Math.round((Date.now() - createdAt) / 60000));
+    }
+
+    let clientMinutes: number | null = null;
+    if (respondedAt && sentAt) {
+      clientMinutes = Math.max(0, Math.round((respondedAt - sentAt) / 60000));
+    } else if (status === 'accepted' || status === 'rejected') {
+      const baseSent = sentAt || createdAt;
+      clientMinutes = Math.max(0, Math.round((updatedAt - baseSent) / 60000));
+    }
+
+    const isSlaBreach = commercialMinutes > 1440; // > 24h
+    const isOverdue = (status === 'draft' && commercialMinutes > 2880) || (status === 'draft' && isSlaBreach);
+
+    totalCommercialDelayMin += commercialMinutes;
+    delayCount++;
+    totalAmount += amount;
+
+    if (!isSlaBreach) slaCompliantCount++;
+    if (status === 'draft') inProgressCount++;
+    if (isOverdue) overdueCount++;
+    if (status === 'accepted') acceptedCount++;
+
+    if (repId !== 'unassigned') {
+      const existing = repStats.get(repId) || {
+        repId,
+        repName,
+        totalQuotes: 0,
+        totalDelayMin: 0,
+        slaOkCount: 0,
+        acceptedCount: 0,
+        totalAmount: 0,
+      };
+      existing.totalQuotes++;
+      existing.totalDelayMin += commercialMinutes;
+      if (!isSlaBreach) existing.slaOkCount++;
+      if (status === 'accepted') existing.acceptedCount++;
+      existing.totalAmount += amount;
+      repStats.set(repId, existing);
+    }
+
+    return {
+      id: String(row.id),
+      quoteNumber: String(row.quote_number),
+      clientName,
+      details: row.title || 'Cotation Fret Maritime',
+      repId,
+      repName,
+      amount,
+      amountFormatted: new Intl.NumberFormat('fr-FR').format(amount) + ' XAF',
+      status,
+      commercialMinutes,
+      commercialDelayFormatted: formatMinutes(commercialMinutes),
+      clientMinutes,
+      clientDelayFormatted: clientMinutes !== null ? formatMinutes(clientMinutes) : (status === 'sent' ? 'En attente' : '—'),
+      isSlaBreach,
+      isOverdue,
+      date: new Date(row.created_at).toISOString().slice(0, 10),
+      createdAtFormatted: new Date(row.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      sentAtFormatted: sentAt ? new Date(sentAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : (status === 'sent' ? 'Envoyé' : 'En cours'),
+      respondedAtFormatted: respondedAt ? new Date(respondedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—',
+    };
+  });
+
+  const totalQuotes = delayCount;
+  const avgCommercialDelayMinutes = totalQuotes > 0 ? Math.round(totalCommercialDelayMin / totalQuotes) : 0;
+  const slaComplianceRate = totalQuotes > 0 ? Math.round((slaCompliantCount / totalQuotes) * 1000) / 10 : 100;
+  const conversionRate = totalQuotes > 0 ? Math.round((acceptedCount / totalQuotes) * 1000) / 10 : 0;
+
+  const repsArray = Array.from(repStats.values()).map((r) => ({
+    repId: r.repId,
+    repName: r.repName,
+    quotesCount: r.totalQuotes,
+    avgDelayFormatted: formatMinutes(r.totalQuotes > 0 ? Math.round(r.totalDelayMin / r.totalQuotes) : 0),
+    slaRateFormatted: `${r.totalQuotes > 0 ? Math.round((r.slaOkCount / r.totalQuotes) * 100) : 100}% (${r.slaOkCount}/${r.totalQuotes})`,
+    conversionRateFormatted: `${r.totalQuotes > 0 ? Math.round((r.acceptedCount / r.totalQuotes) * 1000) / 10 : 0}%`,
+    totalAmount: r.totalAmount,
+    totalAmountFormatted: new Intl.NumberFormat('fr-FR').format(r.totalAmount) + ' XAF',
+  }));
+
+  res.json({
+    kpis: {
+      avgDelayFormatted: totalQuotes > 0 ? formatMinutes(avgCommercialDelayMinutes) : '—',
+      avgDelayMinutes: avgCommercialDelayMinutes,
+      slaComplianceRateFormatted: `${slaComplianceRate}%`,
+      slaCompliancePercent: slaComplianceRate,
+      inProgressCount,
+      overdueCount,
+      totalAmount,
+      totalAmountFormatted: new Intl.NumberFormat('fr-FR').format(totalAmount) + ' XAF',
+      conversionRateFormatted: `${conversionRate}%`,
+      conversionPercent: conversionRate,
+    },
+    quotes: formattedQuotes,
+    reps: repsArray,
+    totalCount: totalQuotes,
+  });
 };

@@ -35,6 +35,7 @@ export const MODULE_CAPABILITY_PREFIXES: Readonly<Record<string, readonly string
   'module.prospects.view': ['prospects.'],
   'module.quotes.view': ['quotes.'],
   'module.crm.view': ['crm.'],
+  'module.crm_performance.view': ['quotes.timing.'],
   'module.dossiers.view': ['dossiers.'],
   'module.configuration.view': ['configuration.', 'journals.create', 'journals.update', 'journals.delete'],
   'module.access_control.view': ['access.'],

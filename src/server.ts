@@ -46,6 +46,7 @@ import {
   createQuoteTemplateHandler,
   deleteQuoteHandler,
   deleteQuoteTemplateHandler,
+  getQuoteTimingAnalyticsHandler,
   listQuoteAssigneesHandler,
   listQuoteProspectsHandler,
   listQuoteContactsHandler,
@@ -1247,6 +1248,7 @@ app.patch('/api/journals/:journalId/entries/:id', requireAuth, requirePermission
 app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.delete', resolveJournalOwnerContext), deleteJournalEntryHandler);
 
 // Module Cotations : l'API applique en plus les règles de propriété des commerciaux.
+app.get('/api/quotes/timing-analytics', requireAuth, requirePermission('quotes.timing.read'), getQuoteTimingAnalyticsHandler);
 app.get('/api/quotes/assignees', requireAuth, requirePermission('quotes.assign'), listQuoteAssigneesHandler);
 app.get('/api/quotes/prospects', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteProspectsHandler);
 app.get('/api/quotes/contacts', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteContactsHandler);

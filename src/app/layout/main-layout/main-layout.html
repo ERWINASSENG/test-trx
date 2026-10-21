@@ -97,7 +97,7 @@
                 <a
                   [routerLink]="item.route"
                   routerLinkActive="active"
-                  [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+                  [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' || item.route === '/dashboard/crm' }"
                   class="nav-link flex items-center gap-1.5 text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer"
                   [id]="item.id">
                   <span class="whitespace-nowrap">{{ item.label }}</span>
@@ -400,7 +400,7 @@
               <a
                 [routerLink]="item.route"
                 routerLinkActive="active"
-                [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+                [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' || item.route === '/dashboard/crm' }"
                 (click)="closeMenu()"
                 class="nav-link flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                 [id]="item.id + '-mobile'">

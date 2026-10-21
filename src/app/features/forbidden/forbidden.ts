@@ -11,6 +11,7 @@ const MODULE_LABELS: Record<string, string> = {
   'module.prospects.view': 'Contacts & Prospects',
   'module.quotes.view': 'Cotations Commerciales',
   'module.crm.view': 'CRM Commercial',
+  'module.crm_performance.view': 'CRM • Délais des Cotations',
   'module.dossiers.view': 'Gestion des Dossiers',
   'module.configuration.view': 'Configuration & Journaux',
   'module.access_control.view': 'Gestion des Accès',

@@ -87,6 +87,8 @@ export interface SalesQuote {
   status: QuoteStatus;
   validUntil: string | null;
   seaFreight?: SeaFreightDetails;
+  sentAt?: string | null;
+  respondedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,4 +117,67 @@ export interface QuoteAssignee {
   firstName: string;
   lastName: string;
   email: string;
+}
+
+export interface QuoteTimingItem {
+  id: string;
+  quoteNumber: string;
+  clientName: string;
+  details: string;
+  repId: string;
+  repName: string;
+  amount: number;
+  amountFormatted: string;
+  status: string;
+  commercialMinutes: number;
+  commercialDelayFormatted: string;
+  clientMinutes: number | null;
+  clientDelayFormatted: string;
+  isSlaBreach: boolean;
+  isOverdue: boolean;
+  date: string;
+  createdAtFormatted: string;
+  sentAtFormatted: string;
+  respondedAtFormatted: string;
+}
+
+export interface SalesRepPerformance {
+  repId: string;
+  repName: string;
+  quotesCount: number;
+  avgDelayFormatted: string;
+  slaRateFormatted: string;
+  conversionRateFormatted: string;
+  totalAmount: number;
+  totalAmountFormatted: string;
+}
+
+export interface QuoteTimingKpis {
+  avgDelayFormatted: string;
+  avgDelayMinutes: number;
+  slaComplianceRateFormatted: string;
+  slaCompliancePercent: number;
+  inProgressCount: number;
+  overdueCount: number;
+  totalAmount: number;
+  totalAmountFormatted: string;
+  conversionRateFormatted: string;
+  conversionPercent: number;
+}
+
+export interface QuoteTimingAnalyticsResponse {
+  kpis: QuoteTimingKpis;
+  quotes: QuoteTimingItem[];
+  reps: SalesRepPerformance[];
+  totalCount: number;
+}
+
+export type QuoteTimingPeriod = '7d' | 'month' | 'quarter' | 'year' | 'day';
+
+export interface QuoteTimingFilter {
+  period: QuoteTimingPeriod;
+  date?: string | null;
+  repId?: string;
+  search?: string;
+  status?: string;
 }

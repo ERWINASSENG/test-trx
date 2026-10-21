@@ -335,4 +335,69 @@ describe('AccessControlService', () => {
     expect(service.hasPermission('module.accounting.view')).toBe(false);
     expect(service.hasPermission('apps.view')).toBe(true);
   });
+
+  it('déduit automatiquement la visibilité de module.crm_performance.view quand quotes.timing.read est accordée', async () => {
+    currentUser.set({
+      id: 'manager-user',
+      email: 'manager@example.test',
+      firstName: 'Manager',
+      lastName: 'Test',
+      role: 'manager',
+      isActive: true,
+      createdAt: '2026-10-03T00:00:00.000Z',
+    });
+    currentRole.set('manager');
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        permissions: [{
+          permissionKey: 'quotes.timing.read',
+          scope: { type: 'all', version: 1 },
+          effect: 'allow',
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await service.loadMyPermissions();
+    expect(service.hasPermission('quotes.timing.read')).toBe(true);
+    expect(service.hasPermission('module.crm_performance.view')).toBe(true);
+  });
+
+  it('autorise module.crm.view pour le rôle manager disposant des permissions CRM', async () => {
+    currentUser.set({
+      id: 'manager-user',
+      email: 'manager@example.test',
+      firstName: 'Manager',
+      lastName: 'Test',
+      role: 'manager',
+      isActive: true,
+      createdAt: '2026-10-03T00:00:00.000Z',
+    });
+    currentRole.set('manager');
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        permissions: [
+          {
+            permissionKey: 'crm.read',
+            scope: { type: 'all', version: 1 },
+            effect: 'allow',
+          },
+          {
+            permissionKey: 'module.crm.view',
+            scope: { type: 'all', version: 1 },
+            effect: 'allow',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await service.loadMyPermissions();
+    expect(service.hasPermission('module.crm.view')).toBe(true);
+    expect(service.hasPermission('crm.read')).toBe(true);
+  });
 });
