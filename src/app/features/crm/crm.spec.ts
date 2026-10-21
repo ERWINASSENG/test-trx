@@ -118,6 +118,7 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
       createContact: vi.fn(),
       createOpportunity: vi.fn(),
       updateOpportunity: vi.fn().mockResolvedValue({ success: true }),
+      updateOpportunityStageOptimistic: vi.fn().mockResolvedValue({ success: true }),
       createActivity: vi.fn(),
       updateActivityStatus: vi.fn(),
       createCampaign: vi.fn(),
@@ -262,7 +263,7 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
     component.onOpportunityDrop(event);
     await Promise.resolve();
 
-    expect(component.crmService.updateOpportunity).toHaveBeenCalledWith('opp-1', { stage: 'negotiation' });
+    expect(component.crmService.updateOpportunityStageOptimistic).toHaveBeenCalledWith('opp-1', 'negotiation');
   });
 
   it('permet à un commercial de faire revenir une opportunité en arrière via onOpportunityDrop', async () => {
@@ -272,7 +273,7 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
     component.onOpportunityDrop(event);
     await Promise.resolve();
 
-    expect(component.crmService.updateOpportunity).toHaveBeenCalledWith('opp-1', { stage: 'qualified' });
+    expect(component.crmService.updateOpportunityStageOptimistic).toHaveBeenCalledWith('opp-1', 'qualified');
   });
 
   it('ne fait rien lors d\'un drop dans la même colonne', () => {
@@ -302,5 +303,36 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
     component.onOpportunityDrop(event);
     expect(component.dialog()).toBe('win');
     expect(component.dialogOpportunityId()).toBe('opp-1');
+  });
+
+  it('ouvre la boîte de dialogue en édition au clic sur une opportunité et préremplit le brouillon', () => {
+    const opp = mockOpportunities[0];
+    component.openOpportunityDialog(opp);
+
+    expect(component.dialog()).toBe('opportunity');
+    expect(component.editingOpportunityId()).toBe('opp-1');
+    expect(component.opportunityDraft().title).toBe('Expédition conteneurs Le Havre - Douala');
+    expect(component.opportunityDraft().transportMode).toBe('sea');
+    expect(component.opportunityDraft().direction).toBe('import');
+    expect(component.opportunityDraft().origin).toBe('Le Havre');
+    expect(component.opportunityDraft().destination).toBe('Douala');
+  });
+
+  it('sauvegarde les modifications d’une opportunité existante via updateOpportunity', async () => {
+    const opp = mockOpportunities[0];
+    component.openOpportunityDialog(opp);
+
+    component.setOpportunity('title', 'Titre mis à jour');
+    component.setOpportunity('transportMode', 'air');
+    await component.saveOpportunity();
+
+    expect(component.crmService.updateOpportunity).toHaveBeenCalledWith(
+      'opp-1',
+      expect.objectContaining({
+        title: 'Titre mis à jour',
+        transportMode: 'air',
+      })
+    );
+    expect(component.feedback()).toBe('Opportunité mise à jour avec succès.');
   });
 });

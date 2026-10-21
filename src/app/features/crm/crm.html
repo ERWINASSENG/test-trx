@@ -80,10 +80,15 @@
               [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
               @for (opportunity of column.opportunities; track opportunity.id) {
                 <article
-                  class="opportunity-card"
+                  class="opportunity-card interactive-card"
                   cdkDrag
                   [cdkDragData]="opportunity"
-                  [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()">
+                  [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()"
+                  (click)="openOpportunityDialog(opportunity)"
+                  (keydown.enter)="openOpportunityDialog(opportunity)"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="'Modifier l’opportunité ' + opportunity.title">
                   <div class="card-topline">
                     <div class="card-badges">
                       <span class="tag-badge mode">{{ modeLabel(opportunity.transportMode) }}</span>
@@ -101,9 +106,13 @@
                       <span class="route-arrow">→</span>
                       <span>{{ opportunity.destination || 'Destination à définir' }}</span>
                     </div>
+                  } @else {
+                    <div class="trade-lane-route unset">
+                      <mat-icon aria-hidden="true">route</mat-icon>
+                      <span>Trajet à définir</span>
+                    </div>
                   }
                   <div class="card-meta">
-                    <span class="meta-item">{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
                     @if (opportunity.expectedCloseDate) {
                       <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
                     }
@@ -111,40 +120,43 @@
                       <span class="meta-item">{{ opportunity.assignedToName }}</span>
                     }
                   </div>
-                  <div class="card-links">
-                    @if (opportunity.quoteNumber) {
-                      <a class="linked-record" [routerLink]="['/quotes']"
-                        [queryParams]="{ quoteId: opportunity.quoteId }">
-                        <mat-icon aria-hidden="true">receipt_long</mat-icon>
-                        {{ opportunity.quoteNumber }}
-                      </a>
-                      @if (opportunity.quoteStatus) {
-                        <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                  @if (opportunity.quoteNumber || opportunity.dossierNumber || (opportunity.stage === 'won' && canCreate())) {
+                    <div class="card-links">
+                      @if (opportunity.quoteNumber) {
+                        <a class="linked-record" [routerLink]="['/quotes']"
+                          [queryParams]="{ quoteId: opportunity.quoteId }"
+                          (click)="$event.stopPropagation()">
+                          <mat-icon aria-hidden="true">receipt_long</mat-icon>
+                          {{ opportunity.quoteNumber }}
+                        </a>
+                        @if (opportunity.quoteStatus) {
+                          <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                        }
                       }
-                    } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
-                      <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
-                        <mat-icon aria-hidden="true">add</mat-icon>
-                        Créer une cotation
-                      </a>
-                    }
-                    @if (opportunity.dossierNumber) {
-                      <a class="linked-record" [routerLink]="['/dossiers']"
-                        [queryParams]="{ dossierId: opportunity.dossierId }">
-                        <mat-icon aria-hidden="true">folder</mat-icon>
-                        {{ opportunity.dossierNumber }}
-                      </a>
-                    } @else if (opportunity.stage === 'won' && canCreate()) {
-                      <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
-                        <mat-icon aria-hidden="true">folder_open</mat-icon>
-                        Créer le dossier
-                      </button>
-                    }
-                  </div>
+                      @if (opportunity.dossierNumber) {
+                        <a class="linked-record" [routerLink]="['/dossiers']"
+                          [queryParams]="{ dossierId: opportunity.dossierId }"
+                          (click)="$event.stopPropagation()">
+                          <mat-icon aria-hidden="true">folder</mat-icon>
+                          {{ opportunity.dossierNumber }}
+                        </a>
+                      } @else if (opportunity.stage === 'won' && canCreate()) {
+                        <button type="button" class="text-link" (click)="openDossierDialog(opportunity); $event.stopPropagation()">
+                          <mat-icon aria-hidden="true">folder_open</mat-icon>
+                          Créer le dossier
+                        </button>
+                      }
+                    </div>
+                  }
                   <footer class="card-actions">
+                    @if (!opportunity.quoteNumber && opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
+                      <a class="text-link action-button" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }" (click)="$event.stopPropagation()">
+                        Cotation
+                      </a>
+                    }
                     @if (canCreate()) {
-                      <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">
-                        <mat-icon aria-hidden="true">add_alert</mat-icon>
-                        Ajouter un rappel
+                      <button type="button" class="icon-text-action action-button" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
+                        Rappel
                       </button>
                     }
                     <span class="sr-only">Étape : {{ column.label }}</span>
@@ -412,7 +424,7 @@
   <div class="crm-backdrop" role="presentation" tabindex="-1" (click)="closeDialog()" (keydown.escape)="closeDialog()">
     <section class="crm-dialog" role="dialog" aria-modal="true" tabindex="-1" [attr.aria-labelledby]="'dialog-title-' + dialog()" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
       <header class="dialog-header"><div><p class="crm-eyebrow">CRM Commercial</p>
-        <h2 [id]="'dialog-title-' + dialog()">{{ dialog() === 'client' ? 'Nouvelle société' : dialog() === 'opportunity' ? 'Nouvelle opportunité' : dialog() === 'activity' ? 'Planifier un rappel' : dialog() === 'campaign' ? 'Planifier une campagne' : dialog() === 'win' ? 'Confirmer un contrat signé' : dialog() === 'dossier' ? 'Créer un dossier d’expédition' : 'Ajouter un contact' }}</h2>
+        <h2 [id]="'dialog-title-' + dialog()">{{ dialog() === 'client' ? 'Nouvelle société' : dialog() === 'opportunity' ? (editingOpportunityId() ? 'Modifier l’opportunité' : 'Nouvelle opportunité') : dialog() === 'activity' ? 'Planifier un rappel' : dialog() === 'campaign' ? 'Planifier une campagne' : dialog() === 'win' ? 'Confirmer un contrat signé' : dialog() === 'dossier' ? 'Créer un dossier d’expédition' : 'Ajouter un contact' }}</h2>
       </div><button type="button" class="close-action" (click)="closeDialog()">Fermer</button></header>
 
       @if (formError()) { <p class="crm-error" role="alert">{{ formError() }}</p> }
@@ -438,7 +450,7 @@
           <div class="form-three"><label>Poids (kg)<input name="weightKg" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().weightKg" (ngModelChange)="setOpportunity('weightKg', $event)" /></label><label>Volume (m³)<input name="volumeM3" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().volumeM3" (ngModelChange)="setOpportunity('volumeM3', $event)" /></label><label>Incoterm<input name="incoterm" maxlength="20" [ngModel]="opportunityDraft().incoterm" (ngModelChange)="setOpportunity('incoterm', $event)" /></label></div>
           <div class="form-three"><label>Valeur estimée<input name="estimatedValue" type="number" min="0" step="0.01" [ngModel]="opportunityDraft().estimatedValue" (ngModelChange)="setOpportunity('estimatedValue', $event)" /></label><label>Devise<input name="currency" maxlength="3" [ngModel]="opportunityDraft().currency" (ngModelChange)="setOpportunity('currency', $event)" /></label><label>Clôture prévue<input name="expectedCloseDate" type="date" [ngModel]="opportunityDraft().expectedCloseDate" (ngModelChange)="setOpportunity('expectedCloseDate', $event)" /></label></div>
           <label>Notes<textarea name="notes" rows="2" maxlength="10000" [ngModel]="opportunityDraft().notes" (ngModelChange)="setOpportunity('notes', $event)"></textarea></label>
-          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Ajouter au pipeline</button></footer>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">{{ editingOpportunityId() ? 'Enregistrer les modifications' : 'Ajouter au pipeline' }}</button></footer>
         </form>
       }
 

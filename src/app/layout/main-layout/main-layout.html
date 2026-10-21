@@ -35,7 +35,7 @@
 
         <!-- Navigation Métier Horizontale (overflow-visible pour laisser flotter les menus déroulants) -->
         @if (isCrmRoute()) {
-          <nav class="hidden md:flex items-center gap-1 lg:gap-2 overflow-visible select-none" id="topbar-crm-nav" aria-label="Navigation du CRM Commercial">
+          <nav class="flex items-center gap-1 sm:gap-2 overflow-visible select-none" id="topbar-crm-nav" aria-label="Navigation du CRM Commercial">
             @for (item of crmMenuItems; track item.id) {
               <a
                 [routerLink]="['/crm-commercial']"
@@ -49,7 +49,7 @@
             }
           </nav>
         } @else {
-          <nav class="hidden md:flex items-center gap-3 lg:gap-4 overflow-visible select-none" id="topbar-main-nav">
+          <nav class="flex items-center gap-2 sm:gap-3 lg:gap-4 overflow-visible select-none" id="topbar-main-nav">
             @for (item of visibleMenuItems(); track item.id) {
               @if (item.id === 'configuration') {
                 <div class="relative overflow-visible" id="config-dropdown-container">

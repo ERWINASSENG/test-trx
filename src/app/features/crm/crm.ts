@@ -145,6 +145,7 @@ export class CrmComponent {
   public readonly focusedOpportunityId = signal<string | null>(null);
   public readonly focusedActivityId = signal<string | null>(null);
   public readonly dialogOpportunityId = signal<string | null>(null);
+  public readonly editingOpportunityId = signal<string | null>(null);
   public readonly opportunityDraft = signal<OpportunityDraft>({ ...EMPTY_OPPORTUNITY });
   public readonly clientDraft = signal({
     companyName: '',
@@ -542,9 +543,33 @@ export class CrmComponent {
     this.openDialog('client');
   }
 
-  public openOpportunityDialog(clientId?: string): void {
+  public openOpportunityDialog(target?: string | CrmOpportunity): void {
+    if (typeof target === 'object' && target !== null) {
+      if (!this.canUpdate()) return;
+      this.editingOpportunityId.set(target.id);
+      this.opportunityDraft.set({
+        prospectId: target.prospectId,
+        title: target.title,
+        transportMode: target.transportMode || '',
+        direction: target.direction || '',
+        origin: target.origin || '',
+        destination: target.destination || '',
+        goodsDescription: target.goodsDescription || '',
+        weightKg: target.weightKg !== null && target.weightKg !== undefined ? String(target.weightKg) : '',
+        volumeM3: target.volumeM3 !== null && target.volumeM3 !== undefined ? String(target.volumeM3) : '',
+        incoterm: target.incoterm || '',
+        estimatedValue: target.estimatedValue ? String(target.estimatedValue) : '',
+        currency: target.currency || 'XAF',
+        expectedCloseDate: target.expectedCloseDate || '',
+        notes: target.notes || '',
+      });
+      this.openDialog('opportunity');
+      return;
+    }
+
     if (!this.canCreate()) return;
-    this.opportunityDraft.set({ ...EMPTY_OPPORTUNITY, prospectId: clientId || '' });
+    this.editingOpportunityId.set(null);
+    this.opportunityDraft.set({ ...EMPTY_OPPORTUNITY, prospectId: target || '' });
     this.openDialog('opportunity');
   }
 
@@ -593,6 +618,7 @@ export class CrmComponent {
   public closeDialog(): void {
     if (this.isSaving()) return;
     this.dialog.set(null);
+    this.editingOpportunityId.set(null);
     this.formError.set(null);
   }
 
@@ -626,21 +652,43 @@ export class CrmComponent {
       this.formError.set('Sélectionnez une société et donnez un titre à l’opportunité.');
       return;
     }
+    const editId = this.editingOpportunityId();
+    if (editId) {
+      const result = await this.save(() => this.crmService.updateOpportunity(editId, {
+        prospectId: draft.prospectId,
+        title: draft.title.trim(),
+        transportMode: draft.transportMode || null,
+        direction: draft.direction || null,
+        origin: draft.origin.trim() || null,
+        destination: draft.destination.trim() || null,
+        goodsDescription: draft.goodsDescription.trim() || null,
+        weightKg: draft.weightKg ? Number(draft.weightKg) : null,
+        volumeM3: draft.volumeM3 ? Number(draft.volumeM3) : null,
+        incoterm: draft.incoterm.trim() || null,
+        estimatedValue: Number(draft.estimatedValue || 0),
+        currency: draft.currency || 'XAF',
+        expectedCloseDate: draft.expectedCloseDate || null,
+        notes: draft.notes.trim() || null,
+      }));
+      if (result) this.feedback.set('Opportunité mise à jour avec succès.');
+      return;
+    }
+
     const result = await this.save(() => this.crmService.createOpportunity({
       prospectId: draft.prospectId,
-      title: draft.title,
+      title: draft.title.trim(),
       transportMode: draft.transportMode || null,
       direction: draft.direction || null,
-      origin: draft.origin || null,
-      destination: draft.destination || null,
-      goodsDescription: draft.goodsDescription || null,
+      origin: draft.origin.trim() || null,
+      destination: draft.destination.trim() || null,
+      goodsDescription: draft.goodsDescription.trim() || null,
       weightKg: draft.weightKg ? Number(draft.weightKg) : null,
       volumeM3: draft.volumeM3 ? Number(draft.volumeM3) : null,
-      incoterm: draft.incoterm || null,
+      incoterm: draft.incoterm.trim() || null,
       estimatedValue: Number(draft.estimatedValue || 0),
       currency: draft.currency,
       expectedCloseDate: draft.expectedCloseDate || null,
-      notes: draft.notes || null,
+      notes: draft.notes.trim() || null,
     }));
     if (result) this.feedback.set('Opportunité ajoutée au pipeline.');
   }

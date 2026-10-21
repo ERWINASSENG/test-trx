@@ -342,13 +342,22 @@
     cursor: grabbing;
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--crm-action);
+    outline-offset: 2px;
+  }
+
+  &.interactive-card {
+    cursor: pointer;
+  }
+
   &.cdk-drag-disabled {
-    cursor: default;
+    cursor: pointer;
 
     &:hover {
-      transform: none;
-      border-color: var(--crm-border);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      transform: translateY(-1px);
+      border-color: var(--crm-action);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
     }
   }
 
@@ -462,6 +471,16 @@
   font-weight: 600;
   color: var(--crm-text);
   padding: 3px 0;
+
+  &.unset {
+    color: var(--crm-subtle);
+    font-weight: 500;
+    font-style: italic;
+
+    mat-icon {
+      opacity: 0.6;
+    }
+  }
 }
 
 .trade-lane-route mat-icon {
@@ -503,8 +522,17 @@
 
 .card-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--crm-border);
+
+  .text-link,
+  .icon-text-action {
+    font-size: 0.74rem;
+    font-weight: 600;
+  }
 }
 
 .icon-text-action {

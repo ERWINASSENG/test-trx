@@ -56,7 +56,7 @@ export class AccessControlService {
   private static readonly GET_CACHE_TTL_MS = 30_000;
   private readonly authService = inject(AuthService);
   private permissionsUserId: string | null | undefined;
-  private permissionsLoadedUserId: string | null = null;
+  private readonly _permissionsLoadedUserId = signal<string | null>(null);
   private permissionsLoadedAt = 0;
   private permissionsRequestVersion = 0;
   private permissionsRequest: {
@@ -137,10 +137,12 @@ export class AccessControlService {
 
   public hasPermission(permissionKey: string): boolean {
     const currentUser = this.authService.currentUser();
+    const effectivePermissions = this._effectivePermissions();
+    const loadedUserId = this._permissionsLoadedUserId();
     if (!currentUser || currentUser.isActive === false) {
       return false;
     }
-    const permissionsBelongToCurrentUser = this.permissionsLoadedUserId === currentUser.id;
+    const permissionsBelongToCurrentUser = loadedUserId === currentUser.id;
 
     // 1. Règle d'or : l'administrateur système actif possède tous les droits
     if (this.authService.isAdmin() || currentUser.role === 'admin') {
@@ -153,8 +155,8 @@ export class AccessControlService {
     }
 
     // 3. Évaluation granulaire issue de l'API /api/access-control/me (rôles dynamiques, système et exceptions)
-    const effectivePermissions = permissionsBelongToCurrentUser ? this._effectivePermissions() : [];
-    const matchingPermissions = effectivePermissions.filter(
+    const userPermissions = permissionsBelongToCurrentUser ? effectivePermissions : [];
+    const matchingPermissions = userPermissions.filter(
       (permission) => permission.permissionKey === permissionKey
     );
     if (matchingPermissions.some((permission) => permission.effect === 'deny' && permission.scope?.type === 'all')) {
@@ -169,7 +171,7 @@ export class AccessControlService {
 
     // 3b. Si la permission demandée est une visibilité de module (module.*.view),
     // autoriser uniquement si l'utilisateur possède une permission métier active de ce module précis.
-    if (this.hasGrantedModuleCapability(permissionKey, effectivePermissions)) {
+    if (this.hasGrantedModuleCapability(permissionKey, userPermissions)) {
       return true;
     }
 
@@ -185,6 +187,8 @@ export class AccessControlService {
     this.resetForAccountChange();
 
     const currentUser = this.authService.currentUser();
+    const effectivePermissions = this._effectivePermissions();
+    const loadedUserId = this._permissionsLoadedUserId();
     if (!currentUser || currentUser.isActive === false) {
       return false;
     }
@@ -195,8 +199,8 @@ export class AccessControlService {
 
     const actorId = currentUser.id;
     if (!actorId) return false;
-    const effectivePermissions = this.permissionsLoadedUserId === currentUser.id ? this._effectivePermissions() : [];
-    const matchingPermissions = effectivePermissions.filter(
+    const userPermissions = loadedUserId === currentUser.id ? effectivePermissions : [];
+    const matchingPermissions = userPermissions.filter(
       (permission) => permission.permissionKey === permissionKey
     );
     const scopeMatches = (scope: EffectivePermission['scope']): boolean => {
@@ -212,18 +216,19 @@ export class AccessControlService {
     return matchingPermissions.some((permission) => permission.effect === 'allow' && scopeMatches(permission.scope));
   }
 
-  public loadMyPermissions(forceRefresh = false): Promise<boolean> {
+  public async loadMyPermissions(forceRefresh = false): Promise<boolean> {
+    await this.authService.waitForSession();
     this.resetForAccountChange();
     const currentUser = this.authService.currentUser();
     const requestedUserId = currentUser?.id ?? null;
-    if (!requestedUserId || currentUser?.isActive === false) return Promise.resolve(false);
+    if (!requestedUserId || currentUser?.isActive === false) return false;
 
     if (
       !forceRefresh &&
-      this.permissionsLoadedUserId === requestedUserId &&
+      this._permissionsLoadedUserId() === requestedUserId &&
       Date.now() - this.permissionsLoadedAt < AccessControlService.PERMISSIONS_CACHE_TTL_MS
     ) {
-      return Promise.resolve(true);
+      return true;
     }
 
     if (!forceRefresh && this.permissionsRequest?.userId === requestedUserId) {
@@ -240,7 +245,7 @@ export class AccessControlService {
 
       if (result.success) {
         this._effectivePermissions.set(result.data?.permissions || []);
-        this.permissionsLoadedUserId = requestedUserId;
+        this._permissionsLoadedUserId.set(requestedUserId);
         this.permissionsLoadedAt = Date.now();
         this._error.set(null);
       } else {
@@ -248,12 +253,12 @@ export class AccessControlService {
         // ou qu'aucune permission validée n'appartient à cet utilisateur, on purge immédiatement.
         const canPreserveExistingPermissions =
           result.preserveData === true &&
-          this.permissionsLoadedUserId === requestedUserId &&
+          this._permissionsLoadedUserId() === requestedUserId &&
           this._effectivePermissions().length > 0;
 
         if (!canPreserveExistingPermissions) {
           this._effectivePermissions.set([]);
-          this.permissionsLoadedUserId = null;
+          this._permissionsLoadedUserId.set(null);
           this.permissionsLoadedAt = 0;
         }
         this._error.set(result.error || 'Impossible de charger les permissions.');
@@ -274,7 +279,7 @@ export class AccessControlService {
     if (this.permissionsUserId === userId) return;
 
     this.permissionsUserId = userId;
-    this.permissionsLoadedUserId = null;
+    this._permissionsLoadedUserId.set(null);
     this.permissionsLoadedAt = 0;
     this.permissionsRequestVersion += 1;
     this.permissionsRequest = null;
@@ -620,7 +625,7 @@ export class AccessControlService {
       if (!response.ok) {
         if (response.status === 401) {
           this._effectivePermissions.set([]);
-          this.permissionsLoadedUserId = null;
+          this._permissionsLoadedUserId.set(null);
           this.permissionsLoadedAt = 0;
           this.getResponseCache.clear();
           this.authService.handleUnauthorizedSession?.();

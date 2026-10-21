@@ -176,6 +176,25 @@ export const mergeLegacyProspectNotes = (
   return JSON.stringify({ ...legacyNotes, ...details });
 };
 
+export const generateOpportunityTitle = (prospect: { notes?: string | null; company_name?: string | null; name?: string | null }): string => {
+  if (typeof prospect.notes === 'string' && prospect.notes.trim()) {
+    try {
+      const parsed = JSON.parse(prospect.notes);
+      if (parsed && typeof parsed === 'object') {
+        const textNote = typeof (parsed as Record<string, unknown>)['notes'] === 'string' ? ((parsed as Record<string, unknown>)['notes'] as string) : '';
+        if (textNote.trim()) {
+          const first = textNote.trim().split('\n')[0].replace(/^#+\s*/, '').trim();
+          if (first.length >= 3 && first.length <= 120) return first;
+        }
+      }
+    } catch {
+      const first = prospect.notes.trim().split('\n')[0].replace(/^#+\s*/, '').trim();
+      if (first.length >= 3 && first.length <= 120) return first;
+    }
+  }
+  return 'Opportunité commerciale';
+};
+
 const actor = (req: express.Request): { id: string; email?: string; role?: string } | undefined =>
   (req as unknown as Record<string, unknown>)['user'] as { id: string; email?: string; role?: string } | undefined;
 
@@ -281,7 +300,7 @@ export const createProspectHandler = async (req: express.Request, res: express.R
   }
   await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'CREATE_PROSPECT', entityType: 'prospect', entityId: data.id, details: { status: data.status }, ipAddress: req.ip || null });
   if (typeof data.assigned_to === 'string') {
-    const oppTitle = `Prise en charge — ${String(data.company_name || data.name)}`;
+    const oppTitle = generateOpportunityTitle(data);
     await adminClient.from('sales_opportunities').insert({
       prospect_id: data.id,
       assigned_to: data.assigned_to,
@@ -385,7 +404,7 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
       .limit(1);
 
     if (!existingOpps || existingOpps.length === 0) {
-      const oppTitle = `Prise en charge — ${String(data.company_name || data.name)}`;
+      const oppTitle = generateOpportunityTitle(data);
       await adminClient.from('sales_opportunities').insert({
         prospect_id: prospectId,
         assigned_to: data.assigned_to,

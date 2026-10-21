@@ -4,12 +4,25 @@ import { PROSPECT_STATUSES, ProspectStatus } from '../app/core/models/prospect.m
 import { hasPermission } from './access-control';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
+import { generateOpportunityTitle } from './prospects';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEARCH_PATTERN = /[^a-zA-Z0-9@.+\-\s]/g;
 const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'task'] as const;
 const ACTIVITY_STATUSES = ['pending', 'completed', 'cancelled'] as const;
+
+export const formatOpportunityTitle = (rawTitle: string, companyName?: string | null): string => {
+  const trimmed = rawTitle.trim();
+  if (/^prise en charge\s*[-—–]\s*/i.test(trimmed)) {
+    const after = trimmed.replace(/^prise en charge\s*[-—–]\s*/i, '').trim();
+    if (!after || (companyName && after.toLowerCase() === companyName.trim().toLowerCase())) {
+      return 'Opportunité commerciale';
+    }
+    return after;
+  }
+  return trimmed || 'Opportunité commerciale';
+};
 
 type JsonRecord = Record<string, unknown>;
 
@@ -493,7 +506,7 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
       prospect_id: client.id,
       assigned_to: client.assigned_to,
       created_by: client.assigned_to,
-      title: `Prise en charge — ${String(client.company_name || client.name || 'Prospect')}`,
+      title: generateOpportunityTitle(client),
       stage: 'new',
       estimated_value: 0,
       currency: 'XAF',
@@ -587,7 +600,7 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
       prospectId,
       assignedTo: typeof row.assigned_to === 'string' ? row.assigned_to : null,
       assignedToName: typeof row.assigned_to === 'string' ? profileNames.get(row.assigned_to) || '' : '',
-      title: String(row.title),
+      title: formatOpportunityTitle(String(row.title), client.companyName || client.name),
       stage: String(row.stage),
       transportMode: typeof row.transport_mode === 'string' ? row.transport_mode : null,
       direction: typeof row.direction === 'string' ? row.direction : null,
