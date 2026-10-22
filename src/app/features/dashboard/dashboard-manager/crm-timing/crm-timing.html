@@ -525,22 +525,34 @@
         </div>
       </div>
 
-      <!-- Chronologie des 3 jalons du dossier -->
+      <!-- Chronologie des 5 jalons du cycle de cotation -->
       <div class="space-y-4 pt-1 text-xs">
         
-        <!-- Jalon 1 : Demande client -->
+        <!-- Jalon 1 : Création de la cotation -->
         <div class="flex gap-3">
           <div class="flex flex-col items-center">
             <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
             <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
           </div>
           <div class="space-y-0.5 pb-2">
-            <div class="font-medium text-slate-900 dark:text-white">Création du dossier</div>
+            <div class="font-medium text-slate-900 dark:text-white">Création de la cotation</div>
             <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.createdAtFormatted }}</div>
           </div>
         </div>
 
-        <!-- Jalon 2 : Chiffrage et envoi de l'offre -->
+        <!-- Jalon 2 : Attribution de la cotation -->
+        <div class="flex gap-3">
+          <div class="flex flex-col items-center">
+            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+          </div>
+          <div class="space-y-0.5 pb-2">
+            <div class="font-medium text-slate-900 dark:text-white">Attribution de la cotation</div>
+            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.assignedAtFormatted }}</div>
+          </div>
+        </div>
+
+        <!-- Jalon 3 : Transmission de l'offre au client -->
         <div class="flex gap-3">
           <div class="flex flex-col items-center">
             <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
@@ -548,12 +560,24 @@
           </div>
           <div class="space-y-0.5 pb-2">
             <div class="font-medium text-slate-900 dark:text-white">Transmission de l'offre au client</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.sentAtFormatted }}</div>
+            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.status === 'draft' ? 'En cours' : 'Traitée' }}</div>
             <div class="text-[11px] text-slate-400">Temps de chiffrage commercial : {{ modalQuote.commercialDelayFormatted }}</div>
           </div>
         </div>
 
-        <!-- Jalon 3 : Réponse du client -->
+        <!-- Jalon 4 : Offre transmise -->
+        <div class="flex gap-3">
+          <div class="flex flex-col items-center">
+            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+          </div>
+          <div class="space-y-0.5 pb-2">
+            <div class="font-medium text-slate-900 dark:text-white">Offre transmise</div>
+            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.sentAtFormatted }}</div>
+          </div>
+        </div>
+
+        <!-- Jalon 5 : Décision du client -->
         <div class="flex gap-3">
           <div class="flex flex-col items-center">
             <div class="w-3 h-3 rounded-full border-2 border-slate-900 dark:border-white bg-white dark:bg-slate-900 shrink-0 mt-0.5"></div>

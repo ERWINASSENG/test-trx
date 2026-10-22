@@ -35,9 +35,10 @@ const MOCK_QUOTE_ITEM: QuoteTimingItem = {
   isSlaBreach: false,
   isOverdue: false,
   date: '2026-10-20',
-  createdAtFormatted: '20/10/2026 09:00',
-  sentAtFormatted: '20/10/2026 11:00',
-  respondedAtFormatted: '20/10/2026 17:00',
+  createdAtFormatted: '20/10/2026 à 09:00',
+  assignedAtFormatted: '20/10/2026 à 09:15',
+  sentAtFormatted: '20/10/2026 à 11:00',
+  respondedAtFormatted: '20/10/2026 à 17:00',
 };
 
 const MOCK_OVERDUE_QUOTE: QuoteTimingItem = {
@@ -57,7 +58,8 @@ const MOCK_OVERDUE_QUOTE: QuoteTimingItem = {
   isSlaBreach: true,
   isOverdue: true,
   date: '2026-10-18',
-  createdAtFormatted: '18/10/2026 08:30',
+  createdAtFormatted: '18/10/2026 à 08:30',
+  assignedAtFormatted: '18/10/2026 à 08:45',
   sentAtFormatted: '-',
   respondedAtFormatted: '-',
 };

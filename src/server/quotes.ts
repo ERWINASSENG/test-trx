@@ -527,6 +527,7 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   seaFreight: row['sea_freight'] ?? {},
   sentAt: row['sent_at'] ?? null,
   respondedAt: row['responded_at'] ?? null,
+  assignedAt: row['assigned_at'] ?? null,
   createdAt: row['created_at'],
   updatedAt: row['updated_at'],
 });
@@ -1317,6 +1318,14 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
   const prospectMap = new Map((prospectsRes.data || []).map((p) => [String(p.id), String(p.company_name || p.name)]));
   const repMap = new Map((repsRes.data || []).map((r) => [String(r.id), `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || 'Commercial']));
 
+  const formatDateTimeFr = (dateInput: string | number | Date | null | undefined): string => {
+    if (!dateInput) return '—';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '—';
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const formatMinutes = (totalMin: number): string => {
     if (totalMin < 0 || !Number.isFinite(totalMin)) return '0m';
     const hours = Math.floor(totalMin / 60);
@@ -1345,6 +1354,7 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
 
   const formattedQuotes = (quoteRows || []).map((row) => {
     const createdAt = new Date(row.created_at).getTime();
+    const assignedAt = row.assigned_at ? new Date(row.assigned_at).getTime() : null;
     const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : null;
     const updatedAt = new Date(row.updated_at).getTime();
     const respondedAt = row.responded_at ? new Date(row.responded_at).getTime() : null;
@@ -1418,9 +1428,10 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
       isSlaBreach,
       isOverdue,
       date: new Date(row.created_at).toISOString().slice(0, 10),
-      createdAtFormatted: new Date(row.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
-      sentAtFormatted: sentAt ? new Date(sentAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : (status === 'sent' ? 'Envoyé' : 'En cours'),
-      respondedAtFormatted: respondedAt ? new Date(respondedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—',
+      createdAtFormatted: formatDateTimeFr(row.created_at),
+      assignedAtFormatted: assignedAt ? formatDateTimeFr(assignedAt) : (row.assigned_to ? formatDateTimeFr(row.created_at) : 'Non assigné'),
+      sentAtFormatted: sentAt ? formatDateTimeFr(sentAt) : (status === 'sent' ? 'Envoyé' : 'En cours'),
+      respondedAtFormatted: respondedAt ? formatDateTimeFr(respondedAt) : '—',
     };
   });
 

@@ -89,6 +89,7 @@ export interface SalesQuote {
   seaFreight?: SeaFreightDetails;
   sentAt?: string | null;
   respondedAt?: string | null;
+  assignedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +138,7 @@ export interface QuoteTimingItem {
   isOverdue: boolean;
   date: string;
   createdAtFormatted: string;
+  assignedAtFormatted?: string;
   sentAtFormatted: string;
   respondedAtFormatted: string;
 }
