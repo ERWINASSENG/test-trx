@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response as ExpressResponse } from 'express';
 import { createDossierHandler, listDossiersHandler } from './dossiers';
 import { clearServerProfileCache } from './auth';
+import { clearAccessRulesCache } from './access-control';
 
 const createResponse = (): ExpressResponse & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> } => {
   const response = {
@@ -26,6 +27,7 @@ describe('dossier handlers', () => {
 
   beforeEach(() => {
     clearServerProfileCache();
+    clearAccessRulesCache();
     testProjectNumber += 1;
     vi.stubEnv('SUPABASE_URL', `https://test-project-${testProjectNumber}.supabase.co`);
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key');

@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { auditPiecesComptables, RawAuditRow } from './cashier.audit';
 
 describe('cashier.audit - auditPiecesComptables', () => {

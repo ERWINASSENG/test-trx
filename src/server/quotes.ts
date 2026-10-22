@@ -531,7 +531,7 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   updatedAt: row['updated_at'],
 });
 
-const expireDueQuotes = async (
+export const expireDueQuotes = async (
   adminClient: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   actorId: string,
   canManageAll: boolean
@@ -712,9 +712,9 @@ export const listQuotesHandler = async (req: express.Request, res: express.Respo
     return;
   }
   const canManageAll = await actorCanManageAllQuotes(actor.id);
-  // L'expiration automatique est gérée en arrière-plan (pg_cron ou tâche planifiée).
-  // Ne plus bloquer le GET sur une UPDATE — on lance en fire-and-forget non bloquant.
-  void expireDueQuotes(adminClient, actor.id, canManageAll);
+  // S11: Requête GET strictement idempotente en lecture seule sans mutation.
+
+  // S11: Les handlers GET ne font JAMAIS de mutation (INSERT/UPDATE/DELETE). L'expiration est gérée par cron/trigger DB.
 
   const rawLimit = Number(req.query['limit']);
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;

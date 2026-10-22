@@ -2,6 +2,7 @@ import express from 'express';
 import { AccessScope, EffectivePermission, PermissionEffect } from '../app/core/models/access-control.model';
 import { getSupabaseAdmin, loadServerUserProfile } from './auth';
 import type { ServerUserProfile } from './auth';
+import { BoundedCache } from './cache.utils';
 
 export interface AccessResourceContext {
   subjectUserId?: string;
@@ -248,12 +249,11 @@ const loadAccessRulesFromDatabase = async (
 
 export const ACCESS_RULES_CACHE_TTL_MS = 60_000;
 
-interface CachedAccessRules {
-  rules: LoadedAccessRules | null;
-  cachedAt: number;
-}
-
-const accessRulesCache = new Map<string, CachedAccessRules>();
+// Cache borné LRU (règle S11 : taille max 500 pour protection anti-DoS OOM)
+const accessRulesCache = new BoundedCache<string, LoadedAccessRules | null>({
+  maxSize: 500,
+  defaultTtlMs: ACCESS_RULES_CACHE_TTL_MS,
+});
 
 export const clearAccessRulesCache = (userId?: string): void => {
   if (userId) {
@@ -270,24 +270,23 @@ export const loadAccessRules = async (
   profile?: ServerUserProfile | null,
   skipCache = false
 ): Promise<LoadedAccessRules | null> => {
-  const now = Date.now();
   if (!skipCache) {
     const cached = accessRulesCache.get(userId);
-    if (cached && now - cached.cachedAt < ACCESS_RULES_CACHE_TTL_MS) {
-      return cached.rules;
+    if (cached !== undefined) {
+      return cached;
     }
   }
 
   try {
     const rules = await rawLoadAccessRules(userId, profile);
     if (rules !== null) {
-      accessRulesCache.set(userId, { rules, cachedAt: Date.now() });
+      accessRulesCache.set(userId, rules, ACCESS_RULES_CACHE_TTL_MS);
     }
     return rules;
   } catch (error) {
     const existing = accessRulesCache.get(userId);
-    if (existing?.rules) {
-      return existing.rules;
+    if (existing !== undefined) {
+      return existing;
     }
     throw error;
   }

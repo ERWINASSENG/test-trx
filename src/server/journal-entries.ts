@@ -225,7 +225,7 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
         return;
       }
       res.status(500).json({
-        error: `Échec d'enregistrement de l'écriture en base : ${insertError?.message || 'Erreur inconnue'}`,
+        error: 'Échec d’enregistrement de l’écriture en base de données.',
       });
       return;
     }
@@ -379,9 +379,15 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
 
     const { data: updated, error: updateError } = await query.select().single();
 
-    if (updateError || !updated) {
+    if (updateError) {
+      console.error('[JOURNAL_ENTRIES] Erreur lors de la mise à jour de l’écriture:', updateError.message);
+      res.status(500).json({ error: 'Erreur lors de la mise à jour de l’écriture comptable.' });
+      return;
+    }
+
+    if (!updated) {
       res.status(404).json({
-        error: updateError?.message || 'Écriture introuvable ou modification non autorisée.',
+        error: 'Écriture introuvable ou modification non autorisée.',
       });
       return;
     }

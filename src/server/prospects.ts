@@ -3,10 +3,12 @@ import { PROSPECT_STATUSES, ProspectStatus } from '../app/core/models/prospect.m
 import { createAppNotification } from './app-notifications';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
+import { hasPermission } from './access-control';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SEARCH_PATTERN = /[^a-zA-Z0-9@.+\-\s]/g;
+// S4: Le point '.' et les caractères de syntaxe PostgREST (, ( ) .) sont retirés pour sécuriser le .or()
+const SEARCH_PATTERN = /[^a-zA-Z0-9@\-\s]/g;
 export const PROSPECT_LIST_COLUMNS = [
   'id', 'name', 'company_name', 'contact_name', 'email', 'phone', 'source', 'status',
   'assigned_to', 'estimated_value', 'currency', 'next_follow_up', 'notes', 'created_by',
@@ -198,6 +200,20 @@ export const generateOpportunityTitle = (prospect: { notes?: string | null; comp
 const actor = (req: express.Request): { id: string; email?: string; role?: string } | undefined =>
   (req as unknown as Record<string, unknown>)['user'] as { id: string; email?: string; role?: string } | undefined;
 
+const canManageCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+  if (role === 'admin') return true;
+  return hasPermission(actorId, 'crm.team.manage', undefined);
+};
+
+const canReadCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+  if (role === 'admin') return true;
+  const [read, manage] = await Promise.all([
+    hasPermission(actorId, 'crm.team.read', undefined),
+    hasPermission(actorId, 'crm.team.manage', undefined),
+  ]);
+  return read || manage;
+};
+
 const sendDatabaseError = (res: express.Response, error: { code?: string; message?: string }): void => {
   if (error.code === '23503') {
     res.status(400).json({ error: 'Le responsable sélectionné n’existe pas.' });
@@ -213,6 +229,11 @@ export const listProspectsHandler = async (req: express.Request, res: express.Re
     res.status(503).json({ error: 'Le service Prospects est indisponible.' });
     return;
   }
+  const currentUser = actor(req);
+  if (!currentUser?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
 
   const rawLimit = Number(req.query['limit']);
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 25;
@@ -220,20 +241,32 @@ export const listProspectsHandler = async (req: express.Request, res: express.Re
   const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? Math.min(rawOffset, 100000) : 0;
   const rawStatus = req.query['status'];
   const rawProspectId = req.query['prospectId'];
-  const search = typeof req.query['search'] === 'string'
-    ? req.query['search'].replace(SEARCH_PATTERN, ' ').replace(/\s+/g, ' ').trim().slice(0, 100)
-    : '';
+  const rawSearch = typeof req.query['search'] === 'string' ? req.query['search'] : '';
+  const search = rawSearch
+    .replace(SEARCH_PATTERN, ' ')
+    .replace(/[%_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+
   if (rawProspectId !== undefined
     && (typeof rawProspectId !== 'string' || !UUID_PATTERN.test(rawProspectId))) {
     res.status(400).json({ error: 'La fiche prospect sélectionnée est invalide.' });
     return;
   }
 
+  const hasGlobalTeamView = await canReadCrmTeam(currentUser.id, currentUser.role);
+
   let query = adminClient
     .from('prospects')
     .select(PROSPECT_LIST_COLUMNS, { count: 'exact' })
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
+
+  if (!hasGlobalTeamView) {
+    // S1: Visibilité limitée aux prospects assignés à l'acteur ou créés par lui
+    query = query.or(`assigned_to.eq.${currentUser.id},created_by.eq.${currentUser.id}`);
+  }
 
   if (typeof rawProspectId === 'string') query = query.eq('id', rawProspectId);
   if (typeof rawStatus === 'string' && rawStatus) {
@@ -281,6 +314,11 @@ export const createProspectHandler = async (req: express.Request, res: express.R
   const parsed = validateProspectPayload(req.body);
   if (!parsed.data || !currentUser) {
     res.status(parsed.data ? 401 : 400).json({ error: parsed.error || 'Utilisateur non authentifié.' });
+    return;
+  }
+  const hasTeamManage = await canManageCrmTeam(currentUser.id, currentUser.role);
+  if (parsed.data.assigned_to && parsed.data.assigned_to !== currentUser.id && !hasTeamManage) {
+    res.status(403).json({ error: 'Seul un responsable d’équipe peut attribuer un prospect à un autre commercial.' });
     return;
   }
   if (parsed.data.assigned_to) {
@@ -344,6 +382,36 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
     res.status(parsed.data ? 401 : 400).json({ error: parsed.error || 'Utilisateur non authentifié.' });
     return;
   }
+
+  const hasTeamManage = await canManageCrmTeam(currentUser.id, currentUser.role);
+
+  // S1: Vérification préalable de l'existence ET de l'appartenance (404 si non autorisé pour éviter la fuite)
+  const { data: existing, error: existingError } = await adminClient
+    .from('prospects')
+    .select('id, assigned_to, created_by, notes')
+    .eq('id', prospectId)
+    .maybeSingle();
+
+  if (existingError) {
+    sendDatabaseError(res, existingError);
+    return;
+  }
+  if (!existing) {
+    res.status(404).json({ error: 'Prospect introuvable.' });
+    return;
+  }
+
+  if (!hasTeamManage && existing.assigned_to !== currentUser.id && existing.created_by !== currentUser.id) {
+    res.status(404).json({ error: 'Prospect introuvable.' });
+    return;
+  }
+
+  // Seul un responsable d'équipe peut réassigner ce prospect à un autre utilisateur
+  if (parsed.data.assigned_to !== undefined && parsed.data.assigned_to !== existing.assigned_to && !hasTeamManage) {
+    res.status(403).json({ error: 'Seul un responsable d’équipe peut réassigner ce prospect.' });
+    return;
+  }
+
   if (parsed.data.assigned_to) {
     const { data: assignee, error: assigneeError } = await adminClient.from('profiles').select('id').eq('id', parsed.data.assigned_to).eq('is_active', true).maybeSingle();
     if (assigneeError || !assignee) {
@@ -351,41 +419,18 @@ export const updateProspectHandler = async (req: express.Request, res: express.R
       return;
     }
   }
-  let previousAssignee: string | null | undefined;
-  if (parsed.data.assigned_to !== undefined) {
-    const { data: current, error: currentError } = await adminClient.from('prospects')
-      .select('assigned_to').eq('id', prospectId).maybeSingle();
-    if (currentError) {
-      sendDatabaseError(res, currentError);
-      return;
-    }
-    if (!current) {
-      res.status(404).json({ error: 'Prospect introuvable.' });
-      return;
-    }
-    previousAssignee = typeof current.assigned_to === 'string' ? current.assigned_to : null;
-  }
+
+  const previousAssignee = typeof existing.assigned_to === 'string' ? existing.assigned_to : null;
+
   let updateData = parsed.data;
   if (Object.keys(parsed.legacyDetails || {}).length) {
-    let existingNotes: string | undefined;
-    if (updateData.notes === undefined) {
-      const { data: existing, error: existingError } = await adminClient.from('prospects')
-        .select('notes').eq('id', prospectId).maybeSingle();
-      if (existingError) {
-        sendDatabaseError(res, existingError);
-        return;
-      }
-      if (!existing) {
-        res.status(404).json({ error: 'Prospect introuvable.' });
-        return;
-      }
-      existingNotes = typeof existing.notes === 'string' ? existing.notes : undefined;
-    }
+    const existingNotes = typeof existing.notes === 'string' ? existing.notes : undefined;
     updateData = {
       ...updateData,
       notes: mergeLegacyProspectNotes(updateData.notes ?? existingNotes, parsed.legacyDetails || {}),
     };
   }
+
   const { data, error } = await adminClient.from('prospects').update(updateData).eq('id', prospectId).select('*').maybeSingle();
   if (error) {
     sendDatabaseError(res, error);
@@ -449,10 +494,38 @@ export const deleteProspectHandler = async (req: express.Request, res: express.R
     res.status(503).json({ error: 'Le service Prospects est indisponible.' });
     return;
   }
+  if (!currentUser?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
   if (!prospectId || !UUID_PATTERN.test(prospectId)) {
     res.status(400).json({ error: 'Identifiant de prospect invalide.' });
     return;
   }
+
+  const hasTeamManage = await canManageCrmTeam(currentUser.id, currentUser.role);
+
+  // S1: Vérification préalable de l'existence ET de l'appartenance
+  const { data: existing, error: existingError } = await adminClient
+    .from('prospects')
+    .select('id, assigned_to, created_by')
+    .eq('id', prospectId)
+    .maybeSingle();
+
+  if (existingError) {
+    sendDatabaseError(res, existingError);
+    return;
+  }
+  if (!existing) {
+    res.status(404).json({ error: 'Prospect introuvable.' });
+    return;
+  }
+
+  if (!hasTeamManage && existing.assigned_to !== currentUser.id && existing.created_by !== currentUser.id) {
+    res.status(404).json({ error: 'Prospect introuvable.' });
+    return;
+  }
+
   const { data, error } = await adminClient.from('prospects').delete().eq('id', prospectId).select('id').maybeSingle();
   if (error) {
     sendDatabaseError(res, error);
@@ -462,6 +535,6 @@ export const deleteProspectHandler = async (req: express.Request, res: express.R
     res.status(404).json({ error: 'Prospect introuvable.' });
     return;
   }
-  await writeAuditLog(adminClient, { userId: currentUser?.id, userEmail: currentUser?.email, userRole: currentUser?.role, action: 'DELETE_PROSPECT', entityType: 'prospect', entityId: prospectId, ipAddress: req.ip || null });
+  await writeAuditLog(adminClient, { userId: currentUser.id, userEmail: currentUser.email, userRole: currentUser.role, action: 'DELETE_PROSPECT', entityType: 'prospect', entityId: prospectId, ipAddress: req.ip || null });
   res.json({ deleted: true });
 };

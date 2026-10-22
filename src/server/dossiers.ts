@@ -18,6 +18,20 @@ interface DossierActor {
 const getActor = (req: express.Request): DossierActor | undefined =>
   (req as unknown as Record<string, unknown>)['user'] as DossierActor | undefined;
 
+const canManageCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+  if (role === 'admin') return true;
+  return hasPermission(actorId, 'crm.team.manage', undefined);
+};
+
+const canReadCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+  if (role === 'admin') return true;
+  const [read, manage] = await Promise.all([
+    hasPermission(actorId, 'crm.team.read', undefined),
+    hasPermission(actorId, 'crm.team.manage', undefined),
+  ]);
+  return read || manage;
+};
+
 export const listDossiersHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
@@ -25,6 +39,7 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     return;
   }
 
+  const actor = getActor(req);
   const rawLimit = Number(req.query['limit']);
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
   const rawOffset = Number(req.query['offset']);
@@ -44,6 +59,14 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     .select('id, no_dossier, prospect_id, opportunity_id, client, statut, description, created_by, assigned_to, created_at, updated_at', { count: 'exact' })
     .order('no_dossier', { ascending: true })
     .range(offset, offset + limit - 1);
+
+  if (actor?.id) {
+    const hasGlobalTeamView = await canReadCrmTeam(actor.id, actor.role);
+    if (!hasGlobalTeamView) {
+      // S1: L'acteur ne voit que les dossiers assignés à lui ou créés par lui
+      query = query.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
+    }
+  }
 
   if (search) query = query.ilike('no_dossier', `%${search.replace(ILIKE_UNSAFE, '')}%`);
   if (typeof rawDossierId === 'string') query = query.eq('id', rawDossierId);
@@ -127,19 +150,19 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
     return;
   }
   const description = typeof rawDescription === 'string' ? rawDescription.trim() || null : null;
+  const prospectId = req.body?.['prospectId'] ?? req.body?.['prospect_id'];
+  if (typeof prospectId !== 'string' || !UUID_PATTERN.test(prospectId)) {
+    res.status(400).json({ error: 'La sélection d’un prospect valide est obligatoire.' });
+    return;
+  }
   const rawAssignee = req.body?.['assignedTo'];
   if (rawAssignee !== undefined && rawAssignee !== null && (typeof rawAssignee !== 'string' || !UUID_PATTERN.test(rawAssignee))) {
     res.status(400).json({ error: 'Le commercial sélectionné est invalide.' });
     return;
   }
   const assignedTo = typeof rawAssignee === 'string' && rawAssignee ? rawAssignee : null;
-  if (assignedTo && !await hasPermission(actor.id, 'crm.team.manage', undefined)) {
+  if (assignedTo && !(await canManageCrmTeam(actor.id, actor.role))) {
     res.status(403).json({ error: 'Vous ne pouvez pas attribuer ce dossier à un commercial.' });
-    return;
-  }
-  const prospectId = req.body?.['prospectId'] ?? req.body?.['prospect_id'];
-  if (typeof prospectId !== 'string' || !UUID_PATTERN.test(prospectId)) {
-    res.status(400).json({ error: 'La sélection d’un prospect valide est obligatoire.' });
     return;
   }
 
@@ -291,7 +314,8 @@ export const assignDossierHandler = async (req: express.Request, res: express.Re
     res.status(400).json({ error: 'Le dossier ou le commercial sélectionné est invalide.' });
     return;
   }
-  if (!await hasPermission(actor.id, 'crm.team.manage', undefined)) {
+  const hasTeamManage = await canManageCrmTeam(actor.id, actor.role);
+  if (!hasTeamManage) {
     res.status(403).json({ error: 'Vous ne pouvez pas attribuer les dossiers.' });
     return;
   }

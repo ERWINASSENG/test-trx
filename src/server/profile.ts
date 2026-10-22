@@ -1,5 +1,6 @@
 import express from 'express';
 import { clearServerProfileCache, getSupabaseAdmin } from './auth';
+import { BoundedCache } from './cache.utils';
 
 interface AccessRoleAssignment {
   created_at: string;
@@ -17,7 +18,11 @@ interface CachedProfilePayload {
   cachedAt: number;
 }
 
-const profilePayloadCache = new Map<string, CachedProfilePayload>();
+// Cache borné LRU (règle S11 : taille max 500 pour protection anti-DoS OOM)
+const profilePayloadCache = new BoundedCache<string, CachedProfilePayload>({
+  maxSize: 500,
+  defaultTtlMs: USER_PROFILE_RESPONSE_CACHE_TTL_MS,
+});
 const inFlightProfileLoads = new Map<string, Promise<CachedProfilePayload | null>>();
 
 export const clearUserProfileResponseCache = (userId?: string): void => {
@@ -66,9 +71,8 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
   }
 
   try {
-    const now = Date.now();
     const cached = profilePayloadCache.get(userId);
-    if (cached && now - cached.cachedAt < USER_PROFILE_RESPONSE_CACHE_TTL_MS) {
+    if (cached) {
       const effectiveRole = user.role === 'admin'
         ? 'admin'
         : (cached.customRole || user.role || (cached.profile['role'] as string) || 'employe');
@@ -122,7 +126,7 @@ export const getCurrentUserProfileHandler = async (req: express.Request, res: ex
           roleLabel: activeAccessRole?.roleLabel || null,
           cachedAt: Date.now(),
         };
-        profilePayloadCache.set(userId, entry);
+        profilePayloadCache.set(userId, entry, USER_PROFILE_RESPONSE_CACHE_TTL_MS);
         return entry;
       })().finally(() => {
         inFlightProfileLoads.delete(userId);
@@ -174,26 +178,66 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
     return;
   }
 
-  const { firstName, lastName, department, phone } = req.body;
+  const payload = req.body || {};
+  const { firstName, lastName, department, phone } = payload;
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY non configurée' });
     return;
   }
 
+  // Règle S3 : Validation stricte des entrées et typage explicite
+  const profileUpdates: Record<string, unknown> = {
+    id: userId,
+    updated_at: new Date().toISOString(),
+  };
+
+  let hasUpdates = false;
+
+  if (firstName !== undefined) {
+    if (typeof firstName !== 'string' || firstName.length > 100) {
+      res.status(400).json({ error: 'Le prénom est invalide (maximum 100 caractères).' });
+      return;
+    }
+    profileUpdates['first_name'] = firstName.trim();
+    hasUpdates = true;
+  }
+
+  if (lastName !== undefined) {
+    if (typeof lastName !== 'string' || lastName.length > 100) {
+      res.status(400).json({ error: 'Le nom est invalide (maximum 100 caractères).' });
+      return;
+    }
+    profileUpdates['last_name'] = lastName.trim();
+    hasUpdates = true;
+  }
+
+  if (department !== undefined) {
+    if (typeof department !== 'string' || department.length > 100) {
+      res.status(400).json({ error: 'Le département est invalide (maximum 100 caractères).' });
+      return;
+    }
+    profileUpdates['department'] = department.trim();
+    hasUpdates = true;
+  }
+
+  if (phone !== undefined) {
+    if (typeof phone !== 'string' || phone.length > 40) {
+      res.status(400).json({ error: 'Le numéro de téléphone est invalide (maximum 40 caractères).' });
+      return;
+    }
+    profileUpdates['phone'] = phone.trim();
+    hasUpdates = true;
+  }
+
+  if (!hasUpdates) {
+    res.status(400).json({ error: 'Aucun champ valide à mettre à jour fourni.' });
+    return;
+  }
+
   try {
     clearUserProfileResponseCache(userId);
     clearServerProfileCache(userId);
-
-    const profileUpdates: Record<string, unknown> = {
-      id: userId,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (firstName !== undefined) profileUpdates['first_name'] = firstName;
-    if (lastName !== undefined) profileUpdates['last_name'] = lastName;
-    if (department !== undefined) profileUpdates['department'] = department;
-    if (phone !== undefined) profileUpdates['phone'] = phone;
 
     const { data: updatedProfile, error: profileUpdateError } = await adminClient
       .from('profiles')
@@ -213,13 +257,13 @@ export const updateCurrentUserProfileHandler = async (req: express.Request, res:
       const currentMeta = (existingUser?.user?.user_metadata as Record<string, unknown> | undefined) || {};
       const resolvedFirstName = typeof updatedProfile?.first_name === 'string'
         ? updatedProfile.first_name
-        : (firstName ?? String(currentMeta['first_name'] ?? ''));
+        : (firstName !== undefined ? String(profileUpdates['first_name'] ?? '') : String(currentMeta['first_name'] ?? ''));
       const resolvedLastName = typeof updatedProfile?.last_name === 'string'
         ? updatedProfile.last_name
-        : (lastName ?? String(currentMeta['last_name'] ?? ''));
+        : (lastName !== undefined ? String(profileUpdates['last_name'] ?? '') : String(currentMeta['last_name'] ?? ''));
       const resolvedPhone = updatedProfile?.phone !== undefined
         ? updatedProfile.phone
-        : (phone !== undefined ? phone : currentMeta['phone']);
+        : (phone !== undefined ? String(profileUpdates['phone'] ?? '') : currentMeta['phone']);
 
       const authMeta: Record<string, unknown> = {
         user_metadata: {

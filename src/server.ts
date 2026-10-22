@@ -141,7 +141,12 @@ app.use(
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'", 'https:', 'wss:'],
-        frameAncestors: ["'self'", 'https://ai.studio', 'https://*.google.com', 'https://*.run.app'],
+        frameAncestors: [
+          "'self'",
+          'https://ai.studio',
+          'https://*.google.com',
+          ...(process.env['APP_URL'] ? [process.env['APP_URL']] : []),
+        ],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
@@ -191,12 +196,8 @@ app.use('/api', (req, res, next): void => {
 
 /**
  * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
- * La signature HMAC-SHA256 est vérifiée avec SUPABASE_JWT_SECRET avant tout usage.
- * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
-/**
- * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase.
- * Vérifie la signature HMAC-SHA256 si SUPABASE_JWT_SECRET est configuré,
- * ou décode le token de manière sécurisée en amont de requireAuth.
+ * La signature HMAC-SHA256 est impérativement vérifiée avec SUPABASE_JWT_SECRET.
+ * S11: Aucun décodage permissif (jwt.decode) sans validation cryptographique.
  * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
  * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
  */
@@ -212,9 +213,11 @@ const extractAuthenticatedUserId = (req: express.Request): string | null => {
 
   try {
     const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
-    const payload = jwtSecret
-      ? (jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>)
-      : (jwt.decode(token) as Record<string, unknown> | null);
+    if (!jwtSecret) {
+      // S11: Refus par défaut : sans secret de signature configuré, aucun jeton n'est accepté.
+      return null;
+    }
+    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>;
 
     if (
       payload &&
@@ -231,8 +234,9 @@ const extractAuthenticatedUserId = (req: express.Request): string | null => {
 };
 
 /**
- * Exemptions pour le développement local et les adresses de bouclage (localhost / 127.0.0.1)
- * pour éviter tout blocage intempestif en environnement de test ou de développement.
+ * Exemptions pour le développement local et les adresses de bouclage (127.0.0.1 / ::1).
+ * V1: Vérification stricte basée uniquement sur req.ip (dérivé du reverse proxy de confiance).
+ * L'en-tête Host/hostname n'est JAMAIS utilisé pour une décision de sécurité ou d'exemption.
  */
 const isLocalOrDevelopment = (req: express.Request): boolean => {
   if (process.env['NODE_ENV'] !== 'production') return true;
@@ -241,16 +245,15 @@ const isLocalOrDevelopment = (req: express.Request): boolean => {
     ip === '127.0.0.1' ||
     ip === '::1' ||
     ip === '::ffff:127.0.0.1' ||
-    ip.startsWith('127.') ||
-    req.hostname === 'localhost' ||
-    req.hostname === '127.0.0.1'
+    ip.startsWith('127.')
   );
 };
 
+// S11: Rate limiting conservateur (non auth 100/15min, auth 1000/15min, auth/sync 50/15min, mutations 200/15min)
 const apiRateLimitWindowMs = readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
-const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 5000);
-const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 25000);
-const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 2000);
+const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 100);
+const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 1000);
+const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 50);
 
 // 1. Limiteur global sur toutes les routes de l'API /api/* (discriminé par utilisateur connecté ou IP)
 const apiGlobalLimiter = rateLimit({
@@ -262,7 +265,7 @@ const apiGlobalLimiter = rateLimit({
   },
   skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:global:'),
-  passOnStoreError: true,
+  passOnStoreError: false,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
@@ -282,7 +285,7 @@ const authSyncLimiter = rateLimit({
   keyGenerator: (req: Request) => ipKeyGenerator(req.ip || ''),
   skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:auth:'),
-  passOnStoreError: true,
+  passOnStoreError: false,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
@@ -297,14 +300,14 @@ app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSync
 // Prévient l'inondation de la base de données, la création massive de comptes ou de transactions
 const mutationsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 2000),
+  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 200),
   keyGenerator: (req: Request) => {
     const userId = extractAuthenticatedUserId(req);
     return userId ? `usr_mut:${userId}` : ipKeyGenerator(req.ip || '');
   },
   skip: (req: Request) => isLocalOrDevelopment(req),
   store: createRateLimitStore('transmex:api:mutations:'),
-  passOnStoreError: true,
+  passOnStoreError: false,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   statusCode: 429,
