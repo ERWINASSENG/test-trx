@@ -106,9 +106,9 @@ export class MainLayout implements OnInit {
   private readonly allMenuItems: NavOption[] = [
     {
       id: 'dashboard',
-      label: 'Caisse',
+      label: 'Tableau de bord',
       route: '/dashboard',
-      icon: 'point_of_sale',
+      icon: 'dashboard',
       permissionKey: 'module.dashboard.view',
     },
     {
