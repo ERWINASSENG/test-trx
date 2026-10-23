@@ -116,14 +116,14 @@
             <button
               type="button"
               (click)="toggleNotifications($event)"
-              class="utility-icon-btn relative flex items-center justify-center rounded p-1.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+              class="utility-icon-btn relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white cursor-pointer"
               aria-label="Notifications"
               title="Notifications"
               [attr.aria-expanded]="isNotificationsOpen()"
               aria-haspopup="dialog">
               <mat-icon class="!text-[18px] !w-4.5 !h-4.5">notifications</mat-icon>
               @if (appNotificationService.unreadCount() > 0) {
-                <span class="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                <span class="absolute -right-0.5 -top-0.5 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-[#212529]">
                   {{ appNotificationService.unreadCount() > 99 ? '99+' : appNotificationService.unreadCount() }}
                 </span>
               }
@@ -131,51 +131,74 @@
 
             @if (isNotificationsOpen()) {
               <section
-                class="absolute right-0 top-full z-[9999] mt-2 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-[#343a40] dark:bg-[#282d33]"
+                class="shadcn-notification-popover absolute right-0 top-full z-[9999] mt-2 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-zinc-200 bg-white text-zinc-950 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
                 role="dialog"
                 aria-label="Centre de notifications">
-                <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-white/10">
-                  <div>
-                    <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h2>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">
-                      {{ appNotificationService.unreadCount() }} non lue(s)
+                <!-- CardHeader Shadcn UI -->
+                <header class="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800/80">
+                  <div class="grid gap-0.5">
+                    <div class="flex items-center gap-2">
+                      <h2 class="text-sm font-semibold leading-none tracking-tight text-zinc-950 dark:text-zinc-50">Notifications</h2>
+                      @if (appNotificationService.unreadCount() > 0) {
+                        <span class="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                          {{ appNotificationService.unreadCount() }} non lue(s)
+                        </span>
+                      }
+                    </div>
+                    <p class="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Vous avez {{ appNotificationService.unreadCount() }} notification(s) non lue(s).
                     </p>
                   </div>
                   <button
                     type="button"
-                    class="text-xs font-medium text-[#0b5ed7] hover:underline disabled:opacity-50 dark:text-[#8cc2ff]"
+                    class="inline-flex items-center justify-center rounded-md px-2.5 py-1 text-xs font-medium text-[#0b5ed7] transition-colors hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:text-[#8cc2ff] dark:hover:bg-zinc-800/70 cursor-pointer"
                     [disabled]="appNotificationService.unreadCount() === 0"
                     (click)="markAllNotificationsRead()">
                     Tout lire
                   </button>
                 </header>
+
                 @if (appNotificationService.error()) {
-                  <p class="px-4 py-2 text-xs text-red-600 dark:text-red-300" role="alert">
+                  <div class="m-3 shadcn-alert shadcn-alert-destructive" role="alert">
                     {{ appNotificationService.error() }}
-                  </p>
+                  </div>
                 }
-                <div class="max-h-[min(28rem,70vh)] overflow-y-auto">
+
+                <!-- CardContent : Liste des notifications Shadcn UI -->
+                <div class="max-h-[min(26rem,68vh)] overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/70">
                   @for (notification of appNotificationService.notifications(); track notification.id) {
                     <button
                       type="button"
-                      class="flex w-full gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-white/5"
-                      [class.bg-blue-50]="!notification.readAt"
-                      [class.dark:bg-blue-900/20]="!notification.readAt"
+                      class="group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900/60 cursor-pointer"
+                      [class.bg-sky-50/50]="!notification.readAt"
+                      [class.dark:bg-sky-950/20]="!notification.readAt"
                       (click)="openNotification(notification)">
-                      <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                        [class.bg-blue-600]="!notification.readAt"
+                      <span
+                        class="mt-1.5 flex h-2 w-2 shrink-0 rounded-full transition-transform group-hover:scale-110"
+                        [class.bg-sky-500]="!notification.readAt"
                         [class.bg-transparent]="!!notification.readAt"
                         aria-hidden="true"></span>
-                      <span class="min-w-0">
-                        <span class="block text-xs font-semibold text-slate-900 dark:text-white">{{ notification.title }}</span>
-                        <span class="mt-1 block text-xs text-slate-600 dark:text-slate-300">{{ notification.message }}</span>
-                        <span class="mt-1 block text-[10px] text-slate-400">{{ notification.createdAt | date:'short' }}</span>
+                      <span class="min-w-0 flex-1 grid gap-1">
+                        <span class="flex items-center justify-between gap-2">
+                          <span class="text-xs font-semibold leading-snug text-zinc-900 dark:text-zinc-100 truncate">
+                            {{ notification.title }}
+                          </span>
+                          <span class="shrink-0 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                            {{ notification.createdAt | date:'short' }}
+                          </span>
+                        </span>
+                        <span class="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                          {{ notification.message }}
+                        </span>
                       </span>
                     </button>
                   } @empty {
-                    <p class="px-4 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-                      Aucune notification pour le moment.
-                    </p>
+                    <div class="flex flex-col items-center justify-center gap-1.5 px-4 py-10 text-center">
+                      <mat-icon class="!h-6 !w-6 !text-[22px] text-zinc-300 dark:text-zinc-600" aria-hidden="true">notifications_none</mat-icon>
+                      <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                        Aucune notification pour le moment.
+                      </p>
+                    </div>
                   }
                 </div>
               </section>

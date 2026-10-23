@@ -882,24 +882,39 @@
   background: var(--crm-surface);
 }
 
+/* Alertes CRM façon Toast flottant Shadcn UI (comme la Caisse) */
 .crm-feedback,
 .crm-error {
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.82rem;
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 99999;
+  width: calc(100vw - 2rem);
+  max-width: 24rem;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
   font-weight: 500;
+  background: var(--crm-surface);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards, toastAutoFadeOut 0.35s ease-in 9.65s forwards;
+  pointer-events: auto;
+}
+
+.crm-feedback + .crm-error {
+  top: 5.5rem;
 }
 
 .crm-feedback {
-  background: #d1e7dd;
-  color: #0f5132;
-  border: 1px solid #badbcc;
+  color: var(--crm-text);
+  border: 1px solid var(--crm-border);
 }
 
 .crm-error {
-  background: #f8d7da;
-  color: #842029;
-  border: 1px solid #f5c2c7;
+  color: var(--crm-text);
+  border: 1px solid #fecaca;
 }
 
 /* Support Thème Sombre */
@@ -912,6 +927,18 @@
   --crm-text: #e2e8f0;
   --crm-subtle: #94a3b8;
   --crm-action: #2563eb;
+}
+
+:host-context(html.dark) .crm-feedback {
+  background: #09090b;
+  color: #fafafa;
+  border-color: #27272a;
+}
+
+:host-context(html.dark) .crm-error {
+  background: #09090b;
+  color: #fafafa;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 :host-context(html.dark) .status-badge-active { background-color: #064e3b; color: #6ee7b7; border-color: #047857; }

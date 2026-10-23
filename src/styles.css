@@ -454,11 +454,11 @@ mat-icon {
   user-select: none;
 }
 
-/* 5. ANIMATIONS ET STYLES DES NOTIFICATIONS TOAST GLOBALES */
+/* 5. SYSTÈME DE NOTIFICATIONS UNIFIÉ SHADCN UI (SONNER TOAST, ALERT & POPOVER) */
 @keyframes toastSlideIn {
   from {
     opacity: 0;
-    transform: translateY(-12px) scale(0.95);
+    transform: translateY(-8px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -466,8 +466,215 @@ mat-icon {
   }
 }
 
-.toast-item {
-  animation: toastSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes toastAutoFadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    pointer-events: none;
+    visibility: hidden;
+    display: none;
+  }
+}
+
+.toast-item,
+.shadcn-toast {
+  animation: toastSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards, toastAutoFadeOut 0.35s ease-in 9.65s forwards;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.dark .toast-item,
+html.dark .shadcn-toast,
+:root[data-theme="dark"] .toast-item,
+:root[data-theme="dark"] .shadcn-toast {
+  background-color: #09090b !important;
+  color: #fafafa !important;
+  border-color: #27272a !important;
+  box-shadow: 0 14px 28px -6px rgba(0, 0, 0, 0.55), 0 4px 10px -4px rgba(0, 0, 0, 0.4) !important;
+}
+
+.shadcn-toast-error {
+  border-color: #fecaca !important;
+}
+
+html.dark .shadcn-toast-error {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+.shadcn-toast-success,
+.shadcn-toast-warning,
+.shadcn-toast-info {
+  border-color: #e4e4e7 !important;
+}
+
+html.dark .shadcn-toast-success,
+html.dark .shadcn-toast-warning,
+html.dark .shadcn-toast-info {
+  border-color: #27272a !important;
+}
+
+/* Harmonisation globale façon Toast flottant Shadcn UI (comme la Caisse) */
+.feedback,
+.crm-feedback,
+.crm-error,
+#success-feedback-banner,
+#error-feedback-banner,
+#hr-success-alert,
+#hr-error-alert,
+#hr-service-error-alert,
+#hr-modal-error-alert,
+#profile-feedback-alert,
+#profile-pwd-success-alert,
+#profile-error-alert,
+#profile-pwd-error-alert,
+#login-error-alert {
+  position: fixed !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  z-index: 99999 !important;
+  width: calc(100vw - 2rem) !important;
+  max-width: 24rem !important;
+  margin: 0 !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid #e4e4e7 !important;
+  padding: 0.875rem 1rem !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.4 !important;
+  font-weight: 500 !important;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05) !important;
+  animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards, toastAutoFadeOut 0.35s ease-in 9.65s forwards;
+  pointer-events: auto;
+}
+
+/* Alerte inline contenue (ex: popover de notifications) */
+.shadcn-alert {
+  position: relative;
+  width: 100%;
+  border-radius: 0.625rem !important;
+  border: 1px solid #e4e4e7 !important;
+  padding: 0.75rem 1rem !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.4 !important;
+  font-weight: 500 !important;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Décalage si succès et erreur coexistent */
+.feedback:not(.feedback-error):not(.error) + .feedback.feedback-error,
+.crm-feedback + .crm-error {
+  top: 5.5rem !important;
+}
+
+/* Toasts de Succès / Neutre (Style Shadcn Sonner épuré et sobre) */
+.shadcn-alert-success,
+.feedback:not(.feedback-error):not(.error),
+.feedback.success,
+.crm-feedback,
+#success-feedback-banner,
+#hr-success-alert,
+#profile-feedback-alert,
+#profile-pwd-success-alert {
+  border-color: #e4e4e7 !important;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+/* Toasts Destructive / Erreur (Bordure subtile, texte sobre sans vert/rouge fluo) */
+.shadcn-alert-destructive,
+.feedback.feedback-error,
+.feedback.error,
+.crm-error,
+#error-feedback-banner,
+#hr-error-alert,
+#hr-service-error-alert,
+#hr-modal-error-alert,
+#profile-error-alert,
+#profile-pwd-error-alert,
+#login-error-alert {
+  border-color: #fecaca !important;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+html.dark .feedback,
+html.dark .crm-feedback,
+html.dark .crm-error,
+html.dark #success-feedback-banner,
+html.dark #error-feedback-banner,
+html.dark #hr-success-alert,
+html.dark #hr-error-alert,
+html.dark #hr-service-error-alert,
+html.dark #hr-modal-error-alert,
+html.dark #profile-feedback-alert,
+html.dark #profile-pwd-success-alert,
+html.dark #profile-error-alert,
+html.dark #profile-pwd-error-alert,
+html.dark #login-error-alert,
+html.dark .shadcn-alert {
+  background-color: #09090b !important;
+  color: #fafafa !important;
+  border-color: #27272a !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .shadcn-alert-success,
+html.dark .feedback:not(.feedback-error):not(.error),
+html.dark .feedback.success,
+html.dark .crm-feedback,
+html.dark #success-feedback-banner,
+html.dark #hr-success-alert,
+html.dark #profile-feedback-alert,
+html.dark #profile-pwd-success-alert {
+  border-color: #27272a !important;
+  color: #fafafa !important;
+}
+
+html.dark .shadcn-alert-destructive,
+html.dark .feedback.feedback-error,
+html.dark .feedback.error,
+html.dark .crm-error,
+html.dark #error-feedback-banner,
+html.dark #hr-error-alert,
+html.dark #hr-service-error-alert,
+html.dark #hr-modal-error-alert,
+html.dark #profile-error-alert,
+html.dark #profile-pwd-error-alert,
+html.dark #login-error-alert {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #fafafa !important;
+}
+
+/* Popover Centre de notifications Shadcn UI */
+.shadcn-notification-popover {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+  animation: toastSlideIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+html.dark .shadcn-notification-popover,
+:root[data-theme="dark"] .shadcn-notification-popover {
+  background-color: #09090b !important;
+  color: #fafafa !important;
+  border-color: #27272a !important;
+  box-shadow: 0 20px 30px -6px rgba(0, 0, 0, 0.65) !important;
 }
 
 /* 6. MODALES, MENUS DÉROULANTS ET POPOVERS RÉACTIFS AU THÈME */
