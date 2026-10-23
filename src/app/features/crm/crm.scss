@@ -317,16 +317,16 @@
 .stage-won .stage-dot { background: #198754; }
 .stage-lost .stage-dot { background: #dc3545; }
 
-/* Cartes Kanban */
+/* Cartes Kanban (Shadcn UI Card Pattern) */
 .opportunity-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid var(--crm-border);
-  border-radius: 6px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 14px;
   background: var(--crm-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -334,8 +334,8 @@
 
   &:hover {
     transform: translateY(-2px);
-    border-color: var(--crm-action);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    border-color: color-mix(in srgb, var(--crm-action) 45%, var(--crm-border));
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
   }
 
   &:active {
@@ -356,7 +356,7 @@
 
     &:hover {
       transform: translateY(-1px);
-      border-color: var(--crm-action);
+      border-color: color-mix(in srgb, var(--crm-action) 35%, var(--crm-border));
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
     }
   }
@@ -366,21 +366,57 @@
   }
 }
 
+/* Card Header, Content & Footer Shadcn UI */
+.card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .card-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .client-company-title {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--crm-text);
+    letter-spacing: -0.01em;
+  }
+
+  .opportunity-title {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--crm-subtle);
+    line-height: 1.35;
+  }
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Angular CDK Drag and Drop - Styles d'animation et de prévisualisation */
 :host ::ng-deep .cdk-drag-preview,
 .cdk-drag-preview {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 270px;
   max-width: 310px;
-  border-radius: 8px;
-  border: 2px solid var(--crm-action, #0b5ed7);
+  border-radius: 12px;
+  border: 1px solid var(--crm-action, #0b5ed7);
   background: var(--crm-surface, #fff);
-  padding: 12px;
-  box-shadow: 0 14px 28px -4px rgba(11, 94, 215, 0.25), 0 6px 14px rgba(0, 0, 0, 0.12);
-  transform: rotate(1.5deg);
+  padding: 14px;
+  box-shadow: 0 14px 28px -4px rgba(11, 94, 215, 0.22), 0 8px 12px rgba(0, 0, 0, 0.08);
+  transform: rotate(1.2deg);
   cursor: grabbing;
   z-index: 9999;
   user-select: none;
@@ -410,10 +446,10 @@
 :host ::ng-deep .cdk-drag-placeholder,
 .cdk-drag-placeholder {
   box-sizing: border-box;
-  min-height: 80px;
-  border-radius: 6px;
+  min-height: 90px;
+  border-radius: 12px;
   border: 2px dashed var(--crm-action, #0b5ed7) !important;
-  background: color-mix(in srgb, var(--crm-action, #0b5ed7) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--crm-action, #0b5ed7) 8%, transparent) !important;
   opacity: 0.85;
   transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
   margin-bottom: 2px;
@@ -423,14 +459,6 @@
 
 .cdk-drag-animating {
   transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
-}
-
-.card-topline h3 {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--crm-text);
-  line-height: 1.3;
 }
 
 .card-badges {
@@ -443,9 +471,9 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--crm-border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 0.7rem;
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 0.69rem;
   font-weight: 600;
   color: var(--crm-subtle);
   background: var(--crm-muted);
@@ -470,7 +498,7 @@
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--crm-text);
-  padding: 3px 0;
+  padding: 2px 0;
 
   &.unset {
     color: var(--crm-subtle);
@@ -491,16 +519,18 @@
 }
 
 .opportunity-value {
-  font-size: 0.95rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.82rem;
   font-weight: 700;
-  color: var(--crm-action);
+  color: var(--crm-text);
 }
 
 .card-meta {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--crm-subtle);
 }
 
@@ -510,7 +540,7 @@
   justify-content: space-between;
   gap: 8px;
   padding-top: 6px;
-  border-top: 1px dashed var(--crm-border);
+  border-top: 1px solid var(--crm-border);
 }
 
 .card-links {
@@ -520,18 +550,50 @@
   gap: 6px;
 }
 
+/* CardFooter : Boutons d'actions contextuels Shadcn UI */
 .card-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--crm-border);
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--crm-border);
+  margin-top: 2px;
+}
 
-  .text-link,
-  .icon-text-action {
-    font-size: 0.74rem;
-    font-weight: 600;
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+
+  &.text-link {
+    color: var(--crm-action);
+    background: transparent;
+
+    &:hover {
+      background: var(--crm-hover);
+      text-decoration: none;
+    }
+  }
+
+  &.icon-text-action {
+    color: var(--crm-subtle);
+    background: transparent;
+
+    &:hover {
+      color: var(--crm-text);
+      background: var(--crm-hover);
+    }
   }
 }
 
