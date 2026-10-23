@@ -586,3 +586,25 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .quotes-page .quote-kanban-footer > span { color: var(--quote-subtle); font-size: 10px; }
 .quotes-page .quote-kanban-footer { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--quote-border); }
 .quotes-page .quotes-kanban-empty { margin: 12px 2px; color: var(--quote-subtle); font-size: 11px; text-align: center; }
+
+/* 7. ANGULAR CDK DRAG AND DROP - STYLES GLOBAUX POUR ÉLÉMENTS ATTACHÉS AU BODY */
+.cdk-drag-preview {
+  box-sizing: border-box;
+  border-radius: 12px;
+  box-shadow: 0 14px 28px -4px rgba(11, 94, 215, 0.22), 0 8px 12px rgba(0, 0, 0, 0.08);
+  opacity: 0.95;
+  cursor: grabbing !important;
+  z-index: 10000 !important;
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.45;
+}
+
+.cdk-drag-animating {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder) {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}

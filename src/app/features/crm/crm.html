@@ -79,7 +79,7 @@
               (cdkDropListDropped)="onOpportunityDrop($event)"
               [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">              @for (opportunity of column.opportunities; track opportunity.id) {
                 <article
-                  class="opportunity-card interactive-card rounded-xl border border-slate-200 bg-white text-slate-950 shadow-xs dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 transition-all hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 p-3.5 space-y-2.5"
+                  class="opportunity-card interactive-card rounded-xl border border-slate-200 bg-white text-slate-950 shadow-xs dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 transition-[border-color,box-shadow] hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 p-3.5 space-y-2.5"
                   cdkDrag
                   [cdkDragData]="opportunity"
                   [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()"
