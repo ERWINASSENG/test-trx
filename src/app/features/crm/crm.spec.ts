@@ -117,7 +117,9 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
       createClient: vi.fn(),
       createContact: vi.fn(),
       createOpportunity: vi.fn(),
-      updateOpportunity: vi.fn().mockResolvedValue({ success: true }),
+      updateOpportunity: vi.fn().mockResolvedValue({ success: true, data: { id: 'opp-1' } }),
+      setupRealtime: vi.fn(),
+      teardownRealtime: vi.fn(),
       updateOpportunityStageOptimistic: vi.fn().mockResolvedValue({ success: true }),
       createActivity: vi.fn(),
       updateActivityStatus: vi.fn(),
@@ -311,11 +313,11 @@ describe('CrmComponent (Refonte & Interconnexion)', () => {
 
     expect(component.dialog()).toBe('opportunity');
     expect(component.editingOpportunityId()).toBe('opp-1');
-    expect(component.opportunityDraft().title).toBe('Expédition conteneurs Le Havre - Douala');
+    expect(component.opportunityDraft().title).toBe('Import 5x40HC Pièces BTP');
     expect(component.opportunityDraft().transportMode).toBe('sea');
     expect(component.opportunityDraft().direction).toBe('import');
-    expect(component.opportunityDraft().origin).toBe('Le Havre');
-    expect(component.opportunityDraft().destination).toBe('Douala');
+    expect(component.opportunityDraft().origin).toBe('Port d\'Anvers (BE ANR)');
+    expect(component.opportunityDraft().destination).toBe('Port de Douala (CM DLA)');
   });
 
   it('sauvegarde les modifications d’une opportunité existante via updateOpportunity', async () => {

@@ -1,4 +1,8 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { SupabaseService } from './supabase.service';
+import type { QuoteStatus } from '../models/quote.model';
 import {
   CrmActivity,
   CrmCampaign,
@@ -32,6 +36,11 @@ export type UpdateOpportunityInput = Partial<CrmOpportunityInput> & {
 @Injectable({ providedIn: 'root' })
 export class CrmService {
   private readonly authService = inject(AuthService);
+  private readonly supabaseService = inject(SupabaseService);
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly destroyRef = inject(DestroyRef);
+  private crmRealtimeChannel: RealtimeChannel | null = null;
+  private refreshTimeout: ReturnType<typeof setTimeout> | null = null;
   private dataUserId: string | null | undefined;
   private readonly _clients = signal<CrmClient[]>([]);
   private readonly _contacts = signal<CrmContact[]>([]);
@@ -53,9 +62,59 @@ export class CrmService {
 
   constructor() {
     effect(() => {
-      this.authService.currentUser();
+      const user = this.authService.currentUser();
       this.resetForAccountChange();
+      if (user && isPlatformBrowser(this.platformId)) {
+        this.setupRealtime();
+      } else {
+        this.teardownRealtime();
+      }
     });
+
+    this.destroyRef.onDestroy(() => {
+      this.teardownRealtime();
+    });
+  }
+
+  public setupRealtime(): void {
+    if (!isPlatformBrowser(this.platformId) || this.crmRealtimeChannel) return;
+    const client = this.supabaseService.supabase;
+    if (!client) return;
+    try {
+      this.crmRealtimeChannel = client
+        .channel('crm:sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_opportunities' }, () => {
+          this.scheduleDebouncedReload();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_quotes' }, () => {
+          this.scheduleDebouncedReload();
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime CRM indisponible:', err);
+    }
+  }
+
+  public teardownRealtime(): void {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
+    }
+    if (this.crmRealtimeChannel) {
+      const client = this.supabaseService.supabase;
+      if (client) void client.removeChannel(this.crmRealtimeChannel);
+      this.crmRealtimeChannel = null;
+    }
+  }
+
+  private scheduleDebouncedReload(): void {
+    if (this.refreshTimeout) clearTimeout(this.refreshTimeout);
+    this.refreshTimeout = setTimeout(() => {
+      if (this.authService.currentUser() && !this._isLoading()) {
+        void this.load();
+      }
+    }, 400);
+
   }
 
   public async load(): Promise<boolean> {
@@ -131,10 +190,17 @@ export class CrmService {
     const previous = this._opportunities().find((item) => item.id === id);
     if (!previous) return { success: false, error: 'Opportunité introuvable.' };
     const previousStage = previous.stage;
+    const previousQuoteStatus = previous.quoteStatus;
+
+    let optimisticQuoteStatus = previous.quoteStatus;
+    if (newStage === 'quote_sent') optimisticQuoteStatus = 'sent';
+    else if (newStage === 'won') optimisticQuoteStatus = 'accepted';
+    else if (newStage === 'lost') optimisticQuoteStatus = 'rejected';
+    else if (newStage === 'quote_preparation' && previous.quoteStatus === 'draft') optimisticQuoteStatus = 'draft';
 
     // 1. Mise à jour locale immédiate dans le signal pour supprimer tout temps d'attente visuel
     this._opportunities.update((items) =>
-      items.map((item) => (item.id === id ? { ...item, stage: newStage } : item))
+      items.map((item) => (item.id === id ? { ...item, stage: newStage, quoteStatus: optimisticQuoteStatus } : item))
     );
 
     // 2. Persistance asynchrone sur le serveur
@@ -147,9 +213,25 @@ export class CrmService {
     // 3. Rollback en cas d'erreur réseau ou de rejet serveur
     if (!result.success) {
       this._opportunities.update((items) =>
-        items.map((item) => (item.id === id ? { ...item, stage: previousStage } : item))
+        items.map((item) => (item.id === id ? { ...item, stage: previousStage, quoteStatus: previousQuoteStatus } : item))
       );
       return { success: false, error: result.error };
+    }
+
+    if (result.data?.opportunity) {
+      const serverOpp = result.data.opportunity;
+      this._opportunities.update((items) =>
+        items.map((item) => {
+          if (item.id !== id) return item;
+          return {
+            ...item,
+            stage: (serverOpp['stage'] as CrmOpportunityStage) || newStage,
+            quoteStatus: (serverOpp['quoteStatus'] as QuoteStatus) ?? item.quoteStatus,
+            quoteNumber: (serverOpp['quoteNumber'] as string) ?? item.quoteNumber,
+            quoteId: (serverOpp['quoteId'] as string) ?? item.quoteId,
+          };
+        })
+      );
     }
 
     const updated = this._opportunities().find((item) => item.id === id);
@@ -340,6 +422,7 @@ export class CrmService {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+  
       const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };

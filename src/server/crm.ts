@@ -981,7 +981,55 @@ export const updateCrmOpportunityHandler = async (req: express.Request, res: exp
     }
   }
   await audit(req, actor, 'UPDATE_CRM_OPPORTUNITY', 'sales_opportunity', id, { stage: data.stage });
-  res.json({ opportunity: data });
+  const { data: linkedQuote } = await admin.from('sales_quotes')
+    .select('id, quote_number, status')
+    .eq('opportunity_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkedQuote && data.stage) {
+    let nextQuoteStatus: string | null = null;
+    let nextSentAt: string | null = null;
+    let nextRespondedAt: string | null = null;
+
+    if (data.stage === 'quote_sent' && linkedQuote.status !== 'sent' && linkedQuote.status !== 'accepted') {
+      nextQuoteStatus = 'sent';
+      nextSentAt = new Date().toISOString();
+    } else if (data.stage === 'won' && linkedQuote.status !== 'accepted') {
+      nextQuoteStatus = 'accepted';
+      nextRespondedAt = new Date().toISOString();
+    } else if (data.stage === 'lost' && linkedQuote.status !== 'accepted' && linkedQuote.status !== 'rejected') {
+      nextQuoteStatus = 'rejected';
+      nextRespondedAt = new Date().toISOString();
+    } else if (data.stage === 'quote_preparation' && linkedQuote.status === 'draft') {
+      nextQuoteStatus = 'draft';
+    }
+
+    if (nextQuoteStatus) {
+      const quotePatch: Record<string, unknown> = { status: nextQuoteStatus };
+      if (nextSentAt) quotePatch['sent_at'] = nextSentAt;
+      if (nextRespondedAt) quotePatch['responded_at'] = nextRespondedAt;
+      await admin.from('sales_quotes').update(quotePatch).eq('id', linkedQuote.id);
+      linkedQuote.status = nextQuoteStatus;
+    }
+  }
+
+  const { data: linkedDossier } = await admin.from('dossiers')
+    .select('id, no_dossier')
+    .eq('opportunity_id', id)
+    .maybeSingle();
+
+  const enrichedOpportunity = {
+    ...data,
+    quoteId: linkedQuote?.id || null,
+    quoteNumber: linkedQuote?.quote_number || null,
+    quoteStatus: linkedQuote?.status || null,
+    dossierId: linkedDossier?.id || null,
+    dossierNumber: linkedDossier?.no_dossier || null,
+  };
+
+  res.json({ opportunity: enrichedOpportunity });
 };
 
 export const createCrmActivityHandler = async (req: express.Request, res: express.Response): Promise<void> => {

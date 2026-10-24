@@ -397,6 +397,7 @@ export class CrmComponent {
       }
     });
     void this.crmService.load();
+    this.crmService.setupRealtime?.();
   }
 
   public setSearch(value: string): void {
