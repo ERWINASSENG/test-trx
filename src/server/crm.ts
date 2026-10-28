@@ -996,13 +996,16 @@ export const updateCrmOpportunityHandler = async (req: express.Request, res: exp
     if (data.stage === 'quote_sent' && linkedQuote.status !== 'sent' && linkedQuote.status !== 'accepted') {
       nextQuoteStatus = 'sent';
       nextSentAt = new Date().toISOString();
+    } else if (data.stage === 'negotiation' && linkedQuote.status === 'draft') {
+      nextQuoteStatus = 'sent';
+      nextSentAt = new Date().toISOString();
     } else if (data.stage === 'won' && linkedQuote.status !== 'accepted') {
       nextQuoteStatus = 'accepted';
       nextRespondedAt = new Date().toISOString();
     } else if (data.stage === 'lost' && linkedQuote.status !== 'accepted' && linkedQuote.status !== 'rejected') {
       nextQuoteStatus = 'rejected';
       nextRespondedAt = new Date().toISOString();
-    } else if (data.stage === 'quote_preparation' && linkedQuote.status === 'draft') {
+    } else if (data.stage === 'quote_preparation' && linkedQuote.status !== 'draft') {
       nextQuoteStatus = 'draft';
     }
 

@@ -193,10 +193,17 @@ export class CrmService {
     const previousQuoteStatus = previous.quoteStatus;
 
     let optimisticQuoteStatus = previous.quoteStatus;
-    if (newStage === 'quote_sent') optimisticQuoteStatus = 'sent';
-    else if (newStage === 'won') optimisticQuoteStatus = 'accepted';
-    else if (newStage === 'lost') optimisticQuoteStatus = 'rejected';
-    else if (newStage === 'quote_preparation' && previous.quoteStatus === 'draft') optimisticQuoteStatus = 'draft';
+    if (newStage === 'quote_sent') {
+      optimisticQuoteStatus = 'sent';
+    } else if (newStage === 'negotiation') {
+      if (previous.quoteStatus === 'draft') optimisticQuoteStatus = 'sent';
+    } else if (newStage === 'won') {
+      optimisticQuoteStatus = 'accepted';
+    } else if (newStage === 'lost') {
+      optimisticQuoteStatus = 'rejected';
+    } else if (newStage === 'quote_preparation') {
+      if (previous.quoteNumber) optimisticQuoteStatus = 'draft';
+    }
 
     // 1. Mise à jour locale immédiate dans le signal pour supprimer tout temps d'attente visuel
     this._opportunities.update((items) =>
