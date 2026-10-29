@@ -4,14 +4,11 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express, { type Request } from 'express';
+import express from 'express';
 import {join} from 'node:path';
 import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
-import jwt from 'jsonwebtoken';
-import { UpstashRateLimitStore } from './server/upstash-rate-limit.store';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
@@ -121,10 +118,6 @@ const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
   return parsed;
 };
 
-const createRateLimitStore = (prefix: string): UpstashRateLimitStore | undefined =>
-  process.env['UPSTASH_REDIS_REST_URL'] && process.env['UPSTASH_REDIS_REST_TOKEN']
-    ? new UpstashRateLimitStore(prefix)
-    : undefined;
 const slowApiRequestThresholdMs = readPositiveIntegerEnv('API_SLOW_REQUEST_LOG_MS', 1000);
 
 // Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
@@ -194,151 +187,7 @@ app.use('/api', (req, res, next): void => {
  * ==============================================================================
  */
 
-/**
- * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
- * La signature HMAC-SHA256 est impérativement vérifiée avec SUPABASE_JWT_SECRET.
- * S11: Aucun décodage permissif (jwt.decode) sans validation cryptographique.
- * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
- * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
- */
-const extractAuthenticatedUserId = (req: express.Request): string | null => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || typeof authHeader !== 'string') return null;
 
-  const token = authHeader.startsWith('Bearer ')
-    ? authHeader.substring(7).trim()
-    : authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  if (!token) return null;
-
-  try {
-    const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
-    if (!jwtSecret) {
-      // S11: Refus par défaut : sans secret de signature configuré, aucun jeton n'est accepté.
-      return null;
-    }
-    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>;
-
-    if (
-      payload &&
-      typeof payload['sub'] === 'string' &&
-      payload['sub'].length > 0
-    ) {
-      return payload['sub'];
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-};
-
-/**
- * Exemptions pour le développement local et les adresses de bouclage (127.0.0.1 / ::1).
- * V1: Vérification stricte basée uniquement sur req.ip (dérivé du reverse proxy de confiance).
- * L'en-tête Host/hostname n'est JAMAIS utilisé pour une décision de sécurité ou d'exemption.
- */
-const isLocalOrDevelopment = (req: express.Request): boolean => {
-  if (process.env['NODE_ENV'] !== 'production') return true;
-  const ip = req.ip || '';
-  return (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip.startsWith('127.')
-  );
-};
-
-// S11: Rate limiting conservateur (non auth 100/15min, auth 1000/15min, auth/sync 50/15min, mutations 200/15min)
-const apiRateLimitWindowMs = readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
-const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 100);
-const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 1000);
-const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 50);
-
-// 1. Limiteur global sur toutes les routes de l'API /api/* (discriminé par utilisateur connecté ou IP)
-const apiGlobalLimiter = rateLimit({
-  windowMs: apiRateLimitWindowMs,
-  limit: (req: Request) => (extractAuthenticatedUserId(req) ? apiRateLimitAuthMax : apiRateLimitMax),
-  keyGenerator: (req: Request) => {
-    const userId = extractAuthenticatedUserId(req);
-    return userId ? `usr:${userId}` : ipKeyGenerator(req.ip || '');
-  },
-  skip: (req: Request) => isLocalOrDevelopment(req),
-  store: createRateLimitStore('transmex:api:global:'),
-  passOnStoreError: false,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: (req: Request) => ({
-    error: extractAuthenticatedUserId(req)
-      ? 'Quota de requêtes dépassé pour votre compte utilisateur. Veuillez patienter avant de réessayer.'
-      : 'Trop de requêtes envoyées depuis cette adresse IP. Veuillez patienter avant de réessayer.',
-    retryAfterMinutes: Math.ceil(apiRateLimitWindowMs / 60000),
-  }),
-});
-app.use('/api', apiGlobalLimiter);
-
-// 2. Limiteur sur les endpoints de configuration et de synchronisation d'authentification
-const authSyncLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: authSyncRateLimitMax,
-  keyGenerator: (req: Request) => ipKeyGenerator(req.ip || ''),
-  skip: (req: Request) => isLocalOrDevelopment(req),
-  store: createRateLimitStore('transmex:api:auth:'),
-  passOnStoreError: false,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: {
-    error: 'Trop de requêtes sur les services d’authentification. Veuillez patienter quelques instants.',
-    retryAfterMinutes: 15,
-  },
-});
-app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSyncLimiter);
-
-// 3. Limiteur renforcé sur les opérations d'écriture et de mutation (POST, PUT, PATCH, DELETE)
-// Prévient l'inondation de la base de données, la création massive de comptes ou de transactions
-const mutationsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 200),
-  keyGenerator: (req: Request) => {
-    const userId = extractAuthenticatedUserId(req);
-    return userId ? `usr_mut:${userId}` : ipKeyGenerator(req.ip || '');
-  },
-  skip: (req: Request) => isLocalOrDevelopment(req),
-  store: createRateLimitStore('transmex:api:mutations:'),
-  passOnStoreError: false,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: {
-    error: 'Limite de modifications ou d’enregistrements atteinte pour cette période. Veuillez patienter avant de renouveler.',
-    retryAfterMinutes: 15,
-  },
-});
-app.use(
-  [
-    '/api/system/collaborators',
-    '/api/admin/users',
-    '/api/cahier/operations',
-    '/api/cashier/transactions',
-    '/api/system/operations',
-    '/api/prospects',
-    '/api/crm',
-    '/api/quotes',
-    '/api/dossiers',
-    '/api/journals',
-    '/api/access-control',
-    '/api/profile/me',
-  ],
-  (req, res, next): void => {
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-      mutationsLimiter(req, res, next);
-      return;
-    }
-    next();
-  }
-);
 
 app.get('/api/supabase-config', getSupabaseConfigHandler);
 app.get('/api/config', getSupabaseConfigHandler);
