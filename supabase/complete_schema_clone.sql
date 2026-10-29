@@ -23,7 +23,7 @@ COMMENT ON SCHEMA private IS 'Fonctions internes (triggers, audit) volontairemen
 -- ------------------------------------------------------------------
 CREATE TYPE public.user_role_enum AS ENUM (
   'admin', 'rh', 'manager_stock', 'caissier', 'agent',
-  'manager', 'caissiere', 'employe', 'tresorier', 'comptable'
+  'manager', 'caissiere', 'employe', 'tresorier', 'comptable', 'commercial'
 );
 
 CREATE TYPE public.transaction_type_category AS ENUM ('entree', 'sortie');
@@ -373,6 +373,8 @@ CREATE TABLE public.sales_quotes (
   status text NOT NULL DEFAULT 'draft'
     CHECK (status IN ('draft', 'sent', 'accepted', 'rejected', 'expired')),
   valid_until date,
+  sent_at timestamptz,
+  responded_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -380,6 +382,8 @@ CREATE INDEX idx_sales_quotes_assigned_updated ON public.sales_quotes (assigned_
 CREATE INDEX idx_sales_quotes_prospect_created ON public.sales_quotes (prospect_id, created_at DESC);
 CREATE INDEX idx_sales_quotes_status_valid_until ON public.sales_quotes (status, valid_until)
   WHERE status IN ('draft', 'sent') AND valid_until IS NOT NULL;
+CREATE INDEX idx_sales_quotes_timing_analytics ON public.sales_quotes (created_at DESC, sent_at, status, assigned_to);
+CREATE INDEX idx_sales_quotes_sent_at ON public.sales_quotes (sent_at) WHERE sent_at IS NOT NULL;
 CREATE UNIQUE INDEX idx_sales_quotes_unique_opportunity ON public.sales_quotes (opportunity_id) WHERE opportunity_id IS NOT NULL;
 CREATE INDEX idx_sales_quotes_contact ON public.sales_quotes (contact_id) WHERE contact_id IS NOT NULL;
 
@@ -699,6 +703,12 @@ DECLARE
   candidat_piece text;
   existe boolean;
 BEGIN
+  -- Si l'appelant est un utilisateur connecté non-administrateur,
+  -- toute tentative de forcer manuellement une pièce comptable est neutralisée.
+  IF (SELECT auth.uid()) IS NOT NULL AND NOT private.is_admin() THEN
+    NEW.piece_comptable := NULL;
+  END IF;
+
   IF NEW.piece_comptable IS NOT NULL AND btrim(NEW.piece_comptable) <> '' THEN
     RETURN NEW;
   END IF;
@@ -775,8 +785,9 @@ DECLARE
   v_is_current_admin boolean;
   v_before jsonb;
   v_after jsonb;
+  v_profile_rows integer;
 BEGIN
-  IF p_role_key IS NULL OR p_role_key NOT IN ('admin','manager','tresorier','caissiere','comptable','employe') THEN
+  IF p_role_key IS NULL OR p_role_key NOT IN ('admin','manager','tresorier','caissiere','comptable','employe','commercial') THEN
     RAISE EXCEPTION 'Role cannot be synchronized with the legacy profile' USING ERRCODE = '22023';
   END IF;
 
@@ -814,6 +825,7 @@ BEGIN
   FROM public.access_user_roles ur JOIN public.access_roles r ON r.id = ur.role_id
   WHERE ur.user_id = p_user_id;
 
+  -- 1) Assurer le nouveau rôle  2) Retirer les anciens : jamais d'utilisateur sans rôle
   INSERT INTO public.access_user_roles (user_id, role_id, assigned_by, assignment_source, expires_at)
   VALUES (p_user_id, v_role_id, p_actor_user_id, 'legacy_profile', NULL)
   ON CONFLICT (user_id, role_id) DO UPDATE
@@ -825,16 +837,34 @@ BEGIN
     AND (p_exclusive OR assignment_source = 'legacy_profile');
 
   UPDATE public.profiles
-  SET role = p_role_key::public.user_role_enum
+  SET role = p_role_key::public.user_role_enum,
+      updated_at = now()
   WHERE id = p_user_id AND role IS DISTINCT FROM p_role_key::public.user_role_enum;
+  GET DIAGNOSTICS v_profile_rows = ROW_COUNT;
+
+  -- Synchroniser les métadonnées auth.users
+  UPDATE auth.users
+  SET raw_app_meta_data = jsonb_set(
+    jsonb_set(
+      COALESCE(raw_app_meta_data, '{}'::jsonb),
+      '{role}',
+      to_jsonb(p_role_key)
+    ),
+    '{custom_role}',
+    to_jsonb(p_role_key)
+  )
+  WHERE id = p_user_id
+    AND (raw_app_meta_data->>'role' IS DISTINCT FROM p_role_key);
 
   SELECT COALESCE(jsonb_agg(r.role_key ORDER BY r.role_key), '[]'::jsonb) INTO v_after
   FROM public.access_user_roles ur JOIN public.access_roles r ON r.id = ur.role_id
   WHERE ur.user_id = p_user_id;
 
-  INSERT INTO public.access_audit_log (actor_user_id, subject_user_id, action_key, role_key, before_state, after_state)
-  VALUES (p_actor_user_id, p_user_id, 'user.role.sync', p_role_key,
-          jsonb_build_object('roles', v_before), jsonb_build_object('roles', v_after, 'exclusive', p_exclusive));
+  IF v_before IS DISTINCT FROM v_after OR v_profile_rows > 0 THEN
+    INSERT INTO public.access_audit_log (actor_user_id, subject_user_id, action_key, role_key, before_state, after_state)
+    VALUES (p_actor_user_id, p_user_id, 'user.role.sync', p_role_key,
+            jsonb_build_object('roles', v_before), jsonb_build_object('roles', v_after, 'exclusive', p_exclusive));
+  END IF;
 
   RETURN jsonb_build_object('userId', p_user_id, 'roleKey', p_role_key, 'roles', v_after);
 END;
@@ -1104,6 +1134,36 @@ BEGIN
       VALUES (target_user_id, target_role_id, p_actor_user_id, 'admin', NULLIF(payload->>'expiresAt', '')::timestamptz)
       ON CONFLICT (user_id, role_id) DO UPDATE
       SET assigned_by = EXCLUDED.assigned_by, assignment_source = 'admin', expires_at = EXCLUDED.expires_at;
+
+      -- Synchronisation atomique du profil public.profiles
+      IF EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'public.user_role_enum'::regtype AND enumlabel = target_role_key
+      ) THEN
+        UPDATE public.profiles
+        SET role = target_role_key::public.user_role_enum,
+            updated_at = now()
+        WHERE id = target_user_id;
+      ELSE
+        UPDATE public.profiles
+        SET role = 'employe'::public.user_role_enum,
+            updated_at = now()
+        WHERE id = target_user_id;
+      END IF;
+
+      -- Synchronisation atomique des métadonnées auth.users
+      UPDATE auth.users
+      SET raw_app_meta_data = jsonb_set(
+        jsonb_set(
+          COALESCE(raw_app_meta_data, '{}'::jsonb),
+          '{role}',
+          to_jsonb(target_role_key)
+        ),
+        '{custom_role}',
+        to_jsonb(target_role_key)
+      )
+      WHERE id = target_user_id;
+
       next_state := jsonb_build_object('userId', target_user_id, 'roleKey', target_role_key, 'expiresAt', payload->'expiresAt');
       audit_subject := target_user_id;
 
@@ -1127,6 +1187,27 @@ BEGIN
       IF NOT FOUND THEN
         RAISE EXCEPTION 'User role assignment not found' USING ERRCODE = 'P0002';
       END IF;
+
+      -- S'il ne reste plus de rôle actif pour cet utilisateur, repli sur 'employe'
+      IF NOT EXISTS (SELECT 1 FROM public.access_user_roles WHERE user_id = target_user_id) THEN
+        UPDATE public.profiles
+        SET role = 'employe'::public.user_role_enum,
+            updated_at = now()
+        WHERE id = target_user_id;
+
+        UPDATE auth.users
+        SET raw_app_meta_data = jsonb_set(
+          jsonb_set(
+            COALESCE(raw_app_meta_data, '{}'::jsonb),
+            '{role}',
+            '"employe"'::jsonb
+          ),
+          '{custom_role}',
+          '"employe"'::jsonb
+        )
+        WHERE id = target_user_id;
+      END IF;
+
       next_state := jsonb_build_object('revoked', true, 'roleKey', target_role_key);
       audit_subject := target_user_id;
 
@@ -1402,6 +1483,102 @@ BEGIN
 END;
 $function$;
 
+-- ------------------------------------------------------------------
+-- Fonctions du schéma privé (internes, non exposées à PostgREST)
+-- ------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION private.get_current_user_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT (p.role)::text
+  FROM public.profiles p
+  WHERE p.id = (SELECT auth.uid()) AND p.is_active IS TRUE
+  LIMIT 1;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_admin()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT (private.get_current_user_role() = 'admin');
+$function$;
+
+CREATE OR REPLACE FUNCTION private.is_active_user()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = (SELECT auth.uid()) AND p.is_active IS TRUE
+  );
+$function$;
+
+-- Numérotation réelle des écritures de journal : compteur par (journal_id, année).
+CREATE OR REPLACE FUNCTION private.assign_journal_entry_piece_comptable()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  prefix text;
+  annee_piece integer;
+  prochain_num integer;
+  candidat text;
+  existe boolean;
+BEGIN
+  IF NEW.piece_comptable IS NOT NULL AND btrim(NEW.piece_comptable) <> '' AND NEW.sequence_number IS NOT NULL AND NEW.sequence_number > 0 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(sequence_prefix, 'JRNL') INTO prefix
+  FROM public.journals WHERE id = NEW.journal_id;
+
+  IF prefix IS NULL THEN
+    prefix := 'JRNL';
+  END IF;
+
+  annee_piece := COALESCE(
+    NULLIF(substring(NEW.date::text from '^\d{4}'), '')::int,
+    NULLIF(substring(NEW.date::text from '\d{4}$'), '')::int,
+    EXTRACT(YEAR FROM now())::int
+  );
+
+  INSERT INTO public.journal_piece_counters (journal_id, annee, dernier_numero)
+  VALUES (NEW.journal_id, annee_piece, 0)
+  ON CONFLICT (journal_id, annee) DO NOTHING;
+
+  LOOP
+    UPDATE public.journal_piece_counters
+    SET dernier_numero = public.journal_piece_counters.dernier_numero + 1
+    WHERE journal_id = NEW.journal_id AND annee = annee_piece
+    RETURNING dernier_numero INTO prochain_num;
+
+    candidat := prefix || '/' || annee_piece || '/' || lpad(prochain_num::text, 5, '0');
+
+    SELECT EXISTS (
+      SELECT 1 FROM public.journal_entries
+      WHERE journal_id = NEW.journal_id AND piece_comptable = candidat
+    ) INTO existe;
+
+    IF NOT existe THEN
+      NEW.sequence_number := prochain_num;
+      NEW.piece_comptable := candidat;
+      EXIT;
+    END IF;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$function$;
+
 -- Audit automatique : alimente public.audit_logs à chaque écriture sur une
 -- table surveillée (voir triggers trg_audit_* ci-dessous). Ignore les UPDATE
 -- qui ne modifient que updated_at (no-op fonctionnel).
@@ -1451,6 +1628,123 @@ BEGIN
   );
 
   RETURN COALESCE(NEW, OLD);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.protect_profile_identity_columns()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF (SELECT auth.uid()) IS NOT NULL AND NOT private.is_admin() THEN
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.user_code IS DISTINCT FROM OLD.user_code THEN
+      RAISE EXCEPTION 'Les colonnes d’identité d’un profil ne peuvent pas être modifiées par l’utilisateur.'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.protect_cashier_transaction_integrity()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF (SELECT auth.uid()) IS NOT NULL AND NOT private.is_admin() THEN
+    -- Immuabilité de la pièce comptable une fois attribuée
+    IF OLD.piece_comptable IS NOT NULL AND NEW.piece_comptable IS DISTINCT FROM OLD.piece_comptable THEN
+      RAISE EXCEPTION 'Le numéro de pièce comptable est immuable.'
+        USING ERRCODE = '42501';
+    END IF;
+
+    -- Interdiction de valider directement le statut 'posted' sans passer par les contrôles serveur
+    IF OLD.status = 'draft' AND NEW.status = 'posted' THEN
+      RAISE EXCEPTION 'La comptabilisation directe par PostgREST est refusée. Veuillez passer par le circuit de caisse applicatif.'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_opportunity_stage_to_sales_quote()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  -- Si l'étape n'a pas changé, rien à faire
+  IF TG_OP = 'UPDATE' AND OLD.stage IS NOT DISTINCT FROM NEW.stage THEN
+    RETURN NEW;
+  END IF;
+
+  -- 1. Étape Préparation cotation : statut draft (autorise la rétrogradation depuis sent)
+  IF NEW.stage = 'quote_preparation' THEN
+    UPDATE public.sales_quotes
+    SET status = 'draft'
+    WHERE opportunity_id = NEW.id
+      AND status IN ('draft', 'sent');
+
+  -- 2. Étape Cotation envoyée : statut sent + horodatage d'envoi
+  ELSIF NEW.stage = 'quote_sent' THEN
+    UPDATE public.sales_quotes
+    SET status = 'sent',
+        sent_at = COALESCE(sent_at, now())
+    WHERE opportunity_id = NEW.id
+      AND status NOT IN ('sent', 'accepted');
+
+  -- 3. Étape Négociation : si la cotation était encore en brouillon, elle passe à sent
+  ELSIF NEW.stage = 'negotiation' THEN
+    UPDATE public.sales_quotes
+    SET status = 'sent',
+        sent_at = COALESCE(sent_at, now())
+    WHERE opportunity_id = NEW.id
+      AND status = 'draft';
+
+  -- 4. Étape Gagné : statut accepted + horodatage de réponse client
+  ELSIF NEW.stage = 'won' THEN
+    UPDATE public.sales_quotes
+    SET status = 'accepted',
+        responded_at = COALESCE(responded_at, now())
+    WHERE opportunity_id = NEW.id
+      AND status <> 'accepted';
+
+  -- 5. Étape Perdu : statut rejected + horodatage de réponse
+  ELSIF NEW.stage = 'lost' THEN
+    UPDATE public.sales_quotes
+    SET status = 'rejected',
+        responded_at = COALESCE(responded_at, now())
+    WHERE opportunity_id = NEW.id
+      AND status NOT IN ('accepted', 'rejected');
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.validate_sales_quote_contact()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF NEW.contact_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM public.prospect_contacts
+    WHERE id = NEW.contact_id AND prospect_id = NEW.prospect_id
+  ) THEN
+    RAISE EXCEPTION 'Le contact d’une cotation doit appartenir à la société associée.';
+  END IF;
+  RETURN NEW;
 END;
 $function$;
 
@@ -1510,6 +1804,10 @@ CREATE TRIGGER trg_cashier_transactions_updated_at
   BEFORE UPDATE ON public.cashier_transactions
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+CREATE TRIGGER trg_protect_cashier_transaction_integrity
+  BEFORE UPDATE ON public.cashier_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.protect_cashier_transaction_integrity();
+
 CREATE TRIGGER trg_assign_piece_comptable
   BEFORE INSERT ON public.cashier_transactions
   FOR EACH ROW EXECUTE FUNCTION public.assign_piece_comptable();
@@ -1541,6 +1839,10 @@ CREATE TRIGGER trg_sales_quotes_updated_at
   BEFORE UPDATE ON public.sales_quotes
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+CREATE TRIGGER trg_validate_sales_quote_contact
+  BEFORE INSERT OR UPDATE OF contact_id, prospect_id ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.validate_sales_quote_contact();
+
 CREATE TRIGGER trg_sales_quote_templates_updated_at
   BEFORE UPDATE ON public.sales_quote_templates
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -1566,6 +1868,12 @@ CREATE TRIGGER trg_link_sales_quote_to_crm_opportunity
 CREATE TRIGGER trg_sync_accepted_quote_to_sales_crm
   AFTER INSERT OR UPDATE OF status ON public.sales_quotes
   FOR EACH ROW EXECUTE FUNCTION public.sync_accepted_quote_to_sales_crm();
+
+CREATE TRIGGER trg_sync_opportunity_stage_to_sales_quote
+  AFTER UPDATE OF stage
+  ON public.sales_opportunities
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_opportunity_stage_to_sales_quote();
 
 CREATE TRIGGER trg_protect_profile_identity
   BEFORE UPDATE ON public.profiles
@@ -2012,9 +2320,17 @@ GRANT EXECUTE ON FUNCTION public.prepare_sales_campaign_audience(uuid, uuid[]) T
 REVOKE ALL ON FUNCTION public.grant_new_permission_to_admin() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.protect_profile_identity_columns() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.protect_cashier_transaction_integrity() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.protect_cashier_transaction_integrity() TO service_role;
 REVOKE ALL ON FUNCTION public.sync_accepted_quote_to_sales_crm() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.sync_opportunity_stage_to_sales_quote() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_opportunity_stage_to_sales_quote() TO service_role;
+REVOKE ALL ON FUNCTION public.validate_sales_quote_contact() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.validate_sales_quote_contact() TO service_role;
 
 -- Fonctions privées : aucun accès direct via l'API, appelées uniquement par les triggers
+REVOKE ALL ON FUNCTION private.get_current_user_role() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.is_admin() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.is_active_user() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.assign_journal_entry_piece_comptable() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.audit_row_change() FROM PUBLIC, anon, authenticated;
@@ -2111,6 +2427,8 @@ VALUES
   ('module.dossiers.view', 'module.dossiers', 'view', 'Voir les dossiers', 'Afficher la tuile et ouvrir le module Dossiers.', false),
   ('module.configuration.view', 'module.configuration', 'view', 'Voir les paramètres', 'Afficher la tuile et ouvrir le module Paramètres.', false),
   ('module.access_control.view', 'module.access_control', 'view', 'Voir la gestion des accès', 'Afficher la tuile et ouvrir la gestion des accès.', false),
+  ('quotes.timing.read', 'quotes.timing', 'read', 'Consulter les délais et performances des cotations', 'Permet de visualiser les délais de traitement des cotations, le respect des SLA et la synthèse de performance de l’équipe commerciale.', true),
+  ('module.crm_performance.view', 'module.crm_performance', 'view', 'Voir l’onglet CRM Délais & Cotations', 'Affiche l’onglet CRM dans la barre supérieure de navigation du manager. Ne dispense pas du droit de lecture quotes.timing.read.', false)
 ON CONFLICT (permission_key) DO NOTHING;
 
 -- Octrois "all" (étendue générale), reproduisant la matrice de base
@@ -2121,6 +2439,8 @@ WITH initial_grants(role_key, permission_key) AS (
     ('manager', 'apps.view'), ('manager', 'dashboard.view'), ('manager', 'profile.read'), ('manager', 'profile.update'),
     ('manager', 'cashier.read'), ('manager', 'journals.read'), ('manager', 'journal_entries.read'),
     ('manager', 'journal_entries.chart_read'), ('manager', 'configuration.read'),
+    ('manager', 'quotes.timing.read'), ('manager', 'module.crm_performance.view'), ('manager', 'module.crm.view'),
+    ('manager', 'crm.read'), ('manager', 'crm.create'), ('manager', 'crm.update'),
     ('caissiere', 'apps.view'), ('caissiere', 'dashboard.view'), ('caissiere', 'profile.read'), ('caissiere', 'profile.update'),
     ('caissiere', 'cashier.read'), ('caissiere', 'cashier.create'), ('caissiere', 'cashier.update'), ('caissiere', 'cashier.delete'),
     ('caissiere', 'cashier.duplicate'), ('caissiere', 'cashier.status_update'), ('caissiere', 'cashier.import'), ('caissiere', 'cashier.export'),
@@ -2179,15 +2499,41 @@ FROM public.access_roles roles
 WHERE roles.role_key = 'manager' AND roles.is_active IS TRUE
 ON CONFLICT (role_id, permission_key, scope) DO NOTHING;
 
--- Octrois CRM pour un éventuel rôle "commercial". Ce rôle n'est PAS créé par ce
--- script (ni présent en production au 10/10/2026) : sans lui, ce bloc n'insère rien.
-WITH crm_grants(permission_key) AS (
-  VALUES ('crm.read'), ('crm.create'), ('crm.update'), ('crm.campaigns.manage')
+-- Octrois CRM, cotations et dossiers pour le rôle "commercial"
+WITH commercial_grants(permission_key) AS (
+  VALUES
+    ('apps.view'),
+    ('dashboard.view'),
+    ('profile.read'),
+    ('profile.update'),
+    ('prospects.read'),
+    ('prospects.create'),
+    ('prospects.update'),
+    ('crm.read'),
+    ('crm.create'),
+    ('crm.update'),
+    ('crm.team.read'),
+    ('crm.team.manage'),
+    ('crm.campaigns.manage'),
+    ('quotes.read'),
+    ('quotes.create'),
+    ('quotes.update'),
+    ('quotes.delete'),
+    ('quotes.assign'),
+    ('quotes.templates.read'),
+    ('quotes.templates.create'),
+    ('quotes.templates.update'),
+    ('quotes.templates.delete'),
+    ('dossiers.read'),
+    ('module.dashboard.view'),
+    ('module.prospects.view'),
+    ('module.quotes.view'),
+    ('module.crm.view')
 )
 INSERT INTO public.access_role_permissions (role_id, permission_key, scope, granted_by)
 SELECT roles.id, permissions.permission_key, '{"type":"all","version":1}'::jsonb, NULL
 FROM public.access_roles roles
-JOIN crm_grants grants ON true
+JOIN commercial_grants grants ON true
 JOIN public.access_permissions permissions ON permissions.permission_key = grants.permission_key
 WHERE roles.role_key = 'commercial'
 ON CONFLICT (role_id, permission_key, scope) DO NOTHING;

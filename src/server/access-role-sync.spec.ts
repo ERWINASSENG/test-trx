@@ -7,6 +7,8 @@ function createQuery(result: { data: unknown; error: { message: string } | null 
   const query = {
     select: vi.fn(() => query),
     eq: vi.fn(() => query),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
+    update: vi.fn(() => query),
     maybeSingle: vi.fn(() => promise),
     then: promise.then.bind(promise),
   };
@@ -59,5 +61,52 @@ describe('syncUserAccessRole', () => {
       p_role_key: 'tresorier',
       p_exclusive: false,
     });
+  });
+
+  it('synchronizes canonical commercial role via RPC sync_user_primary_role', async () => {
+    const client = createClient(
+      { id: 'role-comm' },
+      { role: 'caissiere' },
+      [{ role_id: 'role-caisse', assignment_source: 'admin', expires_at: null }]
+    );
+
+    await syncUserAccessRole(client, 'user-42', 'commercial', 'admin-1', 'admin');
+
+    expect(client.rpc).toHaveBeenCalledWith('sync_user_primary_role', {
+      p_actor_user_id: 'admin-1',
+      p_user_id: 'user-42',
+      p_role_key: 'commercial',
+      p_exclusive: true,
+    });
+  });
+
+  it('falls back to idempotent upsert and profile update when RPC fails for commercial', async () => {
+    const queries = {
+      access_roles: createQuery({ data: { id: 'role-comm' }, error: null }),
+      profiles: createQuery({ data: { role: 'caissiere' }, error: null }),
+      access_user_roles: createQuery({ data: [], error: null }),
+    };
+    const rpc = vi.fn().mockResolvedValue({ error: { message: 'RPC failure simulation' } });
+    const client = {
+      from: vi.fn((table: keyof typeof queries) => queries[table]),
+      rpc,
+    } as unknown as SupabaseClient;
+
+    await syncUserAccessRole(client, 'user-42', 'commercial', 'admin-1', 'admin');
+
+    expect(rpc).toHaveBeenCalled();
+    expect(queries.access_user_roles.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: 'user-42',
+        role_id: 'role-comm',
+        assignment_source: 'admin',
+      }),
+      { onConflict: 'user_id,role_id' }
+    );
+    expect(queries.profiles.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'commercial',
+      })
+    );
   });
 });
