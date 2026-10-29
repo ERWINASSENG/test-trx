@@ -25,6 +25,8 @@
           <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
           <input
             type="search"
+            id="prospects-search-input"
+            name="search"
             aria-label="Rechercher dans les contacts"
             placeholder="Nom, société ou contact"
             [value]="searchDraft()"
@@ -357,49 +359,86 @@
         <form [formGroup]="form" (ngSubmit)="saveProspect()">
           <div class="form-grid">
             <!-- Ligne 1 : Société | Contact principal -->
-            <label class="field">
+            <label class="field" for="prospect-company-name">
               Société *
-              <input formControlName="companyName" autocomplete="organization" placeholder="Nom de l'entreprise" />
+              <input
+                id="prospect-company-name"
+                name="companyName"
+                formControlName="companyName"
+                autocomplete="organization"
+                placeholder="Nom de l'entreprise" />
               @if (form.controls.companyName.touched && form.controls.companyName.invalid) {
                 <small class="field-error">La société est obligatoire (au moins 2 caractères).</small>
               }
             </label>
-            <label class="field">
+            <label class="field" for="prospect-contact-name">
               Contact principal
-              <input formControlName="contactName" autocomplete="name" placeholder="Nom du contact" />
+              <input
+                id="prospect-contact-name"
+                name="contactName"
+                formControlName="contactName"
+                autocomplete="name"
+                placeholder="Nom du contact" />
             </label>
 
             <!-- Ligne 2 : Fonction du contact | Secteur d'activité -->
-            <label class="field">
+            <label class="field" for="prospect-contact-role">
               Fonction du contact
-              <input formControlName="contactRole" placeholder="Ex: Directeur commercial, Responsable logistique…" />
+              <input
+                id="prospect-contact-role"
+                name="contactRole"
+                formControlName="contactRole"
+                placeholder="Ex: Directeur commercial, Responsable logistique…" />
             </label>
-            <label class="field">
+            <label class="field" for="prospect-sector">
               Secteur d'activité
-              <input formControlName="sector" placeholder="Ex: Commerce international, Logistique, Transit…" />
+              <input
+                id="prospect-sector"
+                name="sector"
+                formControlName="sector"
+                placeholder="Ex: Commerce international, Logistique, Transit…" />
             </label>
 
             <!-- Ligne 3 : Pays | Téléphone -->
-            <label class="field">
+            <label class="field" for="prospect-country">
               Pays
-              <input formControlName="country" autocomplete="country-name" placeholder="Ex: Cameroun, Côte d'Ivoire, France, Nigeria…" />
+              <input
+                id="prospect-country"
+                name="country"
+                formControlName="country"
+                autocomplete="country-name"
+                placeholder="Ex: Cameroun, Côte d'Ivoire, France, Nigeria…" />
             </label>
-            <label class="field">
+            <label class="field" for="prospect-phone">
               Téléphone
-              <input type="tel" formControlName="phone" autocomplete="tel" placeholder="+237 6..." />
+              <input
+                type="tel"
+                id="prospect-phone"
+                name="phone"
+                formControlName="phone"
+                autocomplete="tel"
+                placeholder="+237 6..." />
             </label>
 
             <!-- Ligne 4 : E-mail | Commercial attribué -->
-            <label class="field">
+            <label class="field" for="prospect-email">
               E-mail
-              <input type="email" formControlName="email" autocomplete="email" placeholder="contact@exemple.com" />
+              <input
+                type="email"
+                id="prospect-email"
+                name="email"
+                formControlName="email"
+                autocomplete="email"
+                placeholder="contact@exemple.com" />
               @if (form.controls.email.touched && form.controls.email.invalid) {
                 <small class="field-error">Adresse e-mail invalide.</small>
               }
             </label>
-            <label class="field">
+            <label class="field" for="prospect-assigned-to">
               Commercial attribué
               <select
+                id="prospect-assigned-to"
+                name="assignedTo"
                 formControlName="assignedTo"
                 aria-label="Commercial attribué"
                 class="h-9 w-full rounded border border-slate-300 dark:border-white/20 bg-white dark:bg-[#142a4a] px-2.5 py-1.5 text-xs text-slate-800 dark:text-white transition focus:border-[#0b5ed7] focus:outline-none focus:ring-2 focus:ring-[#0b5ed7]/15">
