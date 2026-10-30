@@ -86,6 +86,8 @@
               <input
                 type="checkbox"
                 class="odoo-checkbox"
+                id="prospects-select-all"
+                name="prospects-select-all"
                 [checked]="isAllSelected()"
                 (change)="toggleSelectAll()"
                 aria-label="Sélectionner tous les prospects"
@@ -224,6 +226,8 @@
                 <input
                   type="checkbox"
                   class="odoo-checkbox"
+                  [id]="'prospect-select-' + prospect.id"
+                  [name]="'prospect-select-' + prospect.id"
                   [checked]="isSelected(prospect.id)"
                   (change)="toggleSelect(prospect.id); $event.stopPropagation()"
                   (dblclick)="$event.stopPropagation()"

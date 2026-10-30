@@ -95,7 +95,8 @@
               placeholder="Rechercher…"
               aria-label="Rechercher dans les opérations de caisse"
               class="min-w-[60px] flex-grow bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
-              id="cashier-control-search" />
+              id="cashier-control-search"
+              name="search" />
           </div>
         }
       </div>
@@ -153,6 +154,7 @@
                 <input
                   type="checkbox"
                   id="select-all-checkbox"
+                  name="select-all-checkbox"
                   [checked]="isAllSelected()"
                   (change)="onToggleSelectAll()"
                   aria-label="Sélectionner toutes les lignes"
@@ -228,7 +230,13 @@
             <tr class="odoo-row-editing" id="inline-add-row" [formGroup]="transactionForm" (keydown)="onAddKeydown($event)">
               <!-- Checkbox -->
               <td class="py-2 px-3 text-center align-middle">
-                <input type="checkbox" disabled class="odoo-checkbox opacity-40" />
+                <input
+                  type="checkbox"
+                  id="inline-add-row-checkbox"
+                  name="inline-add-row-checkbox"
+                  disabled
+                  aria-label="Ligne d'ajout rapide"
+                  class="odoo-checkbox opacity-40" />
               </td>
 
               <!-- Date (Soulignée avec popover calendrier Odoo) -->
@@ -410,7 +418,13 @@
                 >
                   <!-- Checkbox -->
                   <td class="py-2 px-3 text-center align-middle">
-                    <input type="checkbox" disabled class="odoo-checkbox opacity-40" />
+                    <input
+                      type="checkbox"
+                      [id]="'inline-edit-checkbox-' + tx.id"
+                      [name]="'inline-edit-checkbox-' + tx.id"
+                      disabled
+                      aria-label="Ligne en cours d'édition"
+                      class="odoo-checkbox opacity-40" />
                   </td>
 
                   <!-- Date (Soulignée avec popover calendrier Odoo) -->
@@ -578,9 +592,11 @@
                     @if (canSelect()) {
                       <input
                         type="checkbox"
+                        [id]="'cashier-tx-select-' + tx.id"
+                        [name]="'cashier-tx-select-' + tx.id"
                         [checked]="tx.selected"
                         (change)="onToggleSelect(tx)"
-                        aria-label="Sélectionner la ligne"
+                        [attr.aria-label]="'Sélectionner la transaction ' + (tx.libelle || tx.id)"
                         class="odoo-checkbox"
                       />
                     } @else {

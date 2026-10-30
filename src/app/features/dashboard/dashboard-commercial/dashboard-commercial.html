@@ -326,9 +326,12 @@
             <div class="p-3.5 rounded-lg border border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/30 flex items-start gap-3 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
               <input
                 type="checkbox"
+                [id]="'dashboard-comm-task-' + task.id"
+                [name]="'dashboard-comm-task-' + task.id"
                 (change)="completeTask(task.id)"
                 class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:focus:ring-slate-300 cursor-pointer"
                 title="Marquer comme terminée"
+                aria-label="Marquer comme terminée"
               />
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between gap-2">

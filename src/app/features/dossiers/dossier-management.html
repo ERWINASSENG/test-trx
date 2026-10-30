@@ -23,6 +23,8 @@
       <form class="dossiers-control-search flex w-full min-w-0 items-center gap-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]" (submit)="$event.preventDefault(); applyFilters()">
         <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
         <input
+          id="dossiers-search-input"
+          name="dossierSearch"
           type="search"
           aria-label="Rechercher un numéro de dossier"
           placeholder="Numéro de dossier"
@@ -114,6 +116,8 @@
               @if (canAssign()) {
                 <td>
                   <select
+                    [id]="'dossier-table-assignee-' + dossier.id"
+                    [name]="'dossier-table-assignee-' + dossier.id"
                     [attr.aria-label]="'Responsable du dossier ' + dossier.noDossier"
                     [value]="dossier.assignedTo || ''"
                     [disabled]="isAssigning() !== null"
@@ -164,6 +168,8 @@
                 <label class="field">
                   Responsable
                   <select
+                    [id]="'dossier-kanban-assignee-' + dossier.id"
+                    [name]="'dossier-kanban-assignee-' + dossier.id"
                     [attr.aria-label]="'Responsable du dossier ' + dossier.noDossier"
                     [value]="dossier.assignedTo || ''"
                     [disabled]="isAssigning() !== null"
@@ -220,6 +226,8 @@
               <div class="prospect-search">
                 <mat-icon aria-hidden="true">search</mat-icon>
                 <input
+                  id="dossier-modal-prospect-search"
+                  name="prospectSearch"
                   type="search"
                   aria-label="Rechercher un prospect à associer"
                   placeholder="Nom ou société"
@@ -230,7 +238,7 @@
                   <mat-icon>arrow_forward</mat-icon>
                 </button>
               </div>
-              <select id="dossier-prospect" formControlName="prospectId" required aria-describedby="dossier-prospect-hint dossier-prospect-error">
+              <select id="dossier-prospect" name="prospectId" formControlName="prospectId" required aria-describedby="dossier-prospect-hint dossier-prospect-error">
                 <option value="" disabled>Sélectionner un prospect</option>
                 @for (prospect of prospectService.prospects(); track prospect.id) {
                   <option [value]="prospect.id">
@@ -246,7 +254,7 @@
 
             <label class="field field-wide">
               Numéro de dossier *
-              <input id="dossier-number" formControlName="noDossier" maxlength="100" autocomplete="off" required />
+              <input id="dossier-number" name="noDossier" formControlName="noDossier" maxlength="100" autocomplete="off" required />
               @if (form.controls.noDossier.touched && form.controls.noDossier.invalid) {
                 <small class="field-error" role="alert">Le numéro de dossier est obligatoire (100 caractères maximum).</small>
               }
@@ -254,13 +262,13 @@
 
             <label class="field field-wide">
               Description
-              <textarea id="dossier-description" formControlName="description" rows="3"></textarea>
+              <textarea id="dossier-description" name="description" formControlName="description" rows="3"></textarea>
             </label>
 
             @if (canAssign()) {
               <label class="field field-wide">
                 Responsable
-                <select id="dossier-assignee" formControlName="assignedTo">
+                <select id="dossier-assignee" name="assignedTo" formControlName="assignedTo">
                   <option value="">Non attribué</option>
                   @for (assignee of dossierService.assignees(); track assignee.id) {
                     <option [value]="assignee.id">{{ assignee.firstName }} {{ assignee.lastName }}</option>

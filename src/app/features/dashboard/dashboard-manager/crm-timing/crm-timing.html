@@ -268,6 +268,8 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
           <input
+            id="crm-timing-search-input"
+            name="crm-timing-search"
             type="text"
             [ngModel]="searchQuery()"
             (ngModelChange)="searchQuery.set($event)"
@@ -277,6 +279,8 @@
 
         <!-- Filtre Commercial dynamique -->
         <select
+          id="crm-timing-rep-filter"
+          name="crm-timing-rep-filter"
           [ngModel]="selectedRepFilter()"
           (ngModelChange)="selectedRepFilter.set($event); loadData()"
           class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-400 shadow-2xs">
