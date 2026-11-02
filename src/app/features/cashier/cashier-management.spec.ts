@@ -10,7 +10,7 @@ import { NotificationService } from '../../core/services/notification.service';
 import { Journal } from '../../core/models/journal.model';
 import { CashierTransaction } from '../../core/models/cashier-transaction.model';
 import { UserProfile, UserRole } from '../../core/models/auth.model';
-import { vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('CashierManagement', () => {
   let component: CashierManagement;
@@ -422,5 +422,42 @@ describe('CashierManagement', () => {
       'Doublon détecté'
     );
     expect(component.error()).toContain('Opération déjà enregistrée');
+  });
+
+  describe('Comptabilisation en masse (Actions)', () => {
+    it('devrait exécuter onPostSelectedAction et appeler cashierService.postSelected', async () => {
+      const postSelectedSpy = vi.spyOn(service, 'postSelected').mockResolvedValue(true);
+
+      // Simuler une opération sélectionnée
+      const mockOp = {
+        id: 'tx-draft-batch',
+        date: '2026-10-05',
+        libelle: 'Achat consommables',
+        category: 'sortie' as const,
+        status: 'draft' as const,
+        montant: -15000,
+        selected: true,
+      };
+      const mapped = service.mapDatabaseOperations([mockOp]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      expect(component.selectedCount()).toBe(1);
+      expect(component.canPostCashierOperations()).toBe(true);
+
+      await component.onPostSelectedAction();
+
+      expect(postSelectedSpy).toHaveBeenCalled();
+      expect(component.isPosting()).toBe(false);
+      expect(component.isActionsMenuOpen()).toBe(false);
+    });
+
+    it('ne devrait pas déclencher postSelected si aucune opération n’est sélectionnée', async () => {
+      const postSelectedSpy = vi.spyOn(service, 'postSelected');
+
+      expect(component.selectedCount()).toBe(0);
+      await component.onPostSelectedAction();
+
+      expect(postSelectedSpy).not.toHaveBeenCalled();
+    });
   });
 });

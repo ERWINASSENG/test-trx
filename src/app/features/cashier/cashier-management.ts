@@ -201,6 +201,23 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     return isMainCashier && this.accessControlService.hasPermission('cashier.status_update');
   });
 
+  public readonly canPostCashierOperations = computed(() => {
+    const journalId = this.cashierService.activeJournalId();
+    const isMainCashier =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+
+    if (isMainCashier) {
+      return (
+        this.accessControlService.hasPermission('cashier.status_update') ||
+        this.accessControlService.hasPermission('cashier.update')
+      );
+    }
+    return this.accessControlService.hasPermission('journal_entries.update');
+  });
+
   // Données réactives issues du service
   public readonly pagedTransactions = this.cashierService.pagedTransactions;
   public readonly allTransactions = this.cashierService.allTransactions;
@@ -224,6 +241,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly isAddingRow = this.cashierService.isAddingRow;
   public readonly isSubmitting = signal<boolean>(false);
   public readonly isCancelling = signal<boolean>(false);
+  public readonly isPosting = signal<boolean>(false);
   public readonly isFilterDropdownOpen = signal<boolean>(false);
   public readonly isActionsMenuOpen = signal<boolean>(false);
   public readonly searchControl = new FormControl<string>('', {
@@ -696,6 +714,17 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     if (!this.canEdit() || this.selectedCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.duplicateSelected();
+  }
+
+  public async onPostSelectedAction(): Promise<void> {
+    if (!this.canPostCashierOperations() || this.selectedCount() === 0 || this.isPosting()) return;
+    this.closeActionsMenu();
+    this.isPosting.set(true);
+    try {
+      await this.cashierService.postSelected();
+    } finally {
+      this.isPosting.set(false);
+    }
   }
 
   public async onCancelSelectedAction(): Promise<void> {

@@ -1441,6 +1441,134 @@ export class CashierService implements OnDestroy {
   }
 
   /**
+   * Comptabilise les opérations sélectionnées (passe le statut de 'draft' à 'posted')
+   */
+  public async postSelected(): Promise<boolean> {
+    const selected = this._transactions().filter((t) => t.selected);
+    if (selected.length === 0) return true;
+
+    const draftTransactions = selected.filter((t) => t.status === 'draft');
+    if (draftTransactions.length === 0) {
+      const allAlreadyPosted = selected.every((t) => t.status === 'posted');
+      if (allAlreadyPosted) {
+        this.notificationService.info(
+          'Toutes les opérations sélectionnées sont déjà comptabilisées.',
+          'Information'
+        );
+        this.toggleSelectAll(false);
+        return true;
+      }
+      const hasCancelled = selected.some((t) => t.status === 'cancelled');
+      const msg = hasCancelled
+        ? 'Impossible de comptabiliser : les opérations annulées ne peuvent pas être réactivées.'
+        : 'Aucune opération en brouillon éligible à la comptabilisation dans la sélection.';
+      this.setError(msg);
+      return false;
+    }
+
+    const draftIds = draftTransactions.map((t) => t.id);
+    this._error.set(null);
+
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
+        token = sessionData.session?.access_token || null;
+      } catch {
+        // Ignorer
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const isDedicatedJournal = draftTransactions.every(
+      (t) => t.journalId && t.journalId !== 'native-caisse-principal' && t.journalId !== 'CSH1'
+    );
+
+    let postedSuccessfully = false;
+    let failureReason: string | null = null;
+
+    try {
+      if (isDedicatedJournal) {
+        let allOk = true;
+        for (const tx of draftTransactions) {
+          const jId = tx.journalId || tx.journal_id || this._activeJournalId();
+          const response = await fetch(
+            `/api/journals/${encodeURIComponent(jId)}/entries/${encodeURIComponent(tx.id)}`,
+            {
+              method: 'PATCH',
+              headers,
+              body: JSON.stringify({ status: 'posted' }),
+            }
+          );
+          if (!response.ok) {
+            allOk = false;
+            const errorPayload: unknown = await response.json().catch(() => null);
+            failureReason = getApiErrorMessage(
+              errorPayload,
+              `Impossible de comptabiliser l’écriture du journal (erreur HTTP ${response.status}).`
+            );
+          }
+        }
+        if (allOk) {
+          postedSuccessfully = true;
+        }
+      } else {
+        let response = await fetch('/api/cahier/operations/status', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ ids: draftIds, status: 'posted' }),
+        });
+
+        if (!response.ok && response.status === 404) {
+          response = await fetch('/api/cashier/transactions/status', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ids: draftIds, status: 'posted' }),
+          });
+        }
+
+        if (response.ok) {
+          postedSuccessfully = true;
+        } else {
+          const errorPayload: unknown = await response.json().catch(() => null);
+          failureReason = getApiErrorMessage(
+            errorPayload,
+            `Impossible de comptabiliser les opérations (erreur HTTP ${response.status}).`
+          );
+        }
+      }
+    } catch (networkErr) {
+      console.warn('Erreur réseau lors de la comptabilisation:', networkErr);
+      failureReason = 'Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.';
+    }
+
+    if (!postedSuccessfully) {
+      const errorMsg = failureReason || 'Impossible de comptabiliser les opérations sélectionnées.';
+      this.setError(errorMsg);
+      return false;
+    }
+
+    this._transactions.update((items) =>
+      items.map((it) => (draftIds.includes(it.id) ? { ...it, status: 'posted', selected: false } : it))
+    );
+    this.recalculateRunningBalances();
+    void this.loadCashierSummary();
+    this.toggleSelectAll(false);
+    this.notificationService.success(
+      draftIds.length > 1
+        ? `${draftIds.length} opérations ont été comptabilisées avec succès.`
+        : 'L’opération a été comptabilisée avec succès.',
+      'Comptabilisation réussie'
+    );
+    return true;
+  }
+
+  /**
    * Insérer dans une feuille de calcul (génère un classeur TSV/Excel détaillé avec formules de totaux)
    */
   public exportSpreadsheet(): void {

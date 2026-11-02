@@ -648,4 +648,116 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.filterState().pageIndex).toBe(0);
     expect(service.pagedTransactions()[0].id).toBe('draft-without-piece');
   });
+
+  describe('postSelected (Comptabilisation en masse)', () => {
+    it('devrait comptabiliser les opérations sélectionnées en statut draft (cas nominal)', async () => {
+      const mockRows = [
+        {
+          id: 'draft-1',
+          date: '2026-10-01',
+          libelle: 'Carburant navette',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -25000,
+          selected: true,
+        },
+        {
+          id: 'draft-2',
+          date: '2026-10-02',
+          libelle: 'Fournitures bureau',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -10000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      let capturedBody: unknown = null;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = String(input);
+        if (init?.method === 'PATCH' && urlStr.includes('/api/cahier/operations/status')) {
+          capturedBody = JSON.parse(String(init.body));
+          return new Response(JSON.stringify({ success: true, count: 2 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ operations: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(true);
+      expect(capturedBody).toEqual({ ids: ['draft-1', 'draft-2'], status: 'posted' });
+      const txs = service.allTransactions();
+      expect(txs.every((t) => t.status === 'posted')).toBe(true);
+      expect(txs.every((t) => !t.selected)).toBe(true);
+    });
+
+    it('devrait informer l’utilisateur si toutes les opérations sélectionnées sont déjà comptabilisées', async () => {
+      const mockRows = [
+        {
+          id: 'posted-1',
+          date: '2026-10-01',
+          libelle: 'Paiement déjà validé',
+          category: 'entree' as const,
+          status: 'posted' as const,
+          montant: 50000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(service.allTransactions()[0].selected).toBe(false);
+    });
+
+    it('devrait refuser et positionner une erreur si l’API renvoie un statut d’erreur HTTP 403', async () => {
+      const mockRows = [
+        {
+          id: 'draft-unauthorized',
+          date: '2026-10-01',
+          libelle: 'Opération d’un autre utilisateur',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -15000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = String(input);
+        if (init?.method === 'PATCH' && urlStr.includes('/api/cahier/operations/status')) {
+          return new Response(JSON.stringify({ error: 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ operations: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(false);
+      expect(service.allTransactions()[0].status).toBe('draft');
+      expect(service.error()).toContain('Action refusée');
+    });
+  });
 });

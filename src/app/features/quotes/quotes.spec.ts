@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ExportService } from '../../core/services/export.service';
 import { QuoteService } from '../../core/services/quote.service';
 import { QuoteAssignee, QuoteColumn, QuoteContact, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
 import { Prospect } from '../../core/models/prospect.model';
@@ -21,6 +22,11 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   const mockLoading = signal<boolean>(false);
   const mockError = signal<string | null>(null);
   const mockRoute = { snapshot: { queryParamMap: { get: vi.fn().mockReturnValue(null) } } };
+
+  const mockExportService = {
+    exportQuotePdf: vi.fn().mockReturnValue(true),
+    exportQuotesPdf: vi.fn().mockReturnValue(true),
+  };
 
   const mockQuoteService = {
     quotes: mockQuotes,
@@ -102,6 +108,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
         { provide: QuoteService, useValue: mockQuoteService },
         { provide: AccessControlService, useValue: mockAccessControl },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: ExportService, useValue: mockExportService },
         { provide: ActivatedRoute, useValue: mockRoute },
       ],
     }).compileComponents();
@@ -394,4 +401,81 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     const inlandTransport = fixture.nativeElement.querySelector('#field-inland') as HTMLSelectElement;
     expect(inlandTransport.value).toBe('no');
   });
+
+  describe('Export PDF (unitaire et par sélection)', () => {
+    const testQuoteA: SalesQuote = {
+      id: 'quote-test-1',
+      quoteNumber: 'COT-2026-000001',
+      prospectId: 'prospect-abc',
+      prospectName: 'Cameroun Trading SA',
+      assignedTo: 'usr-agent-01',
+      assignedToName: 'Alberic Asseng',
+      createdBy: 'usr-agent-01',
+      title: 'Transport maritime Douala - Anvers',
+      currency: 'XAF',
+      columns: [],
+      rows: [],
+      totalColumnId: '',
+      totalAmount: 2500000,
+      status: 'accepted',
+      validUntil: '2026-12-31T00:00:00Z',
+      seaFreight: { portOfLoading: 'Douala', portOfDischarge: 'Anvers' },
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+    };
+
+    const testQuoteB: SalesQuote = {
+      id: 'quote-test-2',
+      quoteNumber: 'COT-2026-000002',
+      prospectId: 'prospect-abc',
+      prospectName: 'Cameroun Trading SA',
+      assignedTo: 'usr-agent-01',
+      assignedToName: 'Alberic Asseng',
+      createdBy: 'usr-agent-01',
+      title: 'Import FCL Le Havre - Kribi',
+      currency: 'XAF',
+      columns: [],
+      rows: [],
+      totalColumnId: '',
+      totalAmount: 4800000,
+      status: 'sent',
+      validUntil: '2026-11-30T00:00:00Z',
+      seaFreight: { portOfLoading: 'Le Havre', portOfDischarge: 'Kribi' },
+      createdAt: '2026-10-02T00:00:00Z',
+      updatedAt: '2026-10-02T00:00:00Z',
+    };
+
+    it('devrait exporter une cotation individuelle au format PDF et afficher un message de confirmation', async () => {
+      await component.exportQuotePdf(testQuoteA);
+
+      expect(mockExportService.exportQuotePdf).toHaveBeenCalledWith(testQuoteA);
+      expect(component.feedback()).toContain('COT-2026-000001');
+    });
+
+    it('devrait exporter les cotations cochées au format PDF avec feedback de succès', async () => {
+      mockQuotes.set([testQuoteA, testQuoteB]);
+      component.selectedQuoteIds.set(new Set(['quote-test-1', 'quote-test-2']));
+
+      expect(component.selectedCount()).toBe(2);
+
+      await component.exportSelectedQuotesPdf();
+
+      expect(mockExportService.exportQuotesPdf).toHaveBeenCalledWith([testQuoteA, testQuoteB]);
+      expect(component.feedback()).toContain('2 cotation(s) exportée(s)');
+      expect(component.isActionsMenuOpen()).toBe(false);
+    });
+
+    it('Sécurité : ne doit rien exporter et ne déclencher aucun appel si la sélection est vide', async () => {
+      mockQuotes.set([testQuoteA, testQuoteB]);
+      component.selectedQuoteIds.set(new Set());
+
+      expect(component.selectedCount()).toBe(0);
+
+      await component.exportSelectedQuotesPdf();
+
+      expect(mockExportService.exportQuotesPdf).not.toHaveBeenCalled();
+      expect(component.feedback()).toBeNull();
+    });
+  });
 });
+

@@ -7,6 +7,12 @@
           <span>Nouvelle cotation</span>
         </button>
       }
+      @if (selectedCount() > 0) {
+        <button type="button" class="cashier-action-primary inline-flex items-center gap-1.5" (click)="exportSelectedQuotesPdf()" title="Exporter la sélection au format PDF">
+          <mat-icon>upload</mat-icon>
+          <span>Exporter ({{ selectedCount() }})</span>
+        </button>
+      }
       @if (selectedCount() > 0 && canDelete()) {
         <button type="button" class="cashier-action-danger" (click)="deleteSelectedQuotes()" title="Supprimer la sélection">
           <mat-icon>delete_outline</mat-icon>
@@ -19,29 +25,86 @@
       </div>
     </div>
     <div controlPanelCenter class="quotes-control-center">
-      <div class="quotes-search">
-        <mat-icon aria-hidden="true">search</mat-icon>
-        <input
-          id="quotes-control-search"
-          name="quoteSearch"
-          type="search"
-          [value]="quoteSearch()"
-          (input)="searchQuotes($any($event.target).value)"
-          placeholder="Rechercher par référence, client, objet…"
-          aria-label="Rechercher dans les cotations" />
-      </div>
-      <select
-        id="quote-status-filter"
-        name="statusFilter"
-        class="quotes-status-filter"
-        [value]="statusFilter()"
-        aria-label="Filtrer par statut"
-        (change)="filterByStatus($any($event.target).value)">
-        <option value="">Tous les statuts</option>
-        @for (quoteStatus of statuses; track quoteStatus) {
-          <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
-        }
-      </select>
+      @if (selectedCount() > 0) {
+        <div class="quotes-selection-bar flex items-center gap-2" id="quotes-selection-bar">
+          <div class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7]/30 bg-[#0b5ed7]/10 px-3 py-1 text-xs font-semibold text-[#0b5ed7] dark:border-[#7cb3ff]/40 dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff]">
+            <span>{{ selectedCount() }} sélectionnée(s)</span>
+            <button
+              type="button"
+              (click)="clearSelection()"
+              class="ml-0.5 flex items-center justify-center rounded-full p-0.5 transition-colors hover:bg-[#0b5ed7]/15 dark:hover:bg-[#7cb3ff]/20"
+              aria-label="Annuler la sélection"
+              title="Annuler la sélection">
+              <mat-icon class="!h-3.5 !w-3.5 !text-[13px] leading-none">close</mat-icon>
+            </button>
+          </div>
+
+          <div class="relative" id="quotes-actions-dropdown-container">
+            <button
+              type="button"
+              (click)="toggleActionsMenu($event)"
+              class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7] bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50 dark:border-[#7cb3ff] dark:bg-[#0d1f3a] dark:text-white dark:hover:bg-white/5"
+              [attr.aria-expanded]="isActionsMenuOpen()"
+              aria-haspopup="menu"
+              id="quotes-control-actions">
+              <mat-icon class="!h-4 !w-4 !text-[15px] text-[#0b5ed7] dark:text-[#7cb3ff]">tune</mat-icon>
+              <span>Actions</span>
+              <mat-icon class="!h-3.5 !w-3.5 !text-[13px] text-slate-500">arrow_drop_down</mat-icon>
+            </button>
+
+            @if (isActionsMenuOpen()) {
+              <div
+                class="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white py-1.5 text-xs text-slate-700 shadow-2xl dark:border-white/10 dark:bg-[#212529] dark:text-slate-200"
+                role="menu"
+                aria-label="Actions sur les cotations sélectionnées">
+                <button
+                  type="button"
+                  (click)="exportSelectedQuotesPdf()"
+                  class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
+                  role="menuitem">
+                  <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">upload</mat-icon>
+                  <span>Exporter</span>
+                </button>
+                @if (canDelete()) {
+                  <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
+                  <button
+                    type="button"
+                    (click)="deleteSelectedQuotes()"
+                    class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-rose-600 transition-colors hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                    role="menuitem">
+                    <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-rose-500">delete_outline</mat-icon>
+                    <span>Supprimer</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="quotes-search">
+          <mat-icon aria-hidden="true">search</mat-icon>
+          <input
+            id="quotes-control-search"
+            name="quoteSearch"
+            type="search"
+            [value]="quoteSearch()"
+            (input)="searchQuotes($any($event.target).value)"
+            placeholder="Rechercher par référence, client, objet…"
+            aria-label="Rechercher dans les cotations" />
+        </div>
+        <select
+          id="quote-status-filter"
+          name="statusFilter"
+          class="quotes-status-filter"
+          [value]="statusFilter()"
+          aria-label="Filtrer par statut"
+          (change)="filterByStatus($any($event.target).value)">
+          <option value="">Tous les statuts</option>
+          @for (quoteStatus of statuses; track quoteStatus) {
+            <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
+          }
+        </select>
+      }
     </div>
     <div controlPanelEnd class="quotes-control-end">
       <div class="quotes-view-switch" role="group" aria-label="Vue des cotations">
@@ -220,6 +283,9 @@
                   }
                 </button>
               </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-20">
+                <span>PDF</span>
+              </th>
             </tr>
           </thead>
           <tbody moduleTableBody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
@@ -308,6 +374,16 @@
                     }
                   }
                 </td>
+                <td class="py-2.5 px-3 text-center whitespace-nowrap" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    (click)="exportQuotePdf(quote, $event)"
+                    class="inline-flex items-center justify-center p-1.5 rounded text-slate-500 hover:text-[#0b5ed7] hover:bg-slate-100 dark:text-slate-400 dark:hover:text-[#8cc2ff] dark:hover:bg-white/10 transition-colors"
+                    title="Télécharger la cotation en PDF"
+                    [attr.aria-label]="'Télécharger la cotation ' + quote.quoteNumber + ' en PDF'">
+                    <mat-icon class="!h-4 !w-4 !text-[16px]">picture_as_pdf</mat-icon>
+                  </button>
+                </td>
               </tr>
             }
           </tbody>
@@ -358,6 +434,14 @@
                 <div class="quote-kanban-footer">
                   <span>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</span>
                   <div class="row-actions">
+                    <button
+                      type="button"
+                      class="icon-action"
+                      aria-label="Télécharger la cotation en PDF"
+                      title="Télécharger en PDF"
+                      (click)="exportQuotePdf(quote, $event)">
+                      <mat-icon>picture_as_pdf</mat-icon>
+                    </button>
                     @if (canUpdate()) {
                       <button type="button" class="icon-action" aria-label="Modifier la cotation" title="Modifier" (click)="openEdit(quote)">
                         <mat-icon>edit</mat-icon>
@@ -1110,6 +1194,16 @@
           <strong class="total-display">{{ formatAmount(draftTotal(), currency()) }}</strong>
         </div>
         <div class="modal-actions">
+          @if (editingId()) {
+            <button
+              type="button"
+              class="secondary-action inline-flex items-center gap-1.5"
+              (click)="exportCurrentQuotePdf()"
+              title="Télécharger cette cotation en PDF">
+              <mat-icon>picture_as_pdf</mat-icon>
+              <span>Télécharger PDF</span>
+            </button>
+          }
           <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">
             Annuler
           </button>

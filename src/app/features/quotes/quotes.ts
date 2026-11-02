@@ -11,6 +11,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ExportService } from '../../core/services/export.service';
 import { QuoteInput, QuoteService } from '../../core/services/quote.service';
 import {
   QUOTE_COLUMN_TYPES,
@@ -73,6 +74,9 @@ export type QuoteSortField =
   templateUrl: './quotes.html',
   styleUrls: ['./quotes.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:click)': 'onDocumentClick($event)',
+  },
 })
 export class QuotesComponent {
   @Input() public linkedProspectId?: string;
@@ -81,6 +85,7 @@ export class QuotesComponent {
   public readonly quoteService = inject(QuoteService);
   private readonly accessControl = inject(AccessControlService);
   private readonly authService = inject(AuthService);
+  private readonly exportService = inject(ExportService);
   private readonly route = inject(ActivatedRoute);
 
   public readonly statuses = QUOTE_STATUSES;
@@ -99,6 +104,7 @@ export class QuotesComponent {
 
   // Sélection style Caisse (Odoo Checkboxes)
   public readonly selectedQuoteIds = signal<Set<string>>(new Set());
+  public readonly isActionsMenuOpen = signal(false);
 
   public readonly currentUserId = computed(() => this.authService.currentUser()?.id || null);
   public readonly canCreate = computed(() => this.accessControl.hasPermission('quotes.create'));
@@ -392,7 +398,83 @@ export class QuotesComponent {
     this.selectedQuoteIds.set(new Set());
   }
 
+  public toggleActionsMenu(event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.isActionsMenuOpen.update((v) => !v);
+  }
+
+  public onDocumentClick(event: MouseEvent): void {
+    if (this.isActionsMenuOpen()) {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('#quotes-actions-dropdown') && !target?.closest('#quotes-actions-menu-btn')) {
+        this.isActionsMenuOpen.set(false);
+      }
+    }
+  }
+
+  public async exportQuotePdf(quote: SalesQuote, event?: MouseEvent): Promise<void> {
+    if (event) {
+      event.stopPropagation();
+    }
+    try {
+      const success = this.exportService.exportQuotePdf(quote);
+      if (success) {
+        this.feedback.set(`Export PDF réussi pour la cotation ${quote.quoteNumber}.`);
+      } else {
+        this.error.set('Impossible de générer le fichier PDF pour cette cotation.');
+      }
+      setTimeout(() => this.feedback.set(null), 8000);
+    } catch (err: unknown) {
+      this.error.set(err instanceof Error ? err.message : 'Erreur lors de l’export PDF.');
+      setTimeout(() => this.error.set(null), 8000);
+    }
+  }
+
+  public async exportSelectedQuotesPdf(): Promise<void> {
+    this.isActionsMenuOpen.set(false);
+    const selectedIds = this.selectedQuoteIds();
+    if (selectedIds.size === 0) return;
+
+    const selectedQuotes = this.quoteService.quotes().filter((q) => selectedIds.has(q.id));
+    if (selectedQuotes.length === 0) return;
+
+    try {
+      this.isSaving.set(true);
+      const success = this.exportService.exportQuotesPdf(selectedQuotes);
+      if (success) {
+        const count = selectedQuotes.length;
+        this.feedback.set(
+          count === 1
+            ? `Cotation ${selectedQuotes[0].quoteNumber} exportée en PDF.`
+            : `${count} cotation(s) exportée(s) dans le document PDF.`
+        );
+      } else {
+        this.error.set('Impossible de générer l’export PDF pour les cotations sélectionnées.');
+      }
+      setTimeout(() => this.feedback.set(null), 8000);
+    } catch (err: unknown) {
+      this.error.set(err instanceof Error ? err.message : 'Erreur lors de l’export groupé en PDF.');
+      setTimeout(() => this.error.set(null), 8000);
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
+  public async exportCurrentQuotePdf(): Promise<void> {
+    const quoteId = this.editingId();
+    if (!quoteId) return;
+    const quote = this.quoteService.quotes().find((q) => q.id === quoteId);
+    if (!quote) {
+      this.error.set('Cotation introuvable.');
+      return;
+    }
+    await this.exportQuotePdf(quote);
+  }
+
   public async deleteSelectedQuotes(): Promise<void> {
+    this.isActionsMenuOpen.set(false);
     if (!this.canDelete()) return;
     const count = this.selectedQuoteIds().size;
     if (count === 0) return;
