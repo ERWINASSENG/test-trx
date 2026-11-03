@@ -1,31 +1,158 @@
 <div class="w-full min-h-full p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto" id="dashboard-employee-view">
   @if (isCashier()) {
-    <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" aria-label="Synthèse de trésorerie">
-      <article class="bg-white dark:bg-[#0d1f3a] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+    <!-- SÉLECTEUR DE DATE EN PILULE (STYLE MODERNE DU CRM DU MANAGER) -->
+    <div class="flex items-center justify-end pb-3 border-b border-slate-200 dark:border-white/10">
+      <div class="relative inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1 shadow-2xs text-xs" id="period-selector-container">
+        <!-- Bouton Calendrier / Date active -->
+        <button
+          type="button"
+          id="period-calendar-btn"
+          (click)="toggleCalendar($event)"
+          class="px-3 py-1.5 rounded-md text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-medium transition-all flex items-center gap-2"
+          title="Ouvrir le calendrier">
+          <svg class="w-4 h-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span id="period-day-label" class="font-semibold text-slate-900 dark:text-white">{{ selectedDateLabel() }}</span>
+          <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+
+        <!-- Popover Calendrier -->
+        @if (isCalendarOpen()) {
+          <div
+            id="calendar-popover"
+            class="absolute right-0 top-full mt-2 z-50 w-72 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-xl space-y-3 popover-enter"
+            (click)="$event.stopPropagation()">
+            
+            <!-- En-tête mois navigation -->
+            <div class="flex items-center justify-between px-1">
+              <span class="text-xs font-semibold text-slate-900 dark:text-white">{{ calendarMonthTitle() }}</span>
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  (click)="navigateMonth(-1, $event)"
+                  class="w-6 h-6 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs">
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  (click)="navigateMonth(1, $event)"
+                  class="w-6 h-6 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs">
+                  ›
+                </button>
+              </div>
+            </div>
+
+            <!-- Jours de la semaine -->
+            <div class="grid grid-cols-7 text-center text-[10px] font-medium text-slate-400">
+              <div>Lu</div><div>Ma</div><div>Me</div><div>Je</div><div>Ve</div><div>Sa</div><div>Di</div>
+            </div>
+
+            <!-- Grille du calendrier -->
+            <div class="grid grid-cols-7 gap-1 text-center text-xs">
+              @for (day of calendarDays(); track day.date) {
+                @if (day.isCurrentMonth) {
+                  <button
+                    type="button"
+                    (click)="selectDate(day.date, $event)"
+                    class="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 relative transition-colors"
+                    [class.bg-[#0b5ed7]]="day.isSelected"
+                    [class.text-white]="day.isSelected"
+                    [class.font-bold]="day.isSelected || day.isToday">
+                    {{ day.dayNumber }}
+                    @if (day.hasTransactions && !day.isSelected) {
+                      <span class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#0b5ed7] dark:bg-[#7cb3ff]"></span>
+                    }
+                  </button>
+                } @else {
+                  <span class="p-1.5 text-slate-300 dark:text-slate-700 text-[11px]">{{ day.dayNumber }}</span>
+                }
+              }
+            </div>
+
+            <!-- Actions rapides sous le calendrier -->
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1 text-xs">
+              <button
+                type="button"
+                (click)="selectToday($event)"
+                class="w-full text-left px-2 py-1 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">
+                • Aujourd'hui
+              </button>
+              <button
+                type="button"
+                (click)="selectYesterday($event)"
+                class="w-full text-left px-2 py-1 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">
+                • Hier
+              </button>
+              <button
+                type="button"
+                (click)="selectLast7Days($event)"
+                class="w-full text-left px-2 py-1 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold border-t border-slate-100 dark:border-slate-800 pt-1.5">
+                • Les 7 derniers jours
+              </button>
+            </div>
+
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- GRILLE DES 5 CARTES INDICATEURS CLÉS DE CAISSE -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" aria-label="Synthèse de caisse">
+      <!-- 1. Solde Veille -->
+      <article class="bg-white dark:bg-[#0d1f3a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
         <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
-          <span class="text-xs font-medium uppercase tracking-wider">Solde Trésorerie Caisse</span>
+          <span class="text-xs font-medium uppercase tracking-wider">Solde Veille</span>
         </div>
         <div>
-          <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
-            {{ formatAmount(currentBalance()) }} FCFA
+          <div class="text-base font-bold text-slate-900 dark:text-slate-50 tracking-tight" id="val-solde-veille">
+            {{ formatAmount(soldeVeille()) }} FCFA
           </div>
         </div>
       </article>
 
-      <article class="bg-white dark:bg-[#0d1f3a] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+      <!-- 2. Entrées du jour -->
+      <article class="bg-white dark:bg-[#0d1f3a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
         <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
-          <span class="text-xs font-medium uppercase tracking-wider">Total Décaissements</span>
+          <span class="text-xs font-medium uppercase tracking-wider" id="label-entrees">{{ entreesLabel() }}</span>
         </div>
         <div>
-          <div class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight">
-            -{{ formatAmount(totalDisbursements()) }} FCFA
+          <div class="text-base font-bold text-emerald-600 dark:text-emerald-400 tracking-tight" id="val-entrees-jour">
+            {{ formatAmount(entreesJour()) }} FCFA
           </div>
         </div>
       </article>
 
+      <!-- 3. Total Décaissements -->
+      <article class="bg-white dark:bg-[#0d1f3a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+          <span class="text-xs font-medium uppercase tracking-wider" id="label-sorties">{{ sortiesLabel() }}</span>
+        </div>
+        <div>
+          <div class="text-base font-bold text-rose-600 dark:text-rose-400 tracking-tight" id="val-sorties-jour">
+            {{ formatAmount(sortiesJour()) }} FCFA
+          </div>
+        </div>
+      </article>
+
+      <!-- 4. Solde Caisse -->
+      <article class="bg-white dark:bg-[#0d1f3a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
+          <span class="text-xs font-medium uppercase tracking-wider">Solde Caisse</span>
+        </div>
+        <div>
+          <div class="text-base font-bold text-slate-900 dark:text-slate-50 tracking-tight" id="val-solde-caisse">
+            {{ formatAmount(soldeCaisse()) }} FCFA
+          </div>
+        </div>
+      </article>
+
+      <!-- 5. Journal de caisse -->
       <a
         routerLink="/caisse"
-        class="bg-white dark:bg-[#0d1f3a] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between transition-colors hover:border-[#0b5ed7] dark:hover:border-[#7cb3ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b5ed7] dark:focus-visible:outline-[#8cc2ff]"
+        class="bg-white dark:bg-[#0d1f3a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-xs flex flex-col justify-between transition-colors hover:border-[#0b5ed7] dark:hover:border-[#7cb3ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b5ed7] dark:focus-visible:outline-[#8cc2ff] group"
         aria-label="Ouvrir le journal de caisse"
       >
         <div class="flex items-center justify-between text-slate-600 dark:text-slate-300 mb-2">
