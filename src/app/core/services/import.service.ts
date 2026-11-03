@@ -234,10 +234,10 @@ export class ImportService {
     const dateIso = this.normalizeDateToIso(rawDateValue);
 
     // 5. Service
-    const rawService = findValue(['service', 'departement', 'département']).toUpperCase();
+    const rawService = findValue(['service', 'departement', 'département']).trim().toUpperCase();
     let matchedService: Service | undefined = undefined;
     for (const srv of CASHIER_SERVICES) {
-      if (rawService.includes(srv) || srv.includes(rawService)) {
+      if (rawService && (rawService === srv || rawService.includes(srv))) {
         matchedService = srv;
         break;
       }

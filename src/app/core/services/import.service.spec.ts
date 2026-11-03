@@ -129,6 +129,65 @@ describe('ImportService', () => {
       expect(result.error).toBeUndefined();
       expect(result.data?.category).toBe('entree');
       expect(result.data?.montant).toBe(75000);
+      expect(result.data?.service).toBeUndefined();
+    });
+
+    it('should leave service undefined when service column is missing', () => {
+      const row = {
+        'Date': '15/09/2026',
+        'Libellé': 'Achat sans service spécifié',
+        'Sortie': '12500',
+      };
+
+      const result = service.validateAndTransformRow(row, 9);
+      expect(result.error).toBeUndefined();
+      expect(result.data?.service).toBeUndefined();
+    });
+
+    it('should leave service undefined when service cell is empty or contains only whitespace', () => {
+      const row = {
+        'Date': '15/09/2026',
+        'Libellé': 'Opération avec service vide',
+        'Sortie': '8000',
+        'Service': '   ',
+      };
+
+      const result = service.validateAndTransformRow(row, 10);
+      expect(result.error).toBeUndefined();
+      expect(result.data?.service).toBeUndefined();
+    });
+
+    it('should leave service undefined when service is unknown', () => {
+      const row = {
+        'Date': '15/09/2026',
+        'Libellé': 'Opération service externe non reconnu',
+        'Sortie': '5000',
+        'Service': 'INCONNU',
+      };
+
+      const result = service.validateAndTransformRow(row, 11);
+      expect(result.error).toBeUndefined();
+      expect(result.data?.service).toBeUndefined();
+    });
+
+    it('should correctly assign valid services when explicitly provided', () => {
+      const rowTransport = {
+        'Date': '15/09/2026',
+        'Libellé': 'Course transport',
+        'Sortie': '5000',
+        'Service': 'TRANSPORT',
+      };
+      const resultTransport = service.validateAndTransformRow(rowTransport, 12);
+      expect(resultTransport.data?.service).toBe('TRANSPORT');
+
+      const rowManut = {
+        'Date': '15/09/2026',
+        'Libellé': 'Manutention quai',
+        'Sortie': '7000',
+        'Service': 'MANUT',
+      };
+      const resultManut = service.validateAndTransformRow(rowManut, 13);
+      expect(resultManut.data?.service).toBe('MANUT');
     });
   });
 
