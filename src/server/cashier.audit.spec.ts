@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { auditPiecesComptables, auditPiecesComptablesHandler, RawAuditRow } from './cashier.audit';
 import { writeAuditLog } from './audit-log';
@@ -134,19 +135,19 @@ describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', (
   it('retourne HTTP 503 si le client Supabase admin est indisponible', async () => {
     vi.spyOn(authModule, 'getSupabaseAdmin').mockReturnValue(null);
 
-    const req = { query: { year: '2026' } } as unknown as any;
+    const req = { query: { year: '2026' } } as unknown as Request;
     let statusCode = 0;
-    let jsonBody: any = null;
+    let jsonBody: unknown = null;
     const res = {
       status: (code: number) => {
         statusCode = code;
         return res;
       },
-      json: (body: any) => {
+      json: (body: unknown) => {
         jsonBody = body;
         return res;
       },
-    } as unknown as any;
+    } as unknown as Response;
 
     await auditPiecesComptablesHandler(req, res);
 

@@ -1491,7 +1491,7 @@ export class CashierService implements OnDestroy {
 
     let postedSuccessfully = false;
     let failureReason: string | null = null;
-    let postedPayload: { success?: boolean; count?: number; data?: Array<Record<string, unknown>> } | null = null;
+    let postedPayload: { success?: boolean; count?: number; data?: Record<string, unknown>[] } | null = null;
 
     try {
       if (isDedicatedJournal) {

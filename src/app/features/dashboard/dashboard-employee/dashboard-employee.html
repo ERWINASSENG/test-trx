@@ -23,8 +23,14 @@
         @if (isCalendarOpen()) {
           <div
             id="calendar-popover"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sélecteur de date"
+            tabindex="-1"
             class="absolute right-0 top-full mt-2 z-50 w-72 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-xl space-y-3 popover-enter"
-            (click)="$event.stopPropagation()">
+            (click)="$event.stopPropagation()"
+            (keydown)="$event.stopPropagation()"
+            (keydown.escape)="closeCalendar()">
             
             <!-- En-tête mois navigation -->
             <div class="flex items-center justify-between px-1">
