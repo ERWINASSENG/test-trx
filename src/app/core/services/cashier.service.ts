@@ -1491,6 +1491,7 @@ export class CashierService implements OnDestroy {
 
     let postedSuccessfully = false;
     let failureReason: string | null = null;
+    let postedPayload: { success?: boolean; count?: number; data?: Array<Record<string, unknown>> } | null = null;
 
     try {
       if (isDedicatedJournal) {
@@ -1534,6 +1535,7 @@ export class CashierService implements OnDestroy {
 
         if (response.ok) {
           postedSuccessfully = true;
+          postedPayload = await response.json().catch(() => null);
         } else {
           const errorPayload: unknown = await response.json().catch(() => null);
           failureReason = getApiErrorMessage(
@@ -1553,8 +1555,29 @@ export class CashierService implements OnDestroy {
       return false;
     }
 
+    const returnedItems = Array.isArray(postedPayload?.data) ? postedPayload.data : [];
+    const pieceMap = new Map<string, string>();
+    for (const item of returnedItems) {
+      const itemId = typeof item['id'] === 'string' ? item['id'] : null;
+      const itemPiece = typeof item['piece_comptable'] === 'string' && item['piece_comptable'].trim()
+        ? item['piece_comptable'].trim()
+        : (typeof item['pieceComptable'] === 'string' && item['pieceComptable'].trim() ? item['pieceComptable'].trim() : null);
+      if (itemId && itemPiece) {
+        pieceMap.set(itemId, itemPiece);
+      }
+    }
+
     this._transactions.update((items) =>
-      items.map((it) => (draftIds.includes(it.id) ? { ...it, status: 'posted', selected: false } : it))
+      items.map((it) => {
+        if (!draftIds.includes(it.id)) return it;
+        const newPiece = pieceMap.get(it.id) || it.pieceComptable || undefined;
+        return {
+          ...it,
+          status: 'posted' as const,
+          selected: false,
+          pieceComptable: newPiece,
+        };
+      })
     );
     this.recalculateRunningBalances();
     void this.loadCashierSummary();

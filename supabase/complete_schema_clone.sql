@@ -632,7 +632,7 @@ CREATE OR REPLACE FUNCTION public.is_admin()
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-    SELECT (public.get_current_user_role() = 'admin');
+    SELECT private.is_admin();
 $function$;
 
 CREATE OR REPLACE FUNCTION public.is_active_user()

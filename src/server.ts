@@ -937,7 +937,7 @@ const getCashierSummaryHandler = async (req: express.Request, res: express.Respo
 /**
  * Modification de statut en masse (PATCH /api/cahier/operations/status)
  */
-const updateOperationsStatusHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+export const updateOperationsStatusHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY manquante' });
@@ -968,7 +968,7 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
 
     const { data: rowsToCheck, error: fetchErr } = await adminClient
       .from('cashier_transactions')
-      .select('id, created_by, employee_id, status')
+      .select('id, created_by, employee_id, status, date, piece_comptable, category, montant')
       .in('id', bodyIds);
 
     if (fetchErr || !rowsToCheck) {
@@ -984,8 +984,17 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
       return;
     }
 
-    // Contrôle d'appartenance pour les non-admins : interdiction de changer le statut des opérations créées par un tiers
-    if (userRole !== 'admin') {
+    // Contrôle d'habilitation et d'appartenance :
+    // - Les administrateurs peuvent modifier le statut de toutes les opérations.
+    // - Pour la comptabilisation (newStatus === 'posted'), la caissière autorisée (disposant de cashier.status_update) est habilitée à comptabiliser les écritures de caisse.
+    // - Pour les autres changements (annulation / remise en brouillon hors profil habilité), chaque utilisateur ne peut agir que sur ses propres écritures.
+    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere';
+    if (!isAuthorizedCashier && newStatus === 'posted') {
+      res.status(403).json({ error: 'Seul un administrateur ou une caissière autorisée peut comptabiliser des opérations de caisse.' });
+      return;
+    }
+
+    if (userRole !== 'admin' && !(isAuthorizedCashier && newStatus === 'posted')) {
       if (!callerId) {
         res.status(403).json({ error: 'Utilisateur non identifié. Modification de statut refusée.' });
         return;
@@ -1011,12 +1020,76 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
       .select();
 
     if (updateErr) {
-      console.error('Erreur SQL mise à jour statut:', updateErr.message);
+      console.error('[CASHIER_STATUS_UPDATE] Erreur SQL mise à jour statut:', updateErr.message);
+      const isUniqueViolation = updateErr.code === '23505' || updateErr.message?.toLowerCase().includes('unique') || updateErr.message?.includes('duplicate key');
+      if (isUniqueViolation) {
+        const isPiece = updateErr.message?.includes('piece_comptable') || updateErr.message?.includes('piece');
+        res.status(409).json({
+          error: isPiece
+            ? `Erreur d'unicité : un numéro de pièce comptable est déjà utilisé dans la base de données.`
+            : `Doublon détecté : une transaction identique existe déjà en caisse.`,
+        });
+        return;
+      }
+      const isCheckViolation = updateErr.code === '23514' || updateErr.message?.toLowerCase().includes('check constraint');
+      if (isCheckViolation) {
+        res.status(400).json({
+          error: 'Impossible de comptabiliser : une ou plusieurs opérations ne respectent pas les contraintes comptables (montant ou dossier manquant).',
+        });
+        return;
+      }
       res.status(500).json({ error: 'Erreur lors de la mise à jour du statut des opérations.' });
       return;
     }
 
-    if (newStatus === 'cancelled') {
+    // Sécurisation et garantie d'attribution séquentielle immuable de la pièce comptable Odoo (CSH1/AAAA/NNNNN)
+    if (newStatus === 'posted' && updatedRows && updatedRows.length > 0) {
+      const rowsNeedingPiece = updatedRows.filter((r) => !r.piece_comptable || !String(r.piece_comptable).trim());
+      if (rowsNeedingPiece.length > 0) {
+        for (const row of rowsNeedingPiece) {
+          const rawDate = row.date || rowsToCheck.find((c) => c.id === row.id)?.date;
+          const year = normalizeDateToDay(rawDate as string)?.slice(0, 4) || new Date().getFullYear().toString();
+          const { data: maxPieceRows } = await adminClient
+            .from('cashier_transactions')
+            .select('piece_comptable')
+            .ilike('piece_comptable', `CSH1/${year}/%`);
+
+          let maxNum = 0;
+          for (const item of maxPieceRows || []) {
+            const match = String(item.piece_comptable || '').match(/^CSH1\/\d{4}\/(\d{5})$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+            }
+          }
+          const nextPiece = `CSH1/${year}/${String(maxNum + 1).padStart(5, '0')}`;
+          await adminClient
+            .from('cashier_transactions')
+            .update({ piece_comptable: nextPiece })
+            .eq('id', row.id);
+          row.piece_comptable = nextPiece;
+        }
+      }
+    }
+
+    // Journalisation d'audit obligatoire lors de la comptabilisation ou de l'annulation
+    if (newStatus === 'posted') {
+      await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
+        userId: callerId,
+        userEmail: authenticatedUser?.email,
+        userRole,
+        action: 'POST_OPERATION',
+        entityId: row.id,
+        details: {
+          piece_comptable: row.piece_comptable,
+          status: 'posted',
+          previous_status: 'draft',
+          montant: row.montant,
+          category: row.category,
+        },
+        ipAddress: req.ip || null,
+      })));
+    } else if (newStatus === 'cancelled') {
       await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
         userId: callerId,
         userEmail: authenticatedUser?.email,

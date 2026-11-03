@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { auditPiecesComptables, RawAuditRow } from './cashier.audit';
+import { describe, it, expect, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { auditPiecesComptables, auditPiecesComptablesHandler, RawAuditRow } from './cashier.audit';
+import { writeAuditLog } from './audit-log';
+import * as authModule from './auth';
 
 describe('cashier.audit - auditPiecesComptables', () => {
   const currentYear = 2026;
@@ -124,5 +127,104 @@ describe('cashier.audit - auditPiecesComptables', () => {
     expect(result.maxSequence).toBeNull();
     expect(result.missingSequences.length).toBe(0);
     expect(result.anomalies.length).toBe(0);
+  });
+});
+
+describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', () => {
+  it('retourne HTTP 503 si le client Supabase admin est indisponible', async () => {
+    vi.spyOn(authModule, 'getSupabaseAdmin').mockReturnValue(null);
+
+    const req = { query: { year: '2026' } } as unknown as any;
+    let statusCode = 0;
+    let jsonBody: any = null;
+    const res = {
+      status: (code: number) => {
+        statusCode = code;
+        return res;
+      },
+      json: (body: any) => {
+        jsonBody = body;
+        return res;
+      },
+    } as unknown as any;
+
+    await auditPiecesComptablesHandler(req, res);
+
+    expect(statusCode).toBe(503);
+    expect(jsonBody).toEqual({ error: 'Service Supabase non configuré sur le serveur' });
+    vi.restoreAllMocks();
+  });
+
+  it('journalise correctement un événement POST_OPERATION via writeAuditLog', async () => {
+    const mockInsert = vi.fn().mockResolvedValue({ error: null });
+    const mockClient = {
+      from: vi.fn().mockReturnValue({ insert: mockInsert }),
+    } as unknown as SupabaseClient;
+
+    await writeAuditLog(mockClient, {
+      userId: 'test-user-uuid',
+      userEmail: 'caissiere@transimex.cm',
+      userRole: 'caissiere',
+      action: 'POST_OPERATION',
+      entityId: 'operation-123',
+      details: {
+        piece_comptable: 'CSH1/2026/00005',
+        status: 'posted',
+        previous_status: 'draft',
+        montant: 45000,
+        category: 'entree',
+      },
+      ipAddress: '127.0.0.1',
+    });
+
+    expect(mockClient.from).toHaveBeenCalledWith('audit_logs');
+    expect(mockInsert).toHaveBeenCalledWith([
+      {
+        user_id: 'test-user-uuid',
+        user_email: 'caissiere@transimex.cm',
+        user_role: 'caissiere',
+        action: 'POST_OPERATION',
+        entity_type: 'cashier_transaction',
+        entity_id: 'operation-123',
+        details: {
+          piece_comptable: 'CSH1/2026/00005',
+          status: 'posted',
+          previous_status: 'draft',
+          montant: 45000,
+          category: 'entree',
+        },
+        ip_address: '127.0.0.1',
+      },
+    ]);
+  });
+
+  it('génère et vérifie la séquence continue CSH1/AAAA/NNNNN lors de l’attribution', () => {
+    const year = 2026;
+    const existingPieces = [
+      { piece_comptable: 'CSH1/2026/00001' },
+      { piece_comptable: 'CSH1/2026/00002' },
+      { piece_comptable: 'CSH1/2026/00003' },
+    ];
+
+    let maxNum = 0;
+    for (const item of existingPieces) {
+      const match = String(item.piece_comptable || '').match(/^CSH1\/\d{4}\/(\d{5})$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+
+    const nextPiece = `CSH1/${year}/${String(maxNum + 1).padStart(5, '0')}`;
+    expect(nextPiece).toBe('CSH1/2026/00004');
+
+    const verified = auditPiecesComptables([
+      ...existingPieces.map((p, idx) => ({ id: String(idx + 1), piece_comptable: p.piece_comptable, date: '2026-09-01' })),
+      { id: '4', piece_comptable: nextPiece, date: '2026-09-01' },
+    ], year);
+
+    expect(verified.valid).toBe(true);
+    expect(verified.missingSequences.length).toBe(0);
+    expect(verified.maxSequence).toBe(4);
   });
 });
