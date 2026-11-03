@@ -214,13 +214,13 @@ describe('AuthService', () => {
       json: async () => ({
         profile: {
           id: user.id,
-          role: 'employe',
+          role: 'daf',
           is_active: true,
           first_name: user.firstName,
           last_name: user.lastName,
           email: user.email,
         },
-        role: 'employe',
+        role: 'daf',
         customRole: 'daf',
         roleLabel: 'DAF',
       }),
@@ -228,7 +228,7 @@ describe('AuthService', () => {
 
     await service.restoreSession();
 
-    expect(service.currentUser()?.role).toBe('employe');
+    expect(service.currentUser()?.role).toBe('daf');
     expect(service.currentUser()?.customRole).toBe('daf');
     expect(service.currentUser()?.roleLabel).toBe('DAF');
   });

@@ -3,7 +3,6 @@ import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { auditPiecesComptables, auditPiecesComptablesHandler, RawAuditRow } from './cashier.audit';
 import { writeAuditLog } from './audit-log';
-import * as authModule from './auth';
 
 describe('cashier.audit - auditPiecesComptables', () => {
   const currentYear = 2026;
@@ -133,7 +132,8 @@ describe('cashier.audit - auditPiecesComptables', () => {
 
 describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', () => {
   it('retourne HTTP 503 si le client Supabase admin est indisponible', async () => {
-    vi.spyOn(authModule, 'getSupabaseAdmin').mockReturnValue(null);
+    vi.stubEnv('SUPABASE_URL', '');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
 
     const req = { query: { year: '2026' } } as unknown as Request;
     let statusCode = 0;
@@ -149,11 +149,14 @@ describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', (
       },
     } as unknown as Response;
 
-    await auditPiecesComptablesHandler(req, res);
+    try {
+      await auditPiecesComptablesHandler(req, res);
+    } finally {
+      vi.unstubAllEnvs();
+    }
 
     expect(statusCode).toBe(503);
     expect(jsonBody).toEqual({ error: 'Service Supabase non configuré sur le serveur' });
-    vi.restoreAllMocks();
   });
 
   it('journalise correctement un événement POST_OPERATION via writeAuditLog', async () => {

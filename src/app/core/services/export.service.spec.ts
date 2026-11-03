@@ -97,18 +97,41 @@ describe('ExportService', () => {
   });
 
   describe('PDF Export for Quotes (Cotations Maritimes)', () => {
+    const createPdfDocumentSpy = () => {
+      const doc = new jsPDF();
+      const saveSpy = vi.fn();
+      Object.defineProperty(doc, 'save', {
+        configurable: true,
+        value: (filename?: string) => {
+          saveSpy(filename);
+          return doc;
+        },
+      });
+      const addPageSpy = vi.spyOn(doc, 'addPage');
+      vi.spyOn(
+        service as unknown as { createPdfDocument: () => jsPDF },
+        'createPdfDocument'
+      ).mockReturnValue(doc);
+      return { saveSpy, addPageSpy };
+    };
+
     const mockQuote: SalesQuote = {
       id: 'quote-101',
       quoteNumber: 'COT-2026-001',
+      prospectId: 'prospect-101',
       title: 'Acheminement Conteneur 40ft Douala',
       status: 'sent',
       prospectName: 'Cameroun Trading SARL',
+      assignedTo: 'user-101',
       contactName: 'M. Jean Nguemo',
+      createdBy: 'user-101',
       totalAmount: 1850000,
       currency: 'FCFA',
+      totalColumnId: 'total',
       createdAt: '2026-10-01T10:00:00Z',
       validUntil: '2026-10-31T23:59:59Z',
       assignedToName: 'Marc Dupont',
+      updatedAt: '2026-10-01T10:00:00Z',
       seaFreight: {
         portOfLoading: 'Le Havre (France)',
         portOfDischarge: 'Douala (Cameroun)',
@@ -159,11 +182,7 @@ describe('ExportService', () => {
     });
 
     it('should successfully trigger PDF export for a single quote with sanitized filename', () => {
-      let savedFilename = '';
-      vi.spyOn(jsPDF.prototype, 'save').mockImplementation((filename?: string) => {
-        savedFilename = filename || '';
-        return {} as jsPDF;
-      });
+      const { saveSpy } = createPdfDocumentSpy();
 
       const quoteWithSpecialChars: SalesQuote = {
         ...mockQuote,
@@ -173,22 +192,11 @@ describe('ExportService', () => {
       const result = service.exportQuotesPdf([quoteWithSpecialChars]);
 
       expect(result).toBe(true);
-      expect(savedFilename).toBe('cotation_COT_2026_009_SPECIAL.pdf');
+      expect(saveSpy).toHaveBeenCalledWith('cotation_COT_2026_009_SPECIAL.pdf');
     });
 
     it('should support batch export with multiple quotes and add pages', () => {
-      let addPageCalls = 0;
-      let savedFilename = '';
-
-      vi.spyOn(jsPDF.prototype, 'addPage').mockImplementation(() => {
-        addPageCalls++;
-        return {} as jsPDF;
-      });
-
-      vi.spyOn(jsPDF.prototype, 'save').mockImplementation((filename?: string) => {
-        savedFilename = filename || '';
-        return {} as jsPDF;
-      });
+      const { addPageSpy, saveSpy } = createPdfDocumentSpy();
 
       const quote2: SalesQuote = {
         ...mockQuote,
@@ -200,30 +208,36 @@ describe('ExportService', () => {
       const result = service.exportQuotesPdf([mockQuote, quote2]);
 
       expect(result).toBe(true);
-      expect(addPageCalls).toBe(1);
-      expect(savedFilename).toContain('cotations_export_');
-      expect(savedFilename.endsWith('.pdf')).toBe(true);
+      expect(addPageSpy).toHaveBeenCalledTimes(1);
+      expect(saveSpy).toHaveBeenCalledOnce();
+      expect(saveSpy.mock.calls[0][0]).toMatch(/^cotations_export_.*\.pdf$/);
     });
 
     it('should handle quote with missing seaFreight and empty rows gracefully', () => {
-      vi.spyOn(jsPDF.prototype, 'save').mockImplementation(() => {
-        return {} as jsPDF;
-      });
+      const { saveSpy } = createPdfDocumentSpy();
 
       const minimalQuote: SalesQuote = {
         id: 'quote-minimal',
         quoteNumber: 'COT-MIN-001',
+        prospectId: 'prospect-minimal',
         title: 'Cotation sans fret maritime détaillé',
         status: 'draft',
         prospectName: 'Client Inconnu',
+        assignedTo: null,
+        assignedToName: null,
+        createdBy: null,
         totalAmount: 0,
         currency: 'FCFA',
+        totalColumnId: 'total',
         createdAt: '2026-10-15T00:00:00Z',
+        updatedAt: '2026-10-15T00:00:00Z',
+        validUntil: null,
         columns: [],
         rows: [],
       };
 
       expect(() => service.exportQuotesPdf([minimalQuote])).not.toThrow();
+      expect(saveSpy).toHaveBeenCalledOnce();
     });
   });
 });
