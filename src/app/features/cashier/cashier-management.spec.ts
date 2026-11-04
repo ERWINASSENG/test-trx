@@ -461,7 +461,6 @@ describe('CashierManagement', () => {
     });
 
     it('permet à l’administrateur de remettre en brouillon des opérations annulées depuis le menu Actions', async () => {
-      currentUser.set(createUser('admin', 'admin-1'));
       currentRole.set('admin');
       const resetSpy = vi.spyOn(service, 'resetSelectedToDraft').mockResolvedValue(true);
 
@@ -492,7 +491,6 @@ describe('CashierManagement', () => {
     });
 
     it('interdit à la caissière de remettre en brouillon une opération annulée mais l’autorise sur une opération comptabilisée', async () => {
-      currentUser.set(createUser('caissiere', 'caissiere-1'));
       currentRole.set('caissiere');
       const resetSpy = vi.spyOn(service, 'resetSelectedToDraft').mockResolvedValue(true);
 
