@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateDossierExpenses,
   formatPersistedPieceComptable,
+  isCancelledCashierStatusTransitionBlocked,
   normalizeDateToDay,
   requiresCashierDraftBeforeEdit,
 } from './cashier.utils';
@@ -60,6 +61,31 @@ describe('cashier.utils', () => {
 
     it('permet à une caissière de modifier une opération en brouillon', () => {
       expect(requiresCashierDraftBeforeEdit('draft', 'caissiere')).toBe(false);
+    });
+  });
+
+  describe('isCancelledCashierStatusTransitionBlocked', () => {
+    it('autorise uniquement un admin à remettre une opération annulée en brouillon', () => {
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'draft', 'admin')).toBe(false);
+      expect(isCancelledCashierStatusTransitionBlocked(['posted', 'cancelled'], 'draft', 'admin')).toBe(false);
+    });
+
+    it('bloque la remise en brouillon d’une opération annulée pour une caissière ou tout autre rôle non-admin', () => {
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'draft', 'caissiere')).toBe(true);
+      expect(isCancelledCashierStatusTransitionBlocked(['posted', 'cancelled'], 'draft', 'caissiere')).toBe(true);
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'draft', 'manager')).toBe(true);
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'draft', undefined)).toBe(true);
+    });
+
+    it('bloque la comptabilisation directe d’une opération annulée même pour un admin', () => {
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'posted', 'admin')).toBe(true);
+      expect(isCancelledCashierStatusTransitionBlocked(['cancelled'], 'posted', 'caissiere')).toBe(true);
+    });
+
+    it('n’applique aucun blocage lié à l’annulation sur des opérations en brouillon ou comptabilisées', () => {
+      expect(isCancelledCashierStatusTransitionBlocked(['posted'], 'draft', 'caissiere')).toBe(false);
+      expect(isCancelledCashierStatusTransitionBlocked(['posted'], 'draft', 'admin')).toBe(false);
+      expect(isCancelledCashierStatusTransitionBlocked(['draft'], 'posted', 'caissiere')).toBe(false);
     });
   });
 });

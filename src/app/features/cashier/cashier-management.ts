@@ -201,6 +201,16 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     return isMainCashier && this.accessControlService.hasPermission('cashier.status_update');
   });
 
+  public readonly canResetToDraftCashierOperations = computed(() => {
+    if (!this.canCancelCashierOperations()) return false;
+    const selected = this.cashierService.allTransactions().filter((t) => t.selected);
+    const hasCancelledSelected = selected.some((t) => t.status === 'cancelled');
+    if (hasCancelledSelected) {
+      return this.authService.currentRole() === 'admin';
+    }
+    return true;
+  });
+
   public readonly canPostCashierOperations = computed(() => {
     const journalId = this.cashierService.activeJournalId();
     const isMainCashier =
@@ -742,7 +752,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async onResetToDraftAction(): Promise<void> {
-    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
+    if (!this.canResetToDraftCashierOperations() || this.selectedCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.resetSelectedToDraft();
   }

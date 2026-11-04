@@ -459,5 +459,74 @@ describe('CashierManagement', () => {
 
       expect(postSelectedSpy).not.toHaveBeenCalled();
     });
+
+    it('permet à l’administrateur de remettre en brouillon des opérations annulées depuis le menu Actions', async () => {
+      currentUser.set(createUser('admin', 'admin-1'));
+      currentRole.set('admin');
+      const resetSpy = vi.spyOn(service, 'resetSelectedToDraft').mockResolvedValue(true);
+
+      const mapped = service.mapDatabaseOperations([{
+        id: 'tx-cancelled-admin',
+        date: '2026-10-05',
+        libelle: 'Opération annulée à réhabiliter',
+        category: 'sortie',
+        status: 'cancelled',
+        montant: -20000,
+        selected: true,
+      }]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+      fixture.detectChanges();
+
+      expect(component.canResetToDraftCashierOperations()).toBe(true);
+
+      const actionsButton = fixture.nativeElement.querySelector('#cashier-control-actions') as HTMLButtonElement | null;
+      actionsButton?.click();
+      fixture.detectChanges();
+
+      const resetButton = fixture.nativeElement.querySelector('#cashier-action-reset-draft') as HTMLButtonElement | null;
+      expect(resetButton).not.toBeNull();
+      resetButton?.click();
+      fixture.detectChanges();
+
+      expect(resetSpy).toHaveBeenCalled();
+    });
+
+    it('interdit à la caissière de remettre en brouillon une opération annulée mais l’autorise sur une opération comptabilisée', async () => {
+      currentUser.set(createUser('caissiere', 'caissiere-1'));
+      currentRole.set('caissiere');
+      const resetSpy = vi.spyOn(service, 'resetSelectedToDraft').mockResolvedValue(true);
+
+      const cancelledMapped = service.mapDatabaseOperations([{
+        id: 'tx-cancelled-cashier',
+        date: '2026-10-05',
+        libelle: 'Opération annulée',
+        category: 'sortie',
+        status: 'cancelled',
+        montant: -15000,
+        selected: true,
+      }]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(cancelledMapped);
+      fixture.detectChanges();
+
+      expect(component.canResetToDraftCashierOperations()).toBe(false);
+      await component.onResetToDraftAction();
+      expect(resetSpy).not.toHaveBeenCalled();
+
+      const postedMapped = service.mapDatabaseOperations([{
+        id: 'tx-posted-cashier',
+        date: '2026-10-05',
+        libelle: 'Opération comptabilisée',
+        category: 'sortie',
+        status: 'posted',
+        montant: -15000,
+        selected: true,
+      }]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(postedMapped);
+      fixture.detectChanges();
+
+      expect(component.canResetToDraftCashierOperations()).toBe(true);
+      await component.onResetToDraftAction();
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

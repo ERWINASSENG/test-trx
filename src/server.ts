@@ -12,7 +12,12 @@ import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
-import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
+import {
+  formatPersistedPieceComptable,
+  isCancelledCashierStatusTransitionBlocked,
+  normalizeDateToDay,
+  requiresCashierDraftBeforeEdit,
+} from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
@@ -979,7 +984,13 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
       res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
       return;
     }
-    if (newStatus !== 'cancelled' && rowsToCheck.some((row) => row.status === 'cancelled')) {
+    if (
+      isCancelledCashierStatusTransitionBlocked(
+        rowsToCheck.map((row) => row.status),
+        newStatus,
+        userRole
+      )
+    ) {
       res.status(409).json({ error: 'Une opération annulée ne peut pas être réactivée ou modifiée.' });
       return;
     }
@@ -1099,6 +1110,23 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
         details: { piece_comptable: row.piece_comptable, status: 'cancelled' },
         ipAddress: req.ip || null,
       })));
+    } else if (newStatus === 'draft') {
+      await Promise.all((updatedRows || []).map((row) => {
+        const previousStatus = rowsToCheck.find((c) => c.id === row.id)?.status || null;
+        return writeAuditLog(adminClient, {
+          userId: callerId,
+          userEmail: authenticatedUser?.email,
+          userRole,
+          action: 'RESET_TO_DRAFT_OPERATION',
+          entityId: row.id,
+          details: {
+            piece_comptable: row.piece_comptable,
+            status: 'draft',
+            previous_status: previousStatus,
+          },
+          ipAddress: req.ip || null,
+        });
+      }));
     }
 
     const enriched = (updatedRows || []).map((r) => formatPersistedPieceComptable(r));

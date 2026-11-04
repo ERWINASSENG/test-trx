@@ -45,6 +45,23 @@ export const requiresCashierDraftBeforeEdit = (
   role: string | null | undefined
 ): boolean => role === 'caissiere' && status === 'posted';
 
+export const isCancelledCashierStatusTransitionBlocked = (
+  currentStatuses: readonly (string | null | undefined)[],
+  targetStatus: string | null | undefined,
+  role: string | null | undefined
+): boolean => {
+  if (!currentStatuses.some((status) => status === 'cancelled')) {
+    return false;
+  }
+  if (targetStatus === 'cancelled') {
+    return false;
+  }
+  if (targetStatus === 'draft' && role === 'admin') {
+    return false;
+  }
+  return true;
+};
+
 export interface DossierExpenseTransaction {
   dossier_id?: unknown;
   status?: unknown;
