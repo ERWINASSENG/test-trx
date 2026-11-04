@@ -1,4 +1,23 @@
-
+-- ==============================================================================
+-- DIGITAL-TRX — Script de RECRÉATION FIDÈLE DE LA STRUCTURE RÉELLE DE PRODUCTION
+-- Vérifié par introspection directe et synchronisé avec le projet Supabase
+-- "acpnphsvdcvagljlcrvl" le 04/11/2026.
+-- ==============================================================================
+-- Ce fichier documente et recrée l'intégralité du schéma de production :
+--   1. Schémas `public` et `private` étanches avec fonctions utilitaires et de sécurité.
+--   2. Typage natif PostgreSQL `date NOT NULL` pour `cashier_transactions.date`.
+--   3. Attribution atomique de `piece_comptable` réservée au statut `posted`
+--      (`assign_piece_comptable_on_post`), protégeant la séquence contre les trous.
+--   4. Vues de reporting comptable calculant strictement le solde sur `status = 'posted'`.
+--   5. Suivi des SLA de cotations via `sales_quotes.assigned_at` et son déclencheur.
+--   6. Synchronisation temps réel (`broadcast_balance_invalidation`) et RPCs d'agrégation
+--      (`get_cashier_summary`, `get_journal_summary`).
+--   7. Synchronisation bidirectionnelle du cycle de vie des cotations CRM
+--      (`sync_quote_lifecycle_to_sales_crm`).
+--   8. Normalisation automatique du signe des montants (`normalize_montant_sign`).
+--   9. Matrice RBAC complète pré-amorcée (143 attributions pour admin, manager,
+--      commercial, caissière, trésorier).
+--  10. 40 politiques Row Level Security actives et étanches.
 -- ==============================================================================
 
 BEGIN;
@@ -205,7 +224,7 @@ CREATE INDEX idx_audit_logs_user_id ON public.audit_logs (user_id);
 -- service normalisés). Le montant est signé : entrée +X et sortie -X restent distinctes.
 CREATE TABLE public.cashier_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  date text NOT NULL,
+  date date NOT NULL,
   libelle text NOT NULL,
   service text,
   type_description text,
@@ -230,10 +249,10 @@ CREATE TABLE public.cashier_transactions (
     CHECK (service <> 'Opérations' OR no_dossier IS NOT NULL OR dossier_id IS NOT NULL),
   CONSTRAINT chk_operations_requires_quantity
     CHECK (service <> 'Opérations' OR quantity IS NOT NULL),
-  CONSTRAINT chk_cashier_date_iso
-    CHECK (date ~ '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])'),
-  CONSTRAINT chk_cashier_sign_matches_category
-    CHECK ((category = 'entree' AND montant > 0) OR (category = 'sortie' AND montant < 0))
+  CONSTRAINT chk_cashier_montant_nonzero
+    CHECK (montant <> 0),
+  CONSTRAINT chk_cashier_montant_sign
+    CHECK (((category = 'entree' AND montant > 0) OR (category = 'sortie' AND montant < 0)))
 );
 CREATE INDEX idx_cashier_piece_comptable ON public.cashier_transactions (piece_comptable);
 CREATE UNIQUE INDEX uq_cashier_transactions_piece_comptable
@@ -249,7 +268,7 @@ CREATE INDEX idx_cashier_transactions_status ON public.cashier_transactions (sta
 CREATE INDEX idx_cashier_transactions_keyset ON public.cashier_transactions (date, created_at, id);
 CREATE UNIQUE INDEX uq_cashier_transactions_business_fingerprint
   ON public.cashier_transactions (
-    left(date, 10),
+    date,
     category,
     montant,
     regexp_replace(lower(btrim(libelle)), '\s+', ' ', 'g'),
@@ -373,6 +392,7 @@ CREATE TABLE public.sales_quotes (
   status text NOT NULL DEFAULT 'draft'
     CHECK (status IN ('draft', 'sent', 'accepted', 'rejected', 'expired')),
   valid_until date,
+  assigned_at timestamptz,
   sent_at timestamptz,
   responded_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -601,7 +621,7 @@ CREATE VIEW public.cashier_transactions_with_balance AS
         CASE
             WHEN (status <> 'cancelled'::cashier_transaction_status) THEN montant
             ELSE (0)::numeric
-        END) OVER (ORDER BY (left(date, 10)), created_at, id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS solde_progressif
+        END) OVER (ORDER BY (date), created_at, id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS solde_progressif
    FROM public.cashier_transactions t;
 
 CREATE VIEW public.cashier_balance_summary AS
@@ -1424,6 +1444,188 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.assign_piece_comptable_on_post()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  annee_piece integer;
+  prochain_numero integer;
+  candidat_piece text;
+  existe boolean;
+begin
+  if NEW.piece_comptable is not null and btrim(NEW.piece_comptable) <> '' then
+    return NEW;
+  end if;
+
+  if NEW.status <> 'posted' then
+    return NEW;
+  end if;
+
+  annee_piece := coalesce(
+    nullif(substring(NEW.date::text from '^(\\d{4})-'), '')::int,
+    nullif(substring(NEW.date::text from '(\\d{4})$'), '')::int,
+    extract(year from now())::int
+  );
+
+  insert into public.cashier_piece_counters (annee, dernier_numero)
+  values (annee_piece, 0)
+  on conflict (annee) do nothing;
+
+  loop
+    update public.cashier_piece_counters
+    set dernier_numero = dernier_numero + 1
+    where annee = annee_piece
+    returning dernier_numero into prochain_numero;
+
+    if prochain_numero is null then
+      raise exception 'Impossible d''obtenir le compteur de caisse pour l''année %', annee_piece;
+    end if;
+
+    candidat_piece := 'CSH1/' || annee_piece || '/' || lpad(prochain_numero::text, 5, '0');
+
+    select exists (
+      select 1 from public.cashier_transactions where piece_comptable = candidat_piece
+    ) into existe;
+
+    if not existe then
+      NEW.piece_comptable := candidat_piece;
+      exit;
+    end if;
+  end loop;
+
+  return NEW;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_sales_quote_assigned_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.assigned_at := CASE WHEN NEW.assigned_to IS NOT NULL THEN now() END;
+  ELSIF NEW.assigned_to IS DISTINCT FROM OLD.assigned_to THEN
+    NEW.assigned_at := CASE WHEN NEW.assigned_to IS NOT NULL THEN now() END;
+  ELSIF OLD.assigned_at IS NULL AND NEW.assigned_to IS NOT NULL THEN
+    NEW.assigned_at := now();
+  ELSE
+    NEW.assigned_at := OLD.assigned_at;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_quote_lifecycle_to_sales_crm()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.status IS NOT DISTINCT FROM NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.opportunity_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.sales_opportunities
+      WHERE id = NEW.opportunity_id AND prospect_id = NEW.prospect_id
+    ) THEN
+      RAISE EXCEPTION 'La cotation et l''opportunité associée doivent appartenir à la même société.';
+    END IF;
+
+    IF NEW.status = 'accepted' THEN
+      UPDATE public.sales_opportunities
+      SET stage = 'won', won_reason = 'accepted_quote', contract_reference = NULL
+      WHERE id = NEW.opportunity_id AND stage <> 'won';
+    ELSIF NEW.status = 'sent' THEN
+      UPDATE public.sales_opportunities
+      SET stage = 'quote_sent'
+      WHERE id = NEW.opportunity_id
+        AND stage IN ('new', 'qualified', 'quote_preparation', 'quote_sent');
+    ELSIF NEW.status = 'draft' THEN
+      UPDATE public.sales_opportunities
+      SET stage = 'quote_preparation'
+      WHERE id = NEW.opportunity_id
+        AND stage IN ('new', 'qualified', 'quote_preparation');
+    ELSIF NEW.status IN ('rejected', 'expired') THEN
+      UPDATE public.sales_opportunities
+      SET stage = 'lost'
+      WHERE id = NEW.opportunity_id
+        AND stage NOT IN ('won', 'lost');
+    END IF;
+  END IF;
+
+  IF NEW.status = 'accepted' THEN
+    UPDATE public.prospects
+    SET status = 'converted'
+    WHERE id = NEW.prospect_id AND status <> 'converted';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_cashier_summary(p_journal_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+declare
+  v_csh1 uuid;
+  v_result jsonb;
+begin
+  select j.id into v_csh1 from public.journals j where j.sequence_prefix = 'CSH1';
+
+  -- Journal autre que la caisse principale : solde calculé sur ses écritures
+  if p_journal_id is not null and p_journal_id is distinct from v_csh1 then
+    return public.get_journal_summary(p_journal_id);
+  end if;
+
+  -- Caisse principale (CSH1) : opérations de caisse comptabilisées uniquement
+  select jsonb_build_object(
+    'journal_id',    v_csh1,
+    'solde_global',  coalesce(sum(t.montant) filter (where t.status = 'posted'), 0),
+    'total_entrees', coalesce(sum(t.montant) filter (where t.status = 'posted' and t.montant > 0), 0),
+    'total_sorties', coalesce(-sum(t.montant) filter (where t.status = 'posted' and t.montant < 0), 0),
+    'total_count',   count(*) filter (where t.status = 'posted'),
+    'nb_brouillons', count(*) filter (where t.status = 'draft'),
+    'nb_annulees',   count(*) filter (where t.status = 'cancelled')
+  )
+  into v_result
+  from public.cashier_transactions t
+  where t.journal_id is not distinct from v_csh1 or t.journal_id is null;
+
+  return v_result;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_journal_summary(p_journal_id uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'journal_id',    p_journal_id,
+    'solde_global',  coalesce(sum(e.montant) filter (where e.status = 'posted'), 0),
+    'total_entrees', coalesce(sum(e.montant) filter (where e.status = 'posted' and e.montant > 0), 0),
+    'total_sorties', coalesce(-sum(e.montant) filter (where e.status = 'posted' and e.montant < 0), 0),
+    'total_count',   count(*) filter (where e.status = 'posted'),
+    'nb_brouillons', count(*) filter (where e.status = 'draft'),
+    'nb_annulees',   count(*) filter (where e.status = 'cancelled')
+  )
+  from public.journal_entries e
+  where e.journal_id = p_journal_id;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.enqueue_sales_activity_reminders()
 RETURNS integer
 LANGUAGE plpgsql
@@ -1582,6 +1784,52 @@ $function$;
 -- Audit automatique : alimente public.audit_logs à chaque écriture sur une
 -- table surveillée (voir triggers trg_audit_* ci-dessous). Ignore les UPDATE
 -- qui ne modifient que updated_at (no-op fonctionnel).
+-- Normalisation automatique du signe du montant
+CREATE OR REPLACE FUNCTION private.normalize_montant_sign()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if NEW.montant is not null and NEW.montant <> 0 then
+    if NEW.category::text = 'sortie' then
+      NEW.montant := -abs(NEW.montant);
+    elsif NEW.category::text = 'entree' then
+      NEW.montant := abs(NEW.montant);
+    end if;
+  end if;
+  return NEW;
+end;
+$function$;
+
+-- Invalidation du cache des soldes via Supabase Realtime
+CREATE OR REPLACE FUNCTION private.broadcast_balance_invalidation()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if tg_table_name = 'cashier_transactions' then
+    perform realtime.send(
+      '{}'::jsonb,
+      'cashier_balances_invalidated',
+      'cashier-balances:invalidate',
+      true
+    );
+  elsif tg_table_name = 'journal_entries' then
+    perform realtime.send(
+      '{}'::jsonb,
+      'journal_balances_invalidated',
+      'journal-balances:invalidate',
+      true
+    );
+  end if;
+
+  return null;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION private.audit_row_change()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1808,9 +2056,29 @@ CREATE TRIGGER trg_protect_cashier_transaction_integrity
   BEFORE UPDATE ON public.cashier_transactions
   FOR EACH ROW EXECUTE FUNCTION public.protect_cashier_transaction_integrity();
 
-CREATE TRIGGER trg_assign_piece_comptable
+CREATE TRIGGER trg_assign_piece_comptable_on_post_insert
   BEFORE INSERT ON public.cashier_transactions
-  FOR EACH ROW EXECUTE FUNCTION public.assign_piece_comptable();
+  FOR EACH ROW EXECUTE FUNCTION public.assign_piece_comptable_on_post();
+
+CREATE TRIGGER trg_assign_piece_comptable_on_post_update
+  BEFORE UPDATE ON public.cashier_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.assign_piece_comptable_on_post();
+
+CREATE TRIGGER trg_normalize_montant_sign
+  BEFORE INSERT OR UPDATE ON public.cashier_transactions
+  FOR EACH ROW EXECUTE FUNCTION private.normalize_montant_sign();
+
+CREATE TRIGGER trg_normalize_montant_sign
+  BEFORE INSERT OR UPDATE ON public.journal_entries
+  FOR EACH ROW EXECUTE FUNCTION private.normalize_montant_sign();
+
+CREATE TRIGGER trg_cashier_balance_broadcast_invalidation
+  AFTER INSERT OR UPDATE OR DELETE ON public.cashier_transactions
+  FOR EACH ROW EXECUTE FUNCTION private.broadcast_balance_invalidation();
+
+CREATE TRIGGER trg_journal_balance_broadcast_invalidation
+  AFTER INSERT OR UPDATE OR DELETE ON public.journal_entries
+  FOR EACH ROW EXECUTE FUNCTION private.broadcast_balance_invalidation();
 
 CREATE TRIGGER trg_assign_cashier_journal_id
   BEFORE INSERT ON public.cashier_transactions
@@ -1865,9 +2133,13 @@ CREATE TRIGGER trg_link_sales_quote_to_crm_opportunity
   ON public.sales_quotes
   FOR EACH ROW EXECUTE FUNCTION public.link_sales_quote_to_crm_opportunity();
 
-CREATE TRIGGER trg_sync_accepted_quote_to_sales_crm
-  AFTER INSERT OR UPDATE OF status ON public.sales_quotes
-  FOR EACH ROW EXECUTE FUNCTION public.sync_accepted_quote_to_sales_crm();
+CREATE TRIGGER trg_sales_quotes_set_assigned_at
+  BEFORE INSERT OR UPDATE ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.set_sales_quote_assigned_at();
+
+CREATE TRIGGER trg_sync_quote_lifecycle_to_sales_crm
+  AFTER INSERT OR UPDATE ON public.sales_quotes
+  FOR EACH ROW EXECUTE FUNCTION public.sync_quote_lifecycle_to_sales_crm();
 
 CREATE TRIGGER trg_sync_opportunity_stage_to_sales_quote
   AFTER UPDATE OF stage
