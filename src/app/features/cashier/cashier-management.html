@@ -47,7 +47,6 @@
                 [attr.aria-expanded]="isActionsMenuOpen()"
                 aria-haspopup="menu"
                 id="cashier-control-actions">
-                <mat-icon class="!h-4 !w-4 !text-[15px] text-[#0b5ed7] dark:text-[#8cc2ff]">settings</mat-icon>
                 Actions
               </button>
 
@@ -75,6 +74,18 @@
                     <button type="button" (click)="onDuplicateAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem">
                       <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">content_copy</mat-icon>
                       Dupliquer
+                    </button>
+                  }
+                  @if (canPostCashierOperations()) {
+                    <button
+                      type="button"
+                      (click)="onPostSelectedAction()"
+                      [disabled]="isPosting()"
+                      class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-emerald-600 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                      role="menuitem"
+                      id="cashier-action-post">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-emerald-500">check_circle</mat-icon>
+                      Comptabiliser
                     </button>
                   }
                   @if (canCancelCashierOperations()) {
@@ -109,7 +120,8 @@
               placeholder="Rechercher…"
               aria-label="Rechercher dans les opérations de caisse"
               class="min-w-[60px] flex-grow bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
-              id="cashier-control-search" />
+              id="cashier-control-search"
+              name="search" />
           </div>
         }
       </div>
@@ -127,37 +139,6 @@
       </div>
     </app-module-control-panel>
 
-    <!-- BANDEAU D'ALERTE D'ERREUR OU DOUBLON (Accessible WCAG AA, Sticky & Haute Visibilité) -->
-    @if (error()) {
-      <div
-        id="cashier-error-alert"
-        role="alert"
-        aria-live="assertive"
-        class="sticky top-0 z-40 mx-3 my-2 p-3.5 rounded-lg bg-red-600 text-white dark:bg-red-700 shadow-lg border-2 border-red-500 dark:border-red-400 flex items-start justify-between gap-3 animate-pulse-once"
-      >
-        <div class="flex items-start gap-3">
-          <mat-icon class="text-white mt-0.5 !w-6 !h-6 text-2xl flex-shrink-0">report_problem</mat-icon>
-          <div class="text-sm">
-            <span class="font-bold block text-white text-sm mb-0.5 tracking-wide uppercase">
-              ⚠️ Attention : Opération non enregistrée
-            </span>
-            <p class="leading-relaxed text-xs sm:text-sm text-red-50 font-medium">
-              {{ error() }}
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          id="dismiss-cashier-error-btn"
-          (click)="dismissError()"
-          class="p-1 rounded-md text-white hover:bg-white/20 active:scale-95 transition cursor-pointer flex-shrink-0"
-          aria-label="Fermer le message d'erreur"
-          title="Fermer ce message"
-        >
-          <mat-icon class="!w-5 !h-5 text-base leading-none flex items-center justify-center">close</mat-icon>
-        </button>
-      </div>
-    }
 
     <!-- Barre d'état Solde Actuel & Journal Actif -->
     <div class="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-white/5">
@@ -198,6 +179,7 @@
                 <input
                   type="checkbox"
                   id="select-all-checkbox"
+                  name="select-all-checkbox"
                   [checked]="isAllSelected()"
                   (change)="onToggleSelectAll()"
                   aria-label="Sélectionner toutes les lignes"
@@ -216,8 +198,8 @@
               >
                 <span>Date</span>
                 @if (sortField() === 'date') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
-                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  <mat-icon class="!h-3.5 !w-3.5 !text-[13px] !leading-none text-[#0b5ed7] dark:text-[#8cc2ff]">
+                    {{ sortDirection() === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down' }}
                   </mat-icon>
                 }
               </button>
@@ -231,8 +213,8 @@
               >
                 <span>Pièce comptable</span>
                 @if (sortField() === 'pieceComptable') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
-                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  <mat-icon class="!h-3.5 !w-3.5 !text-[13px] !leading-none text-[#0b5ed7] dark:text-[#8cc2ff]">
+                    {{ sortDirection() === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down' }}
                   </mat-icon>
                 }
               </button>
@@ -255,8 +237,8 @@
               >
                 <span>Montant</span>
                 @if (sortField() === 'montant') {
-                  <mat-icon class="text-xs !w-4 !h-4 !leading-4 text-[#0b5ed7] dark:text-[#8cc2ff]">
-                    {{ sortDirection() === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
+                  <mat-icon class="!h-3.5 !w-3.5 !text-[13px] !leading-none text-[#0b5ed7] dark:text-[#8cc2ff]">
+                    {{ sortDirection() === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down' }}
                   </mat-icon>
                 }
               </button>
@@ -273,7 +255,13 @@
             <tr class="odoo-row-editing" id="inline-add-row" [formGroup]="transactionForm" (keydown)="onAddKeydown($event)">
               <!-- Checkbox -->
               <td class="py-2 px-3 text-center align-middle">
-                <input type="checkbox" disabled class="odoo-checkbox opacity-40" />
+                <input
+                  type="checkbox"
+                  id="inline-add-row-checkbox"
+                  name="inline-add-row-checkbox"
+                  disabled
+                  aria-label="Ligne d'ajout rapide"
+                  class="odoo-checkbox opacity-40" />
               </td>
 
               <!-- Date (Soulignée avec popover calendrier Odoo) -->
@@ -455,7 +443,13 @@
                 >
                   <!-- Checkbox -->
                   <td class="py-2 px-3 text-center align-middle">
-                    <input type="checkbox" disabled class="odoo-checkbox opacity-40" />
+                    <input
+                      type="checkbox"
+                      [id]="'inline-edit-checkbox-' + tx.id"
+                      [name]="'inline-edit-checkbox-' + tx.id"
+                      disabled
+                      aria-label="Ligne en cours d'édition"
+                      class="odoo-checkbox opacity-40" />
                   </td>
 
                   <!-- Date (Soulignée avec popover calendrier Odoo) -->
@@ -623,9 +617,11 @@
                     @if (canSelect()) {
                       <input
                         type="checkbox"
+                        [id]="'cashier-tx-select-' + tx.id"
+                        [name]="'cashier-tx-select-' + tx.id"
                         [checked]="tx.selected"
                         (change)="onToggleSelect(tx)"
-                        aria-label="Sélectionner la ligne"
+                        [attr.aria-label]="'Sélectionner la transaction ' + (tx.libelle || tx.id)"
                         class="odoo-checkbox"
                       />
                     } @else {

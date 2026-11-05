@@ -114,6 +114,66 @@ describe('JournalService', () => {
     expect(service.journals()).toEqual([{ id: 'native-caisse-principal' }]);
   });
 
+  it('affiche le motif métier renvoyé par l’API lors du chargement des journaux', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ message: 'L’accès aux journaux est temporairement suspendu.' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    )));
+
+    await service.loadJournals();
+
+    expect(mockNotificationService.error).toHaveBeenCalledWith(
+      'L’accès aux journaux est temporairement suspendu.',
+      'Chargement impossible'
+    );
+  });
+
+  it('distingue une panne réseau lors du chargement des journaux', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await service.loadJournals();
+
+    expect(mockNotificationService.error).toHaveBeenCalledWith(
+      'Connexion au service des journaux impossible. Vérifiez votre connexion puis réessayez.',
+      'Chargement impossible'
+    );
+  });
+
+  it('signale une réponse de chargement invalide', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('null', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    await service.loadJournals();
+
+    expect(mockNotificationService.error).toHaveBeenCalledWith(
+      'Le serveur a renvoyé une liste de journaux invalide.',
+      'Chargement impossible'
+    );
+  });
+
+  it('conserve le motif métier lors du refus de création d’un journal', async () => {
+    grantedPermissions.set(['journals.read', 'journals.create']);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: 'Ce préfixe de séquence est déjà utilisé.' }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    )));
+
+    const result = await service.createJournal({
+      name: 'Journal de test',
+      type: 'bank',
+      sequence_prefix: 'BNK1',
+      default_account: '512000',
+    });
+
+    expect(result).toBeNull();
+    expect(mockNotificationService.error).toHaveBeenCalledWith(
+      'Ce préfixe de séquence est déjà utilisé.',
+      'Échec de création'
+    );
+  });
+
   it('devrait calculer le solde propre du journal natif de caisse', () => {
     Object.assign(service, {
       defaultNativeCashJournal: { id: 'native-caisse-principal' },

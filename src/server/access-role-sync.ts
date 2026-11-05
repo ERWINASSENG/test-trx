@@ -7,6 +7,7 @@ export const CANONICAL_ACCESS_ROLE_KEYS = [
   'caissiere',
   'comptable',
   'employe',
+  'commercial',
 ] as const;
 
 export type CanonicalAccessRoleKey = typeof CANONICAL_ACCESS_ROLE_KEYS[number];

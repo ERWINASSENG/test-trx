@@ -60,11 +60,6 @@ export const createJournalHandler = async (req: express.Request, res: express.Re
     return;
   }
 
-  if (!userId) {
-    res.status(401).json({ error: 'Utilisateur non identifié. Création du journal refusée.' });
-    return;
-  }
-
   const body = req.body || {};
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const type = typeof body.type === 'string' ? body.type.trim() : 'bank';
@@ -300,15 +295,22 @@ export const deleteJournalHandler = async (req: express.Request, res: express.Re
       return;
     }
 
-    // Vérifier si des transactions y sont associées
-    const { count: txCount } = await adminClient
-      .from('cashier_transactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('journal_id', journalId);
+    // Vérifier si des transactions ou écritures y sont associées
+    const [{ count: txCount }, { count: entryCount }] = await Promise.all([
+      adminClient
+        .from('cashier_transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('journal_id', journalId),
+      adminClient
+        .from('journal_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('journal_id', journalId),
+    ]);
 
-    if (txCount && txCount > 0) {
+    const totalLinked = (txCount || 0) + (entryCount || 0);
+    if (totalLinked > 0) {
       res.status(400).json({
-        error: `Impossible de supprimer ce journal : ${txCount} transaction(s) comptable(s) y sont rattachée(s).`,
+        error: `Impossible de supprimer ce journal : ${totalLinked} transaction(s) comptable(s) y sont rattachée(s).`,
       });
       return;
     }

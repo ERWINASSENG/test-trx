@@ -42,9 +42,16 @@
     <section class="roles-workspace" aria-label="Gestion des rôles">
       <aside class="role-rail" aria-label="Liste des rôles">
         <div class="rail-heading">
-          <label class="search-field">
+          <label class="search-field" for="access-role-search-input">
             <mat-icon>search</mat-icon>
-            <input type="search" aria-label="Rechercher un rôle" placeholder="Rechercher un rôle" [value]="roleSearch()" (input)="roleSearch.set($any($event.target).value)" />
+            <input
+              type="search"
+              id="access-role-search-input"
+              name="roleSearch"
+              aria-label="Rechercher un rôle"
+              placeholder="Rechercher un rôle"
+              [value]="roleSearch()"
+              (input)="roleSearch.set($any($event.target).value)" />
           </label>
           @if (can('access.roles.manage')) {
             <button type="button" class="icon-button add-role-button" (click)="createRoleOpen.set(!createRoleOpen())" title="Créer un rôle" aria-label="Créer un rôle">
@@ -55,9 +62,39 @@
 
         @if (createRoleOpen()) {
           <form class="create-role-form" (submit)="$event.preventDefault(); createRole()">
-            <label>Clé du rôle<input required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_]+" [value]="roleKeyDraft()" (input)="roleKeyDraft.set($any($event.target).value)" placeholder="ex. auditeur" /></label>
-            <label>Nom affiché<input required minlength="2" [value]="roleLabelDraft()" (input)="roleLabelDraft.set($any($event.target).value)" placeholder="Auditeur" /></label>
-            <label>Description<input [value]="roleDescriptionDraft()" (input)="roleDescriptionDraft.set($any($event.target).value)" placeholder="Description du rôle" /></label>
+            <label for="create-role-key-input">
+              Clé du rôle
+              <input
+                id="create-role-key-input"
+                name="roleKey"
+                required
+                minlength="2"
+                maxlength="64"
+                pattern="[a-z][a-z0-9_]+"
+                [value]="roleKeyDraft()"
+                (input)="roleKeyDraft.set($any($event.target).value)"
+                placeholder="ex. auditeur" />
+            </label>
+            <label for="create-role-label-input">
+              Nom affiché
+              <input
+                id="create-role-label-input"
+                name="roleLabel"
+                required
+                minlength="2"
+                [value]="roleLabelDraft()"
+                (input)="roleLabelDraft.set($any($event.target).value)"
+                placeholder="Auditeur" />
+            </label>
+            <label for="create-role-desc-input">
+              Description
+              <input
+                id="create-role-desc-input"
+                name="roleDescription"
+                [value]="roleDescriptionDraft()"
+                (input)="roleDescriptionDraft.set($any($event.target).value)"
+                placeholder="Description du rôle" />
+            </label>
             @if (newRoleError()) { <p class="inline-error" role="alert">{{ newRoleError() }}</p> }
             <button type="submit" class="primary-button" [disabled]="accessControl.isLoading()">Créer le rôle</button>
           </form>
@@ -94,8 +131,24 @@
           </div>
 
           <div class="role-metadata">
-            <label>Nom du rôle<input [value]="roleLabelDraft()" [disabled]="role.isSystem || !can('access.roles.manage')" (input)="roleLabelDraft.set($any($event.target).value)" /></label>
-            <label>Description<input [value]="roleDescriptionDraft()" [disabled]="role.isSystem || !can('access.roles.manage')" (input)="roleDescriptionDraft.set($any($event.target).value)" /></label>
+            <label for="edit-role-label-input">
+              Nom du rôle
+              <input
+                id="edit-role-label-input"
+                name="editRoleLabel"
+                [value]="roleLabelDraft()"
+                [disabled]="role.isSystem || !can('access.roles.manage')"
+                (input)="roleLabelDraft.set($any($event.target).value)" />
+            </label>
+            <label for="edit-role-desc-input">
+              Description
+              <input
+                id="edit-role-desc-input"
+                name="editRoleDescription"
+                [value]="roleDescriptionDraft()"
+                [disabled]="role.isSystem || !can('access.roles.manage')"
+                (input)="roleDescriptionDraft.set($any($event.target).value)" />
+            </label>
             @if (!role.isSystem && can('access.roles.manage')) {
               <button type="button" class="secondary-button" (click)="saveRoleDetails()">Enregistrer le rôle</button>
               <button type="button" class="danger-button" (click)="deleteSelectedRole()">Supprimer le rôle</button>
@@ -133,15 +186,30 @@
                         @for (permission of moduleGroup.permissions; track permission.permissionKey) {
                           <tr>
                             <td>
-                              <label class="permission-check">
-                                <input type="checkbox" [checked]="isPermissionGranted(permission.permissionKey)" [disabled]="!can('access.permissions.assign')" (change)="togglePermission(permission, $event)" />
+                              <label class="permission-check" [for]="'perm-chk-' + permission.permissionKey">
+                                <input
+                                  type="checkbox"
+                                  [id]="'perm-chk-' + permission.permissionKey"
+                                  [name]="'perm-chk-' + permission.permissionKey"
+                                  [checked]="isPermissionGranted(permission.permissionKey)"
+                                  [disabled]="!can('access.permissions.assign')"
+                                  (change)="togglePermission(permission, $event)" />
                                 <span>{{ permission.label }}</span>
                               </label>
                               <small>{{ permission.description }}</small>
                             </td>
                             <td><code>{{ permission.permissionKey }}</code></td>
                             <td>
-                              <input class="scope-input" type="text" spellcheck="false" [attr.aria-label]="'Périmètre pour ' + permission.permissionKey" [value]="scopeDraft(permission.permissionKey)" [disabled]="!isPermissionGranted(permission.permissionKey) || !can('access.permissions.assign')" (input)="onScopeDraftInput(permission.permissionKey, $event)" />
+                              <input
+                                class="scope-input"
+                                type="text"
+                                [id]="'perm-scope-' + permission.permissionKey"
+                                [name]="'perm-scope-' + permission.permissionKey"
+                                spellcheck="false"
+                                [attr.aria-label]="'Périmètre pour ' + permission.permissionKey"
+                                [value]="scopeDraft(permission.permissionKey)"
+                                [disabled]="!isPermissionGranted(permission.permissionKey) || !can('access.permissions.assign')"
+                                (input)="onScopeDraftInput(permission.permissionKey, $event)" />
                             </td>
                           </tr>
                         }
@@ -166,9 +234,16 @@
   @if (activeView() === 'users' && can('access.users.read')) {
     <section class="users-workspace" aria-label="Affectations utilisateurs">
       <aside class="user-rail" aria-label="Liste des utilisateurs">
-        <label class="search-field">
+        <label class="search-field" for="access-user-search-input">
           <mat-icon>search</mat-icon>
-          <input type="search" aria-label="Rechercher un utilisateur" placeholder="Nom ou adresse e-mail" [value]="userSearch()" (input)="userSearch.set($any($event.target).value)" />
+          <input
+            type="search"
+            id="access-user-search-input"
+            name="userSearch"
+            aria-label="Rechercher un utilisateur"
+            placeholder="Nom ou adresse e-mail"
+            [value]="userSearch()"
+            (input)="userSearch.set($any($event.target).value)" />
         </label>
         <ul class="user-list">
           @for (user of filteredUsers(); track user.id) {
@@ -228,7 +303,12 @@
 
             @if (can('access.users.assign_roles') && can('access.roles.read')) {
               <div class="inline-assignment">
-                <select aria-label="Choisir un rôle" [value]="userRoleDraft()" (change)="userRoleDraft.set($any($event.target).value)">
+                <select
+                  id="access-user-role-select"
+                  name="userRole"
+                  aria-label="Choisir un rôle"
+                  [value]="userRoleDraft()"
+                  (change)="userRoleDraft.set($any($event.target).value)">
                   <option value="">{{ currentUserRole() ? 'Remplacer par un autre rôle...' : 'Attribuer un rôle...' }}</option>
                   @for (role of accessControl.roles(); track role.id) {
                     @if (role.isActive && role.id !== currentUserRole()?.roleId) {
@@ -249,18 +329,47 @@
             <div class="section-heading"><h3>Exceptions individuelles</h3></div>
             @if (can('access.users.override') && can('access.permissions.read')) {
               <div class="override-form">
-                <select aria-label="Permission" [value]="overridePermissionDraft()" (change)="overridePermissionDraft.set($any($event.target).value)">
+                <select
+                  id="override-perm-select"
+                  name="overridePermission"
+                  aria-label="Permission"
+                  [value]="overridePermissionDraft()"
+                  (change)="overridePermissionDraft.set($any($event.target).value)">
                   <option value="">Choisir une permission</option>
                   @for (permission of accessControl.permissions(); track permission.permissionKey) {
                     <option [value]="permission.permissionKey">{{ permission.label }}</option>
                   }
                 </select>
-                <select aria-label="Effet de l’exception" [value]="overrideEffectDraft()" (change)="overrideEffectDraft.set($any($event.target).value)">
+                <select
+                  id="override-effect-select"
+                  name="overrideEffect"
+                  aria-label="Effet de l’exception"
+                  [value]="overrideEffectDraft()"
+                  (change)="overrideEffectDraft.set($any($event.target).value)">
                   <option value="deny">Refuser</option><option value="allow">Autoriser</option>
                 </select>
-                <input type="text" aria-label="Périmètre JSON" [value]="overrideScopeDraft()" (input)="overrideScopeDraft.set($any($event.target).value)" />
-                <input type="text" aria-label="Motif obligatoire" placeholder="Motif de l’exception" [value]="overrideReasonDraft()" (input)="overrideReasonDraft.set($any($event.target).value)" />
-                <input type="datetime-local" aria-label="Expiration facultative" [value]="overrideExpirationDraft()" (input)="overrideExpirationDraft.set($any($event.target).value)" />
+                <input
+                  type="text"
+                  id="override-scope-input"
+                  name="overrideScope"
+                  aria-label="Périmètre JSON"
+                  [value]="overrideScopeDraft()"
+                  (input)="overrideScopeDraft.set($any($event.target).value)" />
+                <input
+                  type="text"
+                  id="override-reason-input"
+                  name="overrideReason"
+                  aria-label="Motif obligatoire"
+                  placeholder="Motif de l’exception"
+                  [value]="overrideReasonDraft()"
+                  (input)="overrideReasonDraft.set($any($event.target).value)" />
+                <input
+                  type="datetime-local"
+                  id="override-expiration-input"
+                  name="overrideExpiration"
+                  aria-label="Expiration facultative"
+                  [value]="overrideExpirationDraft()"
+                  (input)="overrideExpirationDraft.set($any($event.target).value)" />
                 <button type="button" class="secondary-button" [disabled]="!overridePermissionDraft() || !overrideReasonDraft().trim()" (click)="saveOverride()">Enregistrer l’exception</button>
               </div>
             } @else if (can('access.users.override')) {

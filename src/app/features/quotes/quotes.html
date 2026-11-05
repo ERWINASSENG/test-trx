@@ -7,6 +7,12 @@
           <span>Nouvelle cotation</span>
         </button>
       }
+      @if (selectedCount() > 0) {
+        <button type="button" class="cashier-action-primary inline-flex items-center gap-1.5" (click)="exportSelectedQuotesPdf()" title="Exporter la sélection au format PDF">
+          <mat-icon>upload</mat-icon>
+          <span>Exporter ({{ selectedCount() }})</span>
+        </button>
+      }
       @if (selectedCount() > 0 && canDelete()) {
         <button type="button" class="cashier-action-danger" (click)="deleteSelectedQuotes()" title="Supprimer la sélection">
           <mat-icon>delete_outline</mat-icon>
@@ -14,32 +20,91 @@
         </button>
       }
       <div class="quotes-breadcrumb" aria-label="Fil d’Ariane">
-        <span>Cotations maritimes</span>
+        <h1 id="quotes-title">Cotations maritimes</h1>
         <small>Développement commercial & transit</small>
       </div>
     </div>
     <div controlPanelCenter class="quotes-control-center">
-      <div class="quotes-search">
-        <mat-icon aria-hidden="true">search</mat-icon>
-        <input
-          id="quotes-control-search"
-          type="search"
-          [value]="quoteSearch()"
-          (input)="searchQuotes($any($event.target).value)"
-          placeholder="Rechercher par référence, client, objet…"
-          aria-label="Rechercher dans les cotations" />
-      </div>
-      <select
-        id="quote-status-filter"
-        class="quotes-status-filter"
-        [value]="statusFilter()"
-        aria-label="Filtrer par statut"
-        (change)="filterByStatus($any($event.target).value)">
-        <option value="">Tous les statuts</option>
-        @for (quoteStatus of statuses; track quoteStatus) {
-          <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
-        }
-      </select>
+      @if (selectedCount() > 0) {
+        <div class="quotes-selection-bar flex items-center gap-2" id="quotes-selection-bar">
+          <div class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7]/30 bg-[#0b5ed7]/10 px-3 py-1 text-xs font-semibold text-[#0b5ed7] dark:border-[#7cb3ff]/40 dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff]">
+            <span>{{ selectedCount() }} sélectionnée(s)</span>
+            <button
+              type="button"
+              (click)="clearSelection()"
+              class="ml-0.5 flex items-center justify-center rounded-full p-0.5 transition-colors hover:bg-[#0b5ed7]/15 dark:hover:bg-[#7cb3ff]/20"
+              aria-label="Annuler la sélection"
+              title="Annuler la sélection">
+              <mat-icon class="!h-3.5 !w-3.5 !text-[13px] leading-none">close</mat-icon>
+            </button>
+          </div>
+
+          <div class="relative" id="quotes-actions-dropdown-container">
+            <button
+              type="button"
+              (click)="toggleActionsMenu($event)"
+              class="inline-flex items-center gap-1.5 rounded border border-[#0b5ed7] bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-2xs transition hover:bg-slate-50 dark:border-[#7cb3ff] dark:bg-[#0d1f3a] dark:text-white dark:hover:bg-white/5"
+              [attr.aria-expanded]="isActionsMenuOpen()"
+              aria-haspopup="menu"
+              id="quotes-control-actions">
+              <mat-icon class="!h-4 !w-4 !text-[15px] text-[#0b5ed7] dark:text-[#7cb3ff]">tune</mat-icon>
+              <span>Actions</span>
+              <mat-icon class="!h-3.5 !w-3.5 !text-[13px] text-slate-500">arrow_drop_down</mat-icon>
+            </button>
+
+            @if (isActionsMenuOpen()) {
+              <div
+                class="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white py-1.5 text-xs text-slate-700 shadow-2xl dark:border-white/10 dark:bg-[#212529] dark:text-slate-200"
+                role="menu"
+                aria-label="Actions sur les cotations sélectionnées">
+                <button
+                  type="button"
+                  (click)="exportSelectedQuotesPdf()"
+                  class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
+                  role="menuitem">
+                  <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">upload</mat-icon>
+                  <span>Exporter</span>
+                </button>
+                @if (canDelete()) {
+                  <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
+                  <button
+                    type="button"
+                    (click)="deleteSelectedQuotes()"
+                    class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-rose-600 transition-colors hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                    role="menuitem">
+                    <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-rose-500">delete_outline</mat-icon>
+                    <span>Supprimer</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="quotes-search">
+          <mat-icon aria-hidden="true">search</mat-icon>
+          <input
+            id="quotes-control-search"
+            name="quoteSearch"
+            type="search"
+            [value]="quoteSearch()"
+            (input)="searchQuotes($any($event.target).value)"
+            placeholder="Rechercher par référence, client, objet…"
+            aria-label="Rechercher dans les cotations" />
+        </div>
+        <select
+          id="quote-status-filter"
+          name="statusFilter"
+          class="quotes-status-filter"
+          [value]="statusFilter()"
+          aria-label="Filtrer par statut"
+          (change)="filterByStatus($any($event.target).value)">
+          <option value="">Tous les statuts</option>
+          @for (quoteStatus of statuses; track quoteStatus) {
+            <option [value]="quoteStatus">{{ statusLabel(quoteStatus) }}</option>
+          }
+        </select>
+      }
     </div>
     <div controlPanelEnd class="quotes-control-end">
       <div class="quotes-view-switch" role="group" aria-label="Vue des cotations">
@@ -110,6 +175,7 @@
                   <input
                     type="checkbox"
                     id="select-all-checkbox"
+                    name="selectAll"
                     [checked]="isAllSelected()"
                     (change)="onToggleSelectAll()"
                     aria-label="Sélectionner toutes les cotations"
@@ -217,6 +283,9 @@
                   }
                 </button>
               </th>
+              <th scope="col" class="py-2.5 px-3 font-semibold text-center whitespace-nowrap w-20">
+                <span>PDF</span>
+              </th>
             </tr>
           </thead>
           <tbody moduleTableBody class="divide-y divide-slate-200 dark:divide-white/5 bg-transparent">
@@ -229,6 +298,8 @@
                   @if (canSelect()) {
                     <input
                       type="checkbox"
+                      [id]="'quote-select-' + quote.id"
+                      [name]="'quote-select-' + quote.id"
                       [checked]="isSelected(quote.id)"
                       (change)="onToggleSelect(quote.id)"
                       aria-label="Sélectionner la cotation"
@@ -303,6 +374,16 @@
                     }
                   }
                 </td>
+                <td class="py-2.5 px-3 text-center whitespace-nowrap" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    (click)="exportQuotePdf(quote, $event)"
+                    class="inline-flex items-center justify-center p-1.5 rounded text-slate-500 hover:text-[#0b5ed7] hover:bg-slate-100 dark:text-slate-400 dark:hover:text-[#8cc2ff] dark:hover:bg-white/10 transition-colors"
+                    title="Télécharger la cotation en PDF"
+                    [attr.aria-label]="'Télécharger la cotation ' + quote.quoteNumber + ' en PDF'">
+                    <mat-icon class="!h-4 !w-4 !text-[16px]">picture_as_pdf</mat-icon>
+                  </button>
+                </td>
               </tr>
             }
           </tbody>
@@ -353,6 +434,14 @@
                 <div class="quote-kanban-footer">
                   <span>{{ quote.assignedToName || assigneeLabel(quote.assignedTo) }}</span>
                   <div class="row-actions">
+                    <button
+                      type="button"
+                      class="icon-action"
+                      aria-label="Télécharger la cotation en PDF"
+                      title="Télécharger en PDF"
+                      (click)="exportQuotePdf(quote, $event)">
+                      <mat-icon>picture_as_pdf</mat-icon>
+                    </button>
                     @if (canUpdate()) {
                       <button type="button" class="icon-action" aria-label="Modifier la cotation" title="Modifier" (click)="openEdit(quote)">
                         <mat-icon>edit</mat-icon>
@@ -435,6 +524,7 @@
             <label for="quote-meta-title">Objet de la demande / Subject</label>
             <input
               id="quote-meta-title"
+              name="title"
               type="text"
               [value]="title()"
               (input)="title.set($any($event.target).value)"
@@ -444,6 +534,7 @@
             <label for="quote-meta-currency">Devise / Currency</label>
             <input
               id="quote-meta-currency"
+              name="currency"
               type="text"
               [value]="currency()"
               (input)="currency.set($any($event.target).value)"
@@ -454,6 +545,7 @@
             <label for="quote-meta-status">Statut / Status</label>
             <select
               id="quote-meta-status"
+              name="status"
               [value]="status()"
               (change)="status.set($any($event.target).value)">
               @for (quoteStatus of statuses; track quoteStatus) {
@@ -466,6 +558,7 @@
               <label for="quote-meta-assignee">Commercial assigné / Sales rep</label>
               <select
                 id="quote-meta-assignee"
+                name="assignedTo"
                 [value]="assignedTo()"
                 (change)="assignedTo.set($any($event.target).value)">
                 <option value="">Sélectionner un commercial</option>
@@ -488,11 +581,14 @@
               <div class="client-picker-row">
                 <input
                   id="field-company-name"
+                  name="clientSearch"
                   type="text"
                   [value]="clientSearch()"
                   (input)="onClientSearchInput($any($event.target).value)"
                   placeholder="Rechercher ou saisir la raison sociale de l'entreprise…" />
                 <select
+                  id="field-prospect-select"
+                  name="prospectId"
                   [value]="prospectId()"
                   [disabled]="!!opportunityId()"
                   (change)="onProspectSelected($any($event.target).value)"
@@ -514,7 +610,7 @@
                 <div class="new-prospect-grid">
                   <div class="odoo-field">
                     <label for="field-contact-record">Contact enregistré / Shared contact</label>
-                    <select id="field-contact-record" [value]="contactId()" [disabled]="!prospectId()"
+                    <select id="field-contact-record" name="contactId" [value]="contactId()" [disabled]="!prospectId()"
                       (change)="onContactSelected($any($event.target).value)">
                       <option value="">Aucun contact lié</option>
                       @for (contact of quoteService.contacts(); track contact.id) {
@@ -529,15 +625,15 @@
 
                   <div class="odoo-field">
                     <label for="new-prop-contact">Contact direct</label>
-                    <input id="new-prop-contact" type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" placeholder="Nom complet" />
+                    <input id="new-prop-contact" name="newProspectContact" type="text" [value]="newProspectContact()" (input)="newProspectContact.set($any($event.target).value)" placeholder="Nom complet" />
                   </div>
                   <div class="odoo-field">
                     <label for="new-prop-email">Email</label>
-                    <input id="new-prop-email" type="email" [value]="newProspectEmail()" (input)="newProspectEmail.set($any($event.target).value)" placeholder="contact@entreprise.com" />
+                    <input id="new-prop-email" name="newProspectEmail" type="email" [value]="newProspectEmail()" (input)="newProspectEmail.set($any($event.target).value)" placeholder="contact@entreprise.com" />
                   </div>
                   <div class="odoo-field">
                     <label for="new-prop-phone">Téléphone</label>
-                    <input id="new-prop-phone" type="tel" [value]="newProspectPhone()" (input)="newProspectPhone.set($any($event.target).value)" placeholder="+237 ..." />
+                    <input id="new-prop-phone" name="newProspectPhone" type="tel" [value]="newProspectPhone()" (input)="newProspectPhone.set($any($event.target).value)" placeholder="+237 ..." />
                   </div>
                 </div>
                 <button type="button" class="primary-action mini-action" [disabled]="isCreatingProspect()" (click)="createProspect()">
@@ -551,6 +647,7 @@
               <label for="field-contact-name">Nom du contact / Contact Name :</label>
               <input
                 id="field-contact-name"
+                name="seaContactName"
                 type="text"
                 [value]="seaContactName()"
                 (input)="seaContactName.set($any($event.target).value)"
@@ -561,6 +658,7 @@
               <label for="field-phone">Téléphone / Phone :</label>
               <input
                 id="field-phone"
+                name="seaPhone"
                 type="tel"
                 [value]="seaPhone()"
                 (input)="seaPhone.set($any($event.target).value)"
@@ -571,6 +669,7 @@
               <label for="field-email">Email / Email :</label>
               <input
                 id="field-email"
+                name="seaEmail"
                 type="email"
                 [value]="seaEmail()"
                 (input)="seaEmail.set($any($event.target).value)"
@@ -581,6 +680,7 @@
               <label for="field-address">Adresse / Address :</label>
               <input
                 id="field-address"
+                name="seaAddress"
                 type="text"
                 [value]="seaAddress()"
                 (input)="seaAddress.set($any($event.target).value)"
@@ -599,6 +699,7 @@
               <label for="field-goods-type">Type de marchandise / Type of Goods :</label>
               <input
                 id="field-goods-type"
+                name="seaGoodsType"
                 type="text"
                 [value]="seaGoodsType()"
                 (input)="seaGoodsType.set($any($event.target).value)"
@@ -609,6 +710,7 @@
               <label for="field-goods-desc">Description / Description :</label>
               <input
                 id="field-goods-desc"
+                name="seaGoodsDescription"
                 type="text"
                 [value]="seaGoodsDescription()"
                 (input)="seaGoodsDescription.set($any($event.target).value)"
@@ -619,6 +721,7 @@
               <label for="field-gross-weight">Poids brut total (kg) / Total Gross Weight (kg) :</label>
               <input
                 id="field-gross-weight"
+                name="seaGrossWeightKg"
                 type="number"
                 min="0"
                 step="any"
@@ -631,6 +734,7 @@
               <label for="field-total-volume">Volume total (m³) / Total Volume (m³) :</label>
               <input
                 id="field-total-volume"
+                name="seaTotalVolumeM3"
                 type="number"
                 min="0"
                 step="any"
@@ -643,6 +747,7 @@
               <label for="field-packages-count">Nombre de colis / Number of Packages :</label>
               <input
                 id="field-packages-count"
+                name="seaPackagesCount"
                 type="number"
                 min="1"
                 step="1"
@@ -655,6 +760,7 @@
               <label for="field-packaging-type">Type d'emballage / Packaging Type :</label>
               <input
                 id="field-packaging-type"
+                name="seaPackagingType"
                 type="text"
                 [value]="seaPackagingType()"
                 (input)="seaPackagingType.set($any($event.target).value)"
@@ -673,6 +779,7 @@
               <label for="field-pol">Port de chargement / Port of Loading :</label>
               <input
                 id="field-pol"
+                name="seaPortOfLoading"
                 type="text"
                 [value]="seaPortOfLoading()"
                 (input)="seaPortOfLoading.set($any($event.target).value)"
@@ -683,6 +790,7 @@
               <label for="field-pod">Port de déchargement / Port of Discharge :</label>
               <input
                 id="field-pod"
+                name="seaPortOfDischarge"
                 type="text"
                 [value]="seaPortOfDischarge()"
                 (input)="seaPortOfDischarge.set($any($event.target).value)"
@@ -693,6 +801,7 @@
               <label for="field-incoterm">Incoterm (EXW, FOB, CFR, DAP, CIF, etc.) :</label>
               <input
                 id="field-incoterm"
+                name="seaIncoterm"
                 type="text"
                 [value]="seaIncoterm()"
                 (input)="seaIncoterm.set($any($event.target).value)"
@@ -703,8 +812,10 @@
               <label for="field-inland">Transport intérieur requis ? / Need inland transport? :</label>
               <select
                 id="field-inland"
-                [value]="seaNeedInlandTransport() ? 'yes' : 'no'"
-                (change)="seaNeedInlandTransport.set($any($event.target).value === 'yes')">
+                name="seaNeedInlandTransport"
+                [value]="seaNeedInlandTransport() === null ? '' : seaNeedInlandTransport() ? 'yes' : 'no'"
+                (change)="seaNeedInlandTransport.set($any($event.target).value === '' ? null : $any($event.target).value === 'yes')">
+                <option value="">Choisir une option</option>
                 <option value="no">Non / No</option>
                 <option value="yes">Oui / Yes (Post/Pré-acheminement terrestre)</option>
               </select>
@@ -714,6 +825,7 @@
               <label for="field-etd">Date estimée de départ / Estimated Departure Date :</label>
               <input
                 id="field-etd"
+                name="seaEstimatedDepartureDate"
                 type="date"
                 [value]="seaEstimatedDepartureDate() ?? ''"
                 (input)="seaEstimatedDepartureDate.set($any($event.target).value || null)" />
@@ -723,6 +835,7 @@
               <label for="field-eta">Date estimée d'arrivée / Estimated Arrival Date :</label>
               <input
                 id="field-eta"
+                name="seaEstimatedArrivalDate"
                 type="date"
                 [value]="seaEstimatedArrivalDate() ?? ''"
                 (input)="seaEstimatedArrivalDate.set($any($event.target).value || null)" />
@@ -739,6 +852,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-service-fcl"
+                name="serviceFcl"
                 [checked]="serviceFcl()"
                 (change)="serviceFcl.set($any($event.target).checked)" />
               <span class="box-label"><strong>[ ] FCL</strong> / Full Container Load (Conteneur complet)</span>
@@ -747,6 +862,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-service-lcl"
+                name="serviceLcl"
                 [checked]="serviceLcl()"
                 (change)="serviceLcl.set($any($event.target).checked)" />
               <span class="box-label"><strong>[ ] LCL</strong> / Less than Container Load (Groupage maritime)</span>
@@ -755,6 +872,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-service-roro"
+                name="serviceRoro"
                 [checked]="serviceRoro()"
                 (change)="serviceRoro.set($any($event.target).checked)" />
               <span class="box-label"><strong>[ ] RO/RO</strong> (Véhicules / Vehicles)</span>
@@ -763,6 +882,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-service-breakbulk"
+                name="serviceBreakBulk"
                 [checked]="serviceBreakBulk()"
                 (change)="serviceBreakBulk.set($any($event.target).checked)" />
               <span class="box-label"><strong>[ ] Break Bulk</strong> (Conventionnel / Hors gabarit)</span>
@@ -771,6 +892,8 @@
             <div class="odoo-other-input-row col-span-2">
               <span class="box-label"><strong>[ ] Autre / Other :</strong></span>
               <input
+                id="quote-service-other"
+                name="serviceOther"
                 type="text"
                 [value]="serviceOther()"
                 (input)="serviceOther.set($any($event.target).value)"
@@ -788,6 +911,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-doc-commercial-invoice"
+                name="docCommercialInvoice"
                 [checked]="docCommercialInvoice()"
                 (change)="docCommercialInvoice.set($any($event.target).checked)" />
               <span class="box-label">[ ] Facture commerciale / Commercial Invoice</span>
@@ -796,6 +921,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-doc-packing-list"
+                name="docPackingList"
                 [checked]="docPackingList()"
                 (change)="docPackingList.set($any($event.target).checked)" />
               <span class="box-label">[ ] Liste de colisage / Packing List</span>
@@ -804,6 +931,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-doc-cert-origin"
+                name="docCertificateOfOrigin"
                 [checked]="docCertificateOfOrigin()"
                 (change)="docCertificateOfOrigin.set($any($event.target).checked)" />
               <span class="box-label">[ ] Certificat d'origine / Certificate of Origin</span>
@@ -812,6 +941,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-doc-msds"
+                name="docMsdsTechnicalSheet"
                 [checked]="docMsdsTechnicalSheet()"
                 (change)="docMsdsTechnicalSheet.set($any($event.target).checked)" />
               <span class="box-label">[ ] Fiche technique / MSDS</span>
@@ -820,6 +951,8 @@
             <div class="odoo-other-input-row col-span-2">
               <span class="box-label"><strong>[ ] Autre / Other :</strong></span>
               <input
+                id="quote-doc-other"
+                name="docOther"
                 type="text"
                 [value]="docOther()"
                 (input)="docOther.set($any($event.target).value)"
@@ -837,6 +970,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-addon-customs"
+                name="addonCustomsClearance"
                 [checked]="addonCustomsClearance()"
                 (change)="addonCustomsClearance.set($any($event.target).checked)" />
               <span class="box-label">[ ] Dédouanement / Customs Clearance</span>
@@ -845,6 +980,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-addon-insurance"
+                name="addonCargoInsurance"
                 [checked]="addonCargoInsurance()"
                 (change)="addonCargoInsurance.set($any($event.target).checked)" />
               <span class="box-label">[ ] Assurance transport / Cargo Insurance</span>
@@ -853,6 +990,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-addon-warehousing"
+                name="addonWarehousing"
                 [checked]="addonWarehousing()"
                 (change)="addonWarehousing.set($any($event.target).checked)" />
               <span class="box-label">[ ] Entreposage / Warehousing</span>
@@ -861,6 +1000,8 @@
             <label class="odoo-checkbox-pill">
               <input
                 type="checkbox"
+                id="quote-addon-port-handling"
+                name="addonPortHandling"
                 [checked]="addonPortHandling()"
                 (change)="addonPortHandling.set($any($event.target).checked)" />
               <span class="box-label">[ ] Manutention portuaire / Port Handling</span>
@@ -869,6 +1010,8 @@
             <label class="odoo-checkbox-pill col-span-2">
               <input
                 type="checkbox"
+                id="quote-addon-tracking"
+                name="addonTracking"
                 [checked]="addonTracking()"
                 (change)="addonTracking.set($any($event.target).checked)" />
               <span class="box-label">[ ] Suivi & traçabilité / Tracking</span>
@@ -894,6 +1037,8 @@
             <label class="field-label-sm">
               <span>Nouvelle colonne :</span>
               <input
+                id="quote-col-label-draft"
+                name="columnLabelDraft"
                 type="text"
                 [value]="columnLabelDraft()"
                 (input)="columnLabelDraft.set($any($event.target).value)"
@@ -901,7 +1046,11 @@
             </label>
             <label class="field-label-sm">
               <span>Type :</span>
-              <select [value]="columnTypeDraft()" (change)="columnTypeDraft.set($any($event.target).value)">
+              <select
+                id="quote-col-type-draft"
+                name="columnTypeDraft"
+                [value]="columnTypeDraft()"
+                (change)="columnTypeDraft.set($any($event.target).value)">
                 @for (columnType of columnTypes; track columnType) {
                   <option [value]="columnType">{{ columnTypeLabel(columnType) }}</option>
                 }
@@ -913,7 +1062,11 @@
             @if (totalColumnOptions().length > 1) {
               <label class="field-label-sm ml-auto">
                 <span>Colonne du total :</span>
-                <select [value]="totalColumnId()" (change)="totalColumnId.set($any($event.target).value)">
+                <select
+                  id="quote-total-col-id"
+                  name="totalColumnId"
+                  [value]="totalColumnId()"
+                  (change)="totalColumnId.set($any($event.target).value)">
                   @for (col of totalColumnOptions(); track col.id) {
                     <option [value]="col.id">{{ col.label }}</option>
                   }
@@ -948,9 +1101,17 @@
                     @for (column of columns(); track column.id) {
                       <td>
                         @if (column.type === 'checkbox') {
-                          <input type="checkbox" [checked]="cellValue(row, column) === true" [attr.aria-label]="column.label" (change)="updateCell(rowIndex, column, $event)" />
+                          <input
+                            type="checkbox"
+                            [id]="'quote-cell-chk-' + rowIndex + '-' + column.id"
+                            [name]="'quote-cell-chk-' + rowIndex + '-' + column.id"
+                            [checked]="cellValue(row, column) === true"
+                            [attr.aria-label]="column.label"
+                            (change)="updateCell(rowIndex, column, $event)" />
                         } @else {
                           <input
+                            [id]="'quote-cell-' + rowIndex + '-' + column.id"
+                            [name]="'quote-cell-' + rowIndex + '-' + column.id"
                             [type]="column.type === 'number' || column.type === 'amount' ? 'number' : column.type === 'date' ? 'date' : 'text'"
                             [step]="column.type === 'number' || column.type === 'amount' ? 'any' : null"
                             [min]="column.type === 'amount' ? 0 : null"
@@ -986,6 +1147,7 @@
               <label for="field-validity">Date de validité de l'offre / Valid Until :</label>
               <input
                 id="field-validity"
+                name="validUntil"
                 type="date"
                 [value]="validUntil()"
                 (input)="validUntil.set($any($event.target).value)" />
@@ -993,12 +1155,19 @@
 
             @if (canSaveTemplate() && !editingId()) {
               <div class="odoo-field">
-                <label class="checkbox-label-odoo">
-                  <input type="checkbox" [checked]="saveTemplate()" (change)="saveTemplate.set($any($event.target).checked)" />
+                <label class="checkbox-label-odoo" for="quote-save-template">
+                  <input
+                    type="checkbox"
+                    id="quote-save-template"
+                    name="saveTemplate"
+                    [checked]="saveTemplate()"
+                    (change)="saveTemplate.set($any($event.target).checked)" />
                   <span>Enregistrer la structure comme modèle partagé Transimex</span>
                 </label>
                 @if (saveTemplate()) {
                   <input
+                    id="quote-template-name"
+                    name="templateName"
                     type="text"
                     [value]="templateName()"
                     (input)="templateName.set($any($event.target).value)"
@@ -1025,6 +1194,16 @@
           <strong class="total-display">{{ formatAmount(draftTotal(), currency()) }}</strong>
         </div>
         <div class="modal-actions">
+          @if (editingId()) {
+            <button
+              type="button"
+              class="secondary-action inline-flex items-center gap-1.5"
+              (click)="exportCurrentQuotePdf()"
+              title="Télécharger cette cotation en PDF">
+              <mat-icon>picture_as_pdf</mat-icon>
+              <span>Télécharger PDF</span>
+            </button>
+          }
           <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">
             Annuler
           </button>

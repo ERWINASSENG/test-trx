@@ -1,5 +1,7 @@
 <main class="app-launcher" aria-label="Applications">
   <input
+    id="launcher-search-input"
+    name="launcher-search"
     class="launcher-search-accessible"
     type="search"
     autocomplete="off"
@@ -29,7 +31,7 @@
     </nav>
   } @else {
     <p class="launcher-empty" role="status">
-      Aucun menu ne correspond à « {{ searchQuery() }} ».
+      Vous n'avez aucune autorisation {{ searchQuery() }}.
     </p>
   }
 </main>

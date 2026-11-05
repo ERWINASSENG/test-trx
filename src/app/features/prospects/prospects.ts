@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { A11yModule } from '@angular/cdk/a11y';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,6 +21,7 @@ export type SortDirection = 'asc' | 'desc';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProspectsComponent {
+  public readonly embedded = input<boolean>(false);
   public readonly prospectService = inject(ProspectService);
   private readonly accessControl = inject(AccessControlService);
   private readonly route = inject(ActivatedRoute);
@@ -336,6 +337,11 @@ export class ProspectsComponent {
       ? values.assignedTo.trim()
       : null;
 
+    const editingId = this.editingId();
+    const existingProspect = editingId
+      ? this.prospectService.prospects().find((item) => item.id === editingId)
+      : undefined;
+
     const input: CreateProspectInput = {
       name: companyName || contactName || 'Prospect',
       companyName: companyName || null,
@@ -348,12 +354,11 @@ export class ProspectsComponent {
       phone: values.phone.trim() || null,
       email: values.email.trim().toLowerCase() || null,
       assignedTo,
-      status: 'new',
+      status: existingProspect?.status ?? 'new',
     };
 
     this.isSaving.set(true);
     this.formError.set(null);
-    const editingId = this.editingId();
     const result = editingId
       ? await this.prospectService.updateProspect(editingId, input)
       : await this.prospectService.createProspect(input);

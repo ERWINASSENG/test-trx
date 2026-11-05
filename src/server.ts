@@ -4,14 +4,11 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express, { type Request } from 'express';
+import express from 'express';
 import {join} from 'node:path';
 import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
-import jwt from 'jsonwebtoken';
-import { UpstashRateLimitStore } from './server/upstash-rate-limit.store';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
@@ -46,6 +43,7 @@ import {
   createQuoteTemplateHandler,
   deleteQuoteHandler,
   deleteQuoteTemplateHandler,
+  getQuoteTimingAnalyticsHandler,
   listQuoteAssigneesHandler,
   listQuoteProspectsHandler,
   listQuoteContactsHandler,
@@ -107,7 +105,7 @@ dotenv.config();
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+const angularApp = new AngularNodeAppEngine({ trustProxyHeaders: true });
 
 const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
   const value = process.env[name];
@@ -120,10 +118,6 @@ const readPositiveIntegerEnv = (name: string, defaultValue: number): number => {
   return parsed;
 };
 
-const createRateLimitStore = (prefix: string): UpstashRateLimitStore | undefined =>
-  process.env['UPSTASH_REDIS_REST_URL'] && process.env['UPSTASH_REDIS_REST_TOKEN']
-    ? new UpstashRateLimitStore(prefix)
-    : undefined;
 const slowApiRequestThresholdMs = readPositiveIntegerEnv('API_SLOW_REQUEST_LOG_MS', 1000);
 
 // Configuration du reverse proxy pour Cloud Run / Nginx (gestion sécurisée de l'en-tête X-Forwarded-For)
@@ -140,7 +134,12 @@ app.use(
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'", 'https:', 'wss:'],
-        frameAncestors: ["'self'", 'https://ai.studio', 'https://*.google.com', 'https://*.run.app'],
+        frameAncestors: [
+          "'self'",
+          'https://ai.studio',
+          'https://*.google.com',
+          ...(process.env['APP_URL'] ? [process.env['APP_URL']] : []),
+        ],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
@@ -188,124 +187,7 @@ app.use('/api', (req, res, next): void => {
  * ==============================================================================
  */
 
-/**
- * Extrait l'identifiant de l'utilisateur (`sub`) depuis un jeton JWT Supabase valide.
- * La signature HMAC-SHA256 est vérifiée avec SUPABASE_JWT_SECRET avant tout usage.
- * Permet d'isoler les quotas de requêtes par compte utilisateur plutôt que de
- * pénaliser l'ensemble des utilisateurs partageant une même adresse IP publique en production.
- */
-const extractAuthenticatedUserId = (req: express.Request): string | null => {
-  const jwtSecret = process.env['SUPABASE_JWT_SECRET'];
-  if (!jwtSecret) return null;
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || typeof authHeader !== 'string') return null;
-
-  const token = authHeader.startsWith('Bearer ')
-    ? authHeader.substring(7).trim()
-    : authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  if (!token) return null;
-
-  try {
-    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as Record<string, unknown>;
-
-    if (
-      typeof payload['sub'] === 'string' &&
-      payload['sub'].length > 0 &&
-      payload['role'] === 'authenticated'
-    ) {
-      return payload['sub'];
-    }
-  } catch {
-    // Signature invalide, jeton expiré ou malformé — pas d'erreur levée intentionnellement.
-    // Le limiteur de débit utilise alors l'IP comme clé de repli.
-    return null;
-  }
-
-  return null;
-};
-
-const apiRateLimitWindowMs = readPositiveIntegerEnv('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
-const apiRateLimitMax = readPositiveIntegerEnv('API_RATE_LIMIT_MAX', 200);
-const apiRateLimitAuthMax = readPositiveIntegerEnv('API_RATE_LIMIT_AUTH_MAX', 1200);
-const authSyncRateLimitMax = readPositiveIntegerEnv('AUTH_SYNC_RATE_LIMIT_MAX', 120);
-
-// 1. Limiteur global sur toutes les routes de l'API /api/* (discriminé par utilisateur connecté ou IP)
-const apiGlobalLimiter = rateLimit({
-  windowMs: apiRateLimitWindowMs,
-  limit: (req: Request) => (extractAuthenticatedUserId(req) ? apiRateLimitAuthMax : apiRateLimitMax),
-  keyGenerator: (req: Request) => {
-    const userId = extractAuthenticatedUserId(req);
-    return userId ? `usr:${userId}` : ipKeyGenerator(req.ip || '');
-  },
-  store: createRateLimitStore('transmex:api:global:'),
-  passOnStoreError: true,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: (req: Request) => ({
-    error: extractAuthenticatedUserId(req)
-      ? 'Quota de requêtes dépassé pour votre compte utilisateur. Veuillez patienter avant de réessayer.'
-      : 'Trop de requêtes envoyées depuis cette adresse IP. Veuillez patienter avant de réessayer.',
-    retryAfterMinutes: Math.ceil(apiRateLimitWindowMs / 60000),
-  }),
-});
-app.use('/api', apiGlobalLimiter);
-
-// 2. Limiteur sur les endpoints de configuration et de synchronisation d'authentification
-const authSyncLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: authSyncRateLimitMax,
-  keyGenerator: (req: Request) => ipKeyGenerator(req.ip || ''),
-  store: createRateLimitStore('transmex:api:auth:'),
-  passOnStoreError: true,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: {
-    error: 'Trop de requêtes sur les services d’authentification. Veuillez patienter quelques instants.',
-    retryAfterMinutes: 15,
-  },
-});
-app.use(['/api/auth/sync-role', '/api/supabase-config', '/api/config'], authSyncLimiter);
-
-// 3. Limiteur renforcé sur les opérations d'écriture et de mutation (POST, PUT, PATCH, DELETE)
-// Prévient l'inondation de la base de données, la création massive de comptes ou de transactions
-const mutationsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: readPositiveIntegerEnv('MUTATIONS_RATE_LIMIT_MAX', 150),
-  keyGenerator: (req: Request) => {
-    const userId = extractAuthenticatedUserId(req);
-    return userId ? `usr_mut:${userId}` : ipKeyGenerator(req.ip || '');
-  },
-  store: createRateLimitStore('transmex:api:mutations:'),
-  passOnStoreError: true,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  statusCode: 429,
-  message: {
-    error: 'Limite de modifications ou d’enregistrements atteinte pour cette période. Veuillez patienter avant de renouveler.',
-    retryAfterMinutes: 15,
-  },
-});
-app.use(
-  [
-    '/api/system/collaborators',
-    '/api/admin/users',
-    '/api/cahier/operations',
-    '/api/cashier/transactions',
-    '/api/system/operations',
-    '/api/prospects',
-  ],
-  (req, res, next): void => {
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-      mutationsLimiter(req, res, next);
-      return;
-    }
-    next();
-  }
-);
 
 app.get('/api/supabase-config', getSupabaseConfigHandler);
 app.get('/api/config', getSupabaseConfigHandler);
@@ -1055,7 +937,7 @@ const getCashierSummaryHandler = async (req: express.Request, res: express.Respo
 /**
  * Modification de statut en masse (PATCH /api/cahier/operations/status)
  */
-const updateOperationsStatusHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+export const updateOperationsStatusHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY manquante' });
@@ -1086,7 +968,7 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
 
     const { data: rowsToCheck, error: fetchErr } = await adminClient
       .from('cashier_transactions')
-      .select('id, created_by, employee_id, status')
+      .select('id, created_by, employee_id, status, date, piece_comptable, category, montant')
       .in('id', bodyIds);
 
     if (fetchErr || !rowsToCheck) {
@@ -1097,13 +979,25 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
       res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
       return;
     }
-    if (newStatus !== 'cancelled' && rowsToCheck.some((row) => row.status === 'cancelled')) {
-      res.status(409).json({ error: 'Une opération annulée ne peut pas être réactivée ou modifiée.' });
-      return;
+    const hasCancelledRows = rowsToCheck.some((row) => row.status === 'cancelled');
+    if (hasCancelledRows) {
+      if (newStatus === 'draft') {
+        if (userRole !== 'admin') {
+          res.status(403).json({ error: 'Seul un administrateur est autorisé à remettre en brouillon une opération annulée.' });
+          return;
+        }
+      } else if (newStatus !== 'cancelled') {
+        res.status(409).json({ error: 'Une opération annulée ne peut pas être modifiée directement sans être d’abord remise en brouillon par un administrateur.' });
+        return;
+      }
     }
 
-    // Contrôle d'appartenance pour les non-admins : interdiction de changer le statut des opérations créées par un tiers
-    if (userRole !== 'admin') {
+    // Contrôle d'habilitation et d'appartenance :
+    // - Les administrateurs et caissières autorisées (disposant de la permission cashier.status_update)
+    //   sont habilités à gérer le statut (comptabiliser, annuler, remettre en brouillon) des opérations de caisse.
+    // - Pour les autres utilisateurs non habilités à la gestion de caisse, la modification est restreinte à leurs propres écritures.
+    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere' || userRole === 'manager';
+    if (!isAuthorizedCashier) {
       if (!callerId) {
         res.status(403).json({ error: 'Utilisateur non identifié. Modification de statut refusée.' });
         return;
@@ -1129,12 +1023,76 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
       .select();
 
     if (updateErr) {
-      console.error('Erreur SQL mise à jour statut:', updateErr.message);
+      console.error('[CASHIER_STATUS_UPDATE] Erreur SQL mise à jour statut:', updateErr.message);
+      const isUniqueViolation = updateErr.code === '23505' || updateErr.message?.toLowerCase().includes('unique') || updateErr.message?.includes('duplicate key');
+      if (isUniqueViolation) {
+        const isPiece = updateErr.message?.includes('piece_comptable') || updateErr.message?.includes('piece');
+        res.status(409).json({
+          error: isPiece
+            ? `Erreur d'unicité : un numéro de pièce comptable est déjà utilisé dans la base de données.`
+            : `Doublon détecté : une transaction identique existe déjà en caisse.`,
+        });
+        return;
+      }
+      const isCheckViolation = updateErr.code === '23514' || updateErr.message?.toLowerCase().includes('check constraint');
+      if (isCheckViolation) {
+        res.status(400).json({
+          error: 'Impossible de comptabiliser : une ou plusieurs opérations ne respectent pas les contraintes comptables (montant ou dossier manquant).',
+        });
+        return;
+      }
       res.status(500).json({ error: 'Erreur lors de la mise à jour du statut des opérations.' });
       return;
     }
 
-    if (newStatus === 'cancelled') {
+    // Sécurisation et garantie d'attribution séquentielle immuable de la pièce comptable Odoo (CSH1/AAAA/NNNNN)
+    if (newStatus === 'posted' && updatedRows && updatedRows.length > 0) {
+      const rowsNeedingPiece = updatedRows.filter((r) => !r.piece_comptable || !String(r.piece_comptable).trim());
+      if (rowsNeedingPiece.length > 0) {
+        for (const row of rowsNeedingPiece) {
+          const rawDate = row.date || rowsToCheck.find((c) => c.id === row.id)?.date;
+          const year = normalizeDateToDay(rawDate as string)?.slice(0, 4) || new Date().getFullYear().toString();
+          const { data: maxPieceRows } = await adminClient
+            .from('cashier_transactions')
+            .select('piece_comptable')
+            .ilike('piece_comptable', `CSH1/${year}/%`);
+
+          let maxNum = 0;
+          for (const item of maxPieceRows || []) {
+            const match = String(item.piece_comptable || '').match(/^CSH1\/\d{4}\/(\d{5})$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+            }
+          }
+          const nextPiece = `CSH1/${year}/${String(maxNum + 1).padStart(5, '0')}`;
+          await adminClient
+            .from('cashier_transactions')
+            .update({ piece_comptable: nextPiece })
+            .eq('id', row.id);
+          row.piece_comptable = nextPiece;
+        }
+      }
+    }
+
+    // Journalisation d'audit obligatoire lors de la comptabilisation ou de l'annulation
+    if (newStatus === 'posted') {
+      await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
+        userId: callerId,
+        userEmail: authenticatedUser?.email,
+        userRole,
+        action: 'POST_OPERATION',
+        entityId: row.id,
+        details: {
+          piece_comptable: row.piece_comptable,
+          status: 'posted',
+          previous_status: 'draft',
+          montant: row.montant,
+          category: row.category,
+        },
+        ipAddress: req.ip || null,
+      })));
+    } else if (newStatus === 'cancelled') {
       await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
         userId: callerId,
         userEmail: authenticatedUser?.email,
@@ -1142,6 +1100,16 @@ const updateOperationsStatusHandler = async (req: express.Request, res: express.
         action: 'CANCEL_OPERATION',
         entityId: row.id,
         details: { piece_comptable: row.piece_comptable, status: 'cancelled' },
+        ipAddress: req.ip || null,
+      })));
+    } else if (newStatus === 'draft' && hasCancelledRows) {
+      await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
+        userId: callerId,
+        userEmail: authenticatedUser?.email,
+        userRole,
+        action: 'RESET_CANCELLED_OPERATION',
+        entityId: row.id,
+        details: { piece_comptable: row.piece_comptable, status: 'draft', previous_status: 'cancelled' },
         ipAddress: req.ip || null,
       })));
     }
@@ -1218,6 +1186,7 @@ app.patch('/api/journals/:journalId/entries/:id', requireAuth, requirePermission
 app.delete('/api/journals/:journalId/entries/:id', requireAuth, requirePermission('journal_entries.delete', resolveJournalOwnerContext), deleteJournalEntryHandler);
 
 // Module Cotations : l'API applique en plus les règles de propriété des commerciaux.
+app.get('/api/quotes/timing-analytics', requireAuth, requirePermission('quotes.timing.read'), getQuoteTimingAnalyticsHandler);
 app.get('/api/quotes/assignees', requireAuth, requirePermission('quotes.assign'), listQuoteAssigneesHandler);
 app.get('/api/quotes/prospects', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteProspectsHandler);
 app.get('/api/quotes/contacts', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuoteContactsHandler);
@@ -1313,6 +1282,17 @@ app.use(
     redirect: false,
   }),
 );
+
+// Garde-fou pour les ressources statiques introuvables (.js, .css, .ico, etc.) :
+// Évite qu'Angular SSR ne serve une page HTML 200 à la place d'un chunk manquant,
+// ce qui provoquerait l'erreur "TypeError: Failed to fetch dynamically imported module".
+app.use((req, res, next) => {
+  if (/\.(?:js|mjs|css|map|ico|png|jpg|jpeg|svg|woff2?|ttf|eot)$/i.test(req.path)) {
+    res.status(404).type('text/plain').send('Asset introuvable');
+    return;
+  }
+  next();
+});
 
 /**
  * Traite les requêtes de rendu Angular SSR :

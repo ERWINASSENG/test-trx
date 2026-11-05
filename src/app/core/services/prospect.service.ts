@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
 import { CreateProspectInput, Prospect, ProspectAssignee, ProspectStatus, UpdateProspectInput } from '../models/prospect.model';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface ProspectPageRequest {
   limit?: number;
@@ -108,23 +109,59 @@ export class ProspectService {
 
     this._isLoading.set(true);
     try {
-      const response = await fetch(`/api/prospects${path}`, {
+      const sendRequest = (accessToken: string) => fetch(`/api/prospects${path}`, {
         method,
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+
+      let response = await sendRequest(token);
+      if (response.status === 401) {
+        const refresh = await this.authService.refreshAccessTokenAfterUnauthorized();
+        if (refresh.status === 'refreshed') {
+          response = await sendRequest(refresh.accessToken);
+        } else if (refresh.status === 'unavailable') {
+          return {
+            success: false,
+            error: 'La vérification de session est temporairement indisponible. Réessayez.',
+          };
+        }
+        if (response.status === 401) {
+          this.authService.handleUnauthorizedSession();
+          return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
+        }
+      }
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
-      if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur Prospects est injoignable.' };
+      if (!response.ok) {
+        const action = method === 'GET'
+          ? (path === '/assignees' ? 'charger la liste des responsables' : 'charger les prospects')
+          : method === 'POST'
+            ? 'créer le prospect'
+            : method === 'PATCH'
+              ? 'modifier le prospect'
+              : 'supprimer le prospect';
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
+      }
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service Contacts a renvoyé une réponse invalide.' };
+      }
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service Contacts:', requestError);
+      const message = requestError instanceof TypeError
+        ? 'Connexion au service Contacts impossible. Vérifiez votre connexion puis réessayez.'
+        : 'Impossible de traiter la demande auprès du service Contacts. Réessayez.';
+      return { success: false, error: message };
     } finally {
       this._isLoading.set(false);
     }

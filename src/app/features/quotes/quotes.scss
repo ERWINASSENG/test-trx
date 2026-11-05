@@ -1072,31 +1072,61 @@ textarea:focus {
   display: flex;
   align-items: center;
 }
-.quotes-control-start { gap: 10px; }
-.quotes-breadcrumb { display: flex; flex-direction: column; gap: 2px; line-height: 1.2; }
-.quotes-breadcrumb span { color: var(--quote-accent); font-size: 12px; font-weight: 700; }
+.quotes-control-start {
+  flex: 0 1 auto;
+  gap: 8px;
+}
+.quotes-breadcrumb {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.quotes-breadcrumb h1 {
+  margin: 0;
+  color: var(--quote-text);
+  font-size: 16px;
+  font-weight: 700;
+}
 .quotes-breadcrumb small { color: var(--quote-muted); font-size: 11px; }
-.quotes-control-center { width: 100%; gap: 8px; }
+.quotes-control-center { width: 100%; min-width: 0; gap: 8px; }
 .quotes-search {
   display: flex;
   width: 100%;
   min-width: 60px;
+  min-height: 32px;
   align-items: center;
   gap: 8px;
   padding: 4px 10px;
   border: 1px solid var(--quote-border);
   border-radius: 4px;
   background: var(--quote-surface);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.quotes-search:focus-within {
+  border-color: var(--quote-focus);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--quote-focus) 20%, transparent);
 }
 .quotes-search input {
+  width: 100%;
   min-height: 24px;
   padding: 2px 0;
   border: 0;
   outline: none;
   background: transparent;
 }
-.quotes-control-center .quotes-status-filter { flex: 0 0 150px; width: 150px; min-height: 32px; padding: 4px 8px; }
-.quotes-control-end { gap: 10px; white-space: nowrap; }
+.quotes-control-center .quotes-status-filter {
+  flex: 0 0 150px;
+  width: 150px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--quote-border);
+  border-radius: 4px;
+  background: var(--quote-surface);
+  color: var(--quote-text);
+}
+.quotes-control-end { flex: 0 0 auto; gap: 10px; white-space: nowrap; }
 .quotes-view-switch {
   display: inline-flex;
   gap: 2px;
@@ -1107,8 +1137,8 @@ textarea:focus {
 }
 .quotes-view-switch button {
   display: grid;
-  width: 30px;
-  height: 28px;
+  width: 32px;
+  height: 30px;
   place-items: center;
   padding: 0;
   border: 0;
@@ -1116,6 +1146,12 @@ textarea:focus {
   color: var(--quote-muted);
   background: transparent;
   cursor: pointer;
+}
+.quotes-view-switch button:focus-visible,
+.quotes-pagination button:focus-visible,
+.quotes-control-center .quotes-status-filter:focus-visible {
+  outline: 2px solid var(--quote-focus);
+  outline-offset: 2px;
 }
 .quotes-view-switch button.active {
   color: var(--quote-accent);

@@ -6,11 +6,14 @@ import {
   QuoteRow,
   QuoteStatus,
   QuoteTemplate,
+  QuoteTimingAnalyticsResponse,
+  QuoteTimingFilter,
   SalesQuote,
   SeaFreightDetails,
 } from '../models/quote.model';
 import { Prospect } from '../models/prospect.model';
 import { AuthService } from './auth.service';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface QuoteInput {
   prospectId: string;
@@ -46,6 +49,9 @@ export class QuoteService {
   private readonly _templates = signal<QuoteTemplate[]>([]);
   private readonly _isLoading = signal(false);
   private readonly _error = signal<string | null>(null);
+  private readonly _timingAnalytics = signal<QuoteTimingAnalyticsResponse | null>(null);
+  private readonly _isTimingLoading = signal(false);
+  private readonly _timingError = signal<string | null>(null);
 
   public readonly quotes = computed(() => this._quotes());
   public readonly prospects = computed(() => this._prospects());
@@ -54,12 +60,46 @@ export class QuoteService {
   public readonly templates = computed(() => this._templates());
   public readonly isLoading = computed(() => this._isLoading());
   public readonly error = computed(() => this._error());
+  public readonly timingAnalytics = computed(() => this._timingAnalytics());
+  public readonly isTimingLoading = computed(() => this._isTimingLoading());
+  public readonly timingError = computed(() => this._timingError());
 
   constructor() {
     effect(() => {
       this.authService.currentUser();
       this.resetForAccountChange();
     });
+  }
+
+  public async loadTimingAnalytics(filter?: Partial<QuoteTimingFilter>): Promise<boolean> {
+    this.resetForAccountChange();
+    this._isTimingLoading.set(true);
+    this._timingError.set(null);
+
+    const query = new URLSearchParams();
+    if (filter?.period) query.set('period', filter.period);
+    if (filter?.date) query.set('date', filter.date);
+    if (filter?.repId && filter.repId !== 'all') query.set('repId', filter.repId);
+
+    const result = await this.request<QuoteTimingAnalyticsResponse>(
+      `/api/quotes/timing-analytics${query.size ? `?${query.toString()}` : ''}`,
+      'GET',
+      undefined,
+      false
+    );
+
+    this._isTimingLoading.set(false);
+
+    if (!this.isCurrentDataUser()) return false;
+    if (!result.success || !result.data) {
+      this._timingAnalytics.set(null);
+      this._timingError.set(result.error || 'Impossible de charger les métriques des cotations.');
+      return false;
+    }
+
+    this._timingAnalytics.set(result.data);
+    this._timingError.set(null);
+    return true;
   }
 
   public async loadQuotes(status = ''): Promise<boolean> {
@@ -286,6 +326,22 @@ export class QuoteService {
       }
     }
 
+    const action = method === 'GET'
+      ? path.endsWith('/prospects')
+        ? 'charger les clients des cotations'
+        : path.endsWith('/assignees')
+          ? 'charger les commerciaux'
+          : path.includes('/contacts?')
+            ? 'charger les contacts du client'
+            : path.endsWith('/templates')
+              ? 'charger les modèles de cotation'
+              : 'charger les cotations'
+      : method === 'POST'
+        ? 'créer la cotation'
+        : method === 'PATCH'
+          ? 'modifier la cotation'
+          : 'supprimer la cotation';
+
     if (showLoading) this._isLoading.set(true);
     try {
       const response = await fetch(path, {
@@ -297,16 +353,28 @@ export class QuoteService {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
-      if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
+      if (!response.ok) {
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
+      }
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service Cotations a renvoyé une réponse invalide.' };
+      }
       if (method === 'GET') this.getCache.set(cacheKey, { cachedAt: Date.now(), data: payload });
       else this.getCache.clear();
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur Cotations est injoignable.' };
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service Cotations:', requestError);
+      const message = requestError instanceof TypeError
+        ? `Connexion au service Cotations impossible pour ${action}. Vérifiez votre connexion puis réessayez.`
+        : `Impossible de traiter la demande pour ${action}. Réessayez.`;
+      return { success: false, error: message };
     } finally {
       if (showLoading) this._isLoading.set(false);
     }
@@ -345,6 +413,10 @@ export class QuoteService {
         : row['sea_freight'] && typeof row['sea_freight'] === 'object'
           ? row['sea_freight'] as import('../models/quote.model').SeaFreightDetails
           : undefined,
+      sentAt: typeof row['sentAt'] === 'string' ? row['sentAt']
+        : typeof row['sent_at'] === 'string' ? row['sent_at'] : null,
+      respondedAt: typeof row['respondedAt'] === 'string' ? row['respondedAt']
+        : typeof row['responded_at'] === 'string' ? row['responded_at'] : null,
       createdAt: String(row['createdAt'] ?? row['created_at'] ?? ''),
       updatedAt: String(row['updatedAt'] ?? row['updated_at'] ?? ''),
     };

@@ -1,4 +1,8 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { SupabaseService } from './supabase.service';
+import type { QuoteStatus } from '../models/quote.model';
 import {
   CrmActivity,
   CrmCampaign,
@@ -10,8 +14,11 @@ import {
   CrmOpportunityStage,
   CrmActivityInput,
   CrmOverview,
+  generateDefaultDossierNumber,
+  generateDefaultDossierDescription,
 } from '../models/crm.model';
 import { AuthService } from './auth.service';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface CrmResult<T> {
   success: boolean;
@@ -19,9 +26,21 @@ export interface CrmResult<T> {
   error?: string;
 }
 
+export type UpdateOpportunityInput = Partial<CrmOpportunityInput> & {
+  stage?: CrmOpportunityStage;
+  wonReason?: 'accepted_quote' | 'signed_contract' | null;
+  contractReference?: string | null;
+  assignedTo?: string | null;
+};
+
 @Injectable({ providedIn: 'root' })
 export class CrmService {
   private readonly authService = inject(AuthService);
+  private readonly supabaseService = inject(SupabaseService);
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly destroyRef = inject(DestroyRef);
+  private crmRealtimeChannel: RealtimeChannel | null = null;
+  private refreshTimeout: ReturnType<typeof setTimeout> | null = null;
   private dataUserId: string | null | undefined;
   private readonly _clients = signal<CrmClient[]>([]);
   private readonly _contacts = signal<CrmContact[]>([]);
@@ -43,9 +62,59 @@ export class CrmService {
 
   constructor() {
     effect(() => {
-      this.authService.currentUser();
+      const user = this.authService.currentUser();
       this.resetForAccountChange();
+      if (user && isPlatformBrowser(this.platformId)) {
+        this.setupRealtime();
+      } else {
+        this.teardownRealtime();
+      }
     });
+
+    this.destroyRef.onDestroy(() => {
+      this.teardownRealtime();
+    });
+  }
+
+  public setupRealtime(): void {
+    if (!isPlatformBrowser(this.platformId) || this.crmRealtimeChannel) return;
+    const client = this.supabaseService.supabase;
+    if (!client) return;
+    try {
+      this.crmRealtimeChannel = client
+        .channel('crm:sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_opportunities' }, () => {
+          this.scheduleDebouncedReload();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_quotes' }, () => {
+          this.scheduleDebouncedReload();
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime CRM indisponible:', err);
+    }
+  }
+
+  public teardownRealtime(): void {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
+    }
+    if (this.crmRealtimeChannel) {
+      const client = this.supabaseService.supabase;
+      if (client) void client.removeChannel(this.crmRealtimeChannel);
+      this.crmRealtimeChannel = null;
+    }
+  }
+
+  private scheduleDebouncedReload(): void {
+    if (this.refreshTimeout) clearTimeout(this.refreshTimeout);
+    this.refreshTimeout = setTimeout(() => {
+      if (this.authService.currentUser() && !this._isLoading()) {
+        void this.load();
+      }
+    }, 400);
+
   }
 
   public async load(): Promise<boolean> {
@@ -63,7 +132,11 @@ export class CrmService {
       return false;
     }
     const payload = result.data;
-    this._clients.set(Array.isArray(payload.clients) ? payload.clients : []);
+    this._clients.set(
+      Array.isArray(payload.clients)
+        ? payload.clients.map((client) => this.mapClient(client as unknown as Record<string, unknown>))
+        : []
+    );
     this._contacts.set(Array.isArray(payload.contacts) ? payload.contacts : []);
     this._opportunities.set(Array.isArray(payload.opportunities) ? payload.opportunities : []);
     this._activities.set(Array.isArray(payload.activities) ? payload.activities : []);
@@ -106,13 +179,75 @@ export class CrmService {
       : { success: false, error: 'L’opportunité a été créée, mais son actualisation a échoué.' };
   }
 
+  /**
+   * Met à jour l'étape d'une opportunité de façon optimiste (immédiate dans l'UI style Trello/Odoo)
+   * avec rollback automatique si la requête serveur échoue.
+   */
+  public async updateOpportunityStageOptimistic(
+    id: string,
+    newStage: CrmOpportunityStage
+  ): Promise<CrmResult<CrmOpportunity>> {
+    const previous = this._opportunities().find((item) => item.id === id);
+    if (!previous) return { success: false, error: 'Opportunité introuvable.' };
+    const previousStage = previous.stage;
+    const previousQuoteStatus = previous.quoteStatus;
+
+    let optimisticQuoteStatus = previous.quoteStatus;
+    if (newStage === 'quote_sent') {
+      optimisticQuoteStatus = 'sent';
+    } else if (newStage === 'negotiation') {
+      if (previous.quoteStatus === 'draft') optimisticQuoteStatus = 'sent';
+    } else if (newStage === 'won') {
+      optimisticQuoteStatus = 'accepted';
+    } else if (newStage === 'lost') {
+      optimisticQuoteStatus = 'rejected';
+    } else if (newStage === 'quote_preparation') {
+      if (previous.quoteNumber) optimisticQuoteStatus = 'draft';
+    }
+
+    // 1. Mise à jour locale immédiate dans le signal pour supprimer tout temps d'attente visuel
+    this._opportunities.update((items) =>
+      items.map((item) => (item.id === id ? { ...item, stage: newStage, quoteStatus: optimisticQuoteStatus } : item))
+    );
+
+    // 2. Persistance asynchrone sur le serveur
+    const result = await this.mutate<{ opportunity: Record<string, unknown> }>(
+      `/opportunities/${encodeURIComponent(id)}`,
+      'PATCH',
+      { stage: newStage }
+    );
+
+    // 3. Rollback en cas d'erreur réseau ou de rejet serveur
+    if (!result.success) {
+      this._opportunities.update((items) =>
+        items.map((item) => (item.id === id ? { ...item, stage: previousStage, quoteStatus: previousQuoteStatus } : item))
+      );
+      return { success: false, error: result.error };
+    }
+
+    if (result.data?.opportunity) {
+      const serverOpp = result.data.opportunity;
+      this._opportunities.update((items) =>
+        items.map((item) => {
+          if (item.id !== id) return item;
+          return {
+            ...item,
+            stage: (serverOpp['stage'] as CrmOpportunityStage) || newStage,
+            quoteStatus: (serverOpp['quoteStatus'] as QuoteStatus) ?? item.quoteStatus,
+            quoteNumber: (serverOpp['quoteNumber'] as string) ?? item.quoteNumber,
+            quoteId: (serverOpp['quoteId'] as string) ?? item.quoteId,
+          };
+        })
+      );
+    }
+
+    const updated = this._opportunities().find((item) => item.id === id);
+    return updated ? { success: true, data: updated } : { success: true };
+  }
+
   public async updateOpportunity(
     id: string,
-    input: {
-      stage?: CrmOpportunityStage;
-      wonReason?: 'signed_contract' | null;
-      contractReference?: string | null;
-    }
+    input: UpdateOpportunityInput
   ): Promise<CrmResult<CrmOpportunity>> {
     const result = await this.mutate<{ opportunity: Record<string, unknown> }>(
       `/opportunities/${encodeURIComponent(id)}`,
@@ -204,6 +339,35 @@ export class CrmService {
       : { success: false, error: 'Le dossier a été créé, mais son actualisation a échoué.' };
   }
 
+  /**
+   * Génère automatiquement un dossier d'exploitation lié à une opportunité gagnée
+   */
+  public async autoGenerateDossier(opportunity: CrmOpportunity): Promise<CrmResult<{ id: string; no_dossier: string }>> {
+    const noDossier = generateDefaultDossierNumber();
+    const description = generateDefaultDossierDescription(opportunity);
+    return this.createDossier(opportunity.id, { noDossier, description });
+  }
+
+  public getOpportunityById(id: string): CrmOpportunity | null {
+    return this._opportunities().find((item) => item.id === id) || null;
+  }
+
+  public getClientById(id: string): CrmClient | null {
+    return this._clients().find((item) => item.id === id) || null;
+  }
+
+  public getActivitiesByOpportunity(opportunityId: string): CrmActivity[] {
+    return this._activities().filter((item) => item.opportunityId === opportunityId);
+  }
+
+  public getActivitiesByClient(clientId: string): CrmActivity[] {
+    return this._activities().filter((item) => item.prospectId === clientId);
+  }
+
+  public getOpportunitiesByClient(clientId: string): CrmOpportunity[] {
+    return this._opportunities().filter((item) => item.prospectId === clientId);
+  }
+
   private async mutate<T>(path: string, method: string, body: unknown): Promise<CrmResult<T>> {
     return this.request<T>(path, method, body);
   }
@@ -239,6 +403,21 @@ export class CrmService {
       this.authService.handleUnauthorizedSession();
       return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
     }
+    const action = method === 'GET'
+      ? 'charger les données CRM'
+      : path.includes('/prepare')
+        ? 'préparer l’audience de la campagne'
+        : path.endsWith('/dossier')
+          ? 'créer le dossier depuis le CRM'
+          : path.includes('/contacts')
+            ? 'créer le contact'
+            : path.includes('/opportunities')
+              ? method === 'POST' ? 'créer l’opportunité' : 'modifier l’opportunité'
+              : path.includes('/activities')
+                ? method === 'POST' ? 'créer la tâche' : 'modifier la tâche'
+                : path.includes('/campaigns')
+                  ? 'créer la campagne'
+                  : 'enregistrer le client';
     if (showLoading) this._isLoading.set(true);
     try {
       const response = await fetch(`/api/crm${path}`, {
@@ -250,20 +429,64 @@ export class CrmService {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+  
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
-      if (!response.ok) return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur CRM Commercial est injoignable.' };
+      if (!response.ok) {
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
+      }
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service CRM a renvoyé une réponse invalide.' };
+      }
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service CRM:', requestError);
+      const message = requestError instanceof TypeError
+        ? `Connexion au service CRM impossible pour ${action}. Vérifiez votre connexion puis réessayez.`
+        : `Impossible de traiter la demande CRM pour ${action}. Réessayez.`;
+      return { success: false, error: message };
     } finally {
       if (showLoading) this._isLoading.set(false);
     }
   }
 
   private mapClient(row: Record<string, unknown>): CrmClient {
+    const rawNotes = String(row['notes'] ?? '');
+    let country: string | null = typeof row['country'] === 'string' && row['country'].trim()
+      ? row['country'].trim()
+      : null;
+    let contactRole: string | null = typeof row['contactRole'] === 'string' && row['contactRole'].trim()
+      ? row['contactRole'].trim()
+      : typeof row['contact_role'] === 'string' && row['contact_role'].trim()
+        ? row['contact_role'].trim()
+        : null;
+
+    if (!country && rawNotes) {
+      if (rawNotes.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(rawNotes) as { country?: string; contactRole?: string };
+          if (typeof parsed.country === 'string' && parsed.country.trim()) country = parsed.country.trim();
+          if (typeof parsed.contactRole === 'string' && parsed.contactRole.trim() && !contactRole) {
+            contactRole = parsed.contactRole.trim();
+          }
+        } catch {
+          country = rawNotes.trim();
+        }
+      } else {
+        country = rawNotes.trim();
+      }
+    }
+
+    const source = typeof row['source'] === 'string' && row['source'].trim() ? row['source'].trim() : null;
+    const sector = typeof row['sector'] === 'string' && row['sector'].trim()
+      ? row['sector'].trim()
+      : source;
+
     return {
       id: String(row['id'] ?? ''),
       name: String(row['name'] ?? ''),
@@ -271,12 +494,11 @@ export class CrmService {
         : typeof row['company_name'] === 'string' ? row['company_name'] : null,
       contactName: typeof row['contactName'] === 'string' ? row['contactName']
         : typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
-      contactRole: typeof row['contactRole'] === 'string' ? row['contactRole']
-        : typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
+      contactRole,
       email: typeof row['email'] === 'string' ? row['email'] : null,
       phone: typeof row['phone'] === 'string' ? row['phone'] : null,
-      country: typeof row['country'] === 'string' ? row['country'] : null,
-      sector: typeof row['sector'] === 'string' ? row['sector'] : null,
+      country,
+      sector,
       status: String(row['status'] ?? 'new'),
       assignedTo: typeof row['assignedTo'] === 'string' ? row['assignedTo']
         : typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,

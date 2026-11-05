@@ -4,12 +4,25 @@ import { PROSPECT_STATUSES, ProspectStatus } from '../app/core/models/prospect.m
 import { hasPermission } from './access-control';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
+import { generateOpportunityTitle } from './prospects';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEARCH_PATTERN = /[^a-zA-Z0-9@.+\-\s]/g;
 const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'task'] as const;
 const ACTIVITY_STATUSES = ['pending', 'completed', 'cancelled'] as const;
+
+export const formatOpportunityTitle = (rawTitle: string, companyName?: string | null): string => {
+  const trimmed = rawTitle.trim();
+  if (/^prise en charge\s*[-—–]\s*/i.test(trimmed)) {
+    const after = trimmed.replace(/^prise en charge\s*[-—–]\s*/i, '').trim();
+    if (!after || (companyName && after.toLowerCase() === companyName.trim().toLowerCase())) {
+      return 'Opportunité commerciale';
+    }
+    return after;
+  }
+  return trimmed || 'Opportunité commerciale';
+};
 
 type JsonRecord = Record<string, unknown>;
 
@@ -108,7 +121,7 @@ export const validateCrmClientPayload = (value: unknown): { data?: JsonRecord; e
   if (companyName.length < 2 || companyName.length > 200) {
     return { error: 'Le nom de la société doit comporter entre 2 et 200 caractères.' };
   }
-  const data: JsonRecord = { name: companyName, company_name: companyName, status: 'new' };
+  const data: JsonRecord = { name: companyName, company_name: companyName, status: 'converted' };
   const fields: [string, string, number][] = [
     ['contactName', 'contact_name', 200],
     ['contactRole', 'contact_role', 100],
@@ -361,19 +374,41 @@ export const validateCrmCampaignPayload = (value: unknown): { data?: JsonRecord;
   return { data };
 };
 
-const clientFromRow = (row: JsonRecord) => ({
-  id: String(row['id']),
-  name: String(row['name'] || ''),
-  companyName: typeof row['company_name'] === 'string' ? row['company_name'] : null,
-  contactName: typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
-  contactRole: typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
-  email: typeof row['email'] === 'string' ? row['email'] : null,
-  phone: typeof row['phone'] === 'string' ? row['phone'] : null,
-  country: typeof row['country'] === 'string' ? row['country'] : null,
-  sector: typeof row['sector'] === 'string' ? row['sector'] : null,
-  status: String(row['status'] || 'new'),
-  assignedTo: typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
-});
+const clientFromRow = (row: JsonRecord) => {
+  const rawNotes = String(row['notes'] ?? '');
+  let country = typeof row['country'] === 'string' && row['country'].trim() ? row['country'].trim() : null;
+  if (!country && rawNotes) {
+    if (rawNotes.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawNotes) as { country?: string };
+        if (typeof parsed.country === 'string' && parsed.country.trim()) country = parsed.country.trim();
+      } catch {
+        country = rawNotes.trim();
+      }
+    } else {
+      country = rawNotes.trim();
+    }
+  }
+
+  const source = typeof row['source'] === 'string' && row['source'].trim() ? row['source'].trim() : null;
+  const sector = typeof row['sector'] === 'string' && row['sector'].trim() ? row['sector'].trim() : source;
+
+  return {
+    id: String(row['id']),
+    name: String(row['name'] || ''),
+    companyName: typeof row['company_name'] === 'string' ? row['company_name'] : null,
+    contactName: typeof row['contact_name'] === 'string' ? row['contact_name'] : null,
+    contactRole: typeof row['contact_role'] === 'string' ? row['contact_role'] : null,
+    email: typeof row['email'] === 'string' ? row['email'] : null,
+    phone: typeof row['phone'] === 'string' ? row['phone'] : null,
+    country,
+    sector,
+    notes: rawNotes || null,
+    source,
+    status: String(row['status'] || 'new'),
+    assignedTo: typeof row['assigned_to'] === 'string' ? row['assigned_to'] : null,
+  };
+};
 
 const contactFromRow = (row: JsonRecord) => ({
   id: String(row['id']),
@@ -411,12 +446,18 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     return;
   }
   const teamRead = await canSeeTeam(actor.id);
-  let opportunitiesQuery = admin.from('sales_opportunities').select('*').order('updated_at', { ascending: false }).limit(500);
+  let opportunitiesQuery = admin.from('sales_opportunities')
+    .select('id, prospect_id, assigned_to, title, stage, transport_mode, direction, origin, destination, goods_description, weight_kg, volume_m3, incoterm, estimated_value, currency, expected_close_date, won_reason, contract_reference, notes, updated_at')
+    .order('updated_at', { ascending: false }).limit(500);
   let clientsQuery = admin.from('prospects')
-    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, status, assigned_to')
+    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, notes, source, status, assigned_to')
     .order('company_name').limit(500);
-  let activitiesQuery = admin.from('sales_activities').select('*').order('due_at', { ascending: true }).limit(500);
-  let campaignsQuery = admin.from('sales_campaigns').select('*').order('starts_at', { ascending: false }).limit(200);
+  let activitiesQuery = admin.from('sales_activities')
+    .select('id, prospect_id, opportunity_id, contact_id, assigned_to, activity_type, title, due_at, status, notes')
+    .order('due_at', { ascending: true }).limit(500);
+  let campaignsQuery = admin.from('sales_campaigns')
+    .select('id, name, status, starts_at, ends_at, filters, notes')
+    .order('starts_at', { ascending: false }).limit(200);
   if (!teamRead) {
     opportunitiesQuery = opportunitiesQuery.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
     clientsQuery = clientsQuery.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
@@ -449,7 +490,39 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
     res.status(400).json({ error: 'Le filtre de l’étape commerciale est invalide.' });
     return;
   }
-  const filteredOpportunityRows = (opportunitiesResult.data || []).filter((row) => {
+  const clientRowsData = clientsResult.data || [];
+  const clientIdSet = new Set(clientRowsData.map((row) => String(row.id)));
+  const allOpportunityRows = [...(opportunitiesResult.data || [])];
+
+  // Auto-guérison : s'assurer que chaque prospect assigné dispose au moins d'une opportunité
+  // afin d'être visible dans le pipeline CRM du commercial assigné.
+  const existingOppProspectIds = new Set(allOpportunityRows.map((row) => String(row.prospect_id)));
+  const unlinkedAssignedClients = clientRowsData.filter((client) =>
+    typeof client.assigned_to === 'string' && client.assigned_to && !existingOppProspectIds.has(String(client.id))
+  );
+
+  if (unlinkedAssignedClients.length > 0) {
+    const oppsToInsert = unlinkedAssignedClients.map((client) => ({
+      prospect_id: client.id,
+      assigned_to: client.assigned_to,
+      created_by: client.assigned_to,
+      title: generateOpportunityTitle(client),
+      stage: 'new',
+      estimated_value: 0,
+      currency: 'XAF',
+    }));
+
+    const { data: insertedOpps, error: insertError } = await admin
+      .from('sales_opportunities')
+      .insert(oppsToInsert)
+      .select('id, prospect_id, assigned_to, title, stage, transport_mode, direction, origin, destination, goods_description, weight_kg, volume_m3, incoterm, estimated_value, currency, expected_close_date, won_reason, contract_reference, notes, updated_at');
+
+    if (!insertError && insertedOpps) {
+      allOpportunityRows.push(...(insertedOpps as typeof allOpportunityRows));
+    }
+  }
+
+  const filteredOpportunityRows = allOpportunityRows.filter((row) => {
     if (typeof filterStage === 'string' && filterStage && row.stage !== filterStage) return false;
     if (!rawSearch) return true;
     return [row.title, row.origin, row.destination, row.goods_description, row.incoterm]
@@ -457,8 +530,6 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   });
   // Pas de second aller-retour DB : on réutilise directement clientsResult.data.
   // Les opportunités et activités liées à des prospects hors portée de l'acteur sont filtrées en JS.
-  const clientRowsData = clientsResult.data || [];
-  const clientIdSet = new Set(clientRowsData.map((row) => String(row.id)));
   const visibleOpportunityRows = filteredOpportunityRows.filter((row) =>
     clientIdSet.has(String(row.prospect_id))
   );
@@ -470,7 +541,11 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
   const clientById = new Map(clients.map((client) => [client.id, client]));
   const [contactsResult, dossierResult, quoteResult, profilesResult] = await Promise.all([
     clientIds.length
-      ? admin.from('prospect_contacts').select('*').in('prospect_id', clientIds).order('is_primary', { ascending: false }).order('full_name')
+      ? admin.from('prospect_contacts')
+          .select('id, prospect_id, full_name, job_title, email, phone, is_primary')
+          .in('prospect_id', clientIds)
+          .order('is_primary', { ascending: false })
+          .order('full_name')
       : Promise.resolve({ data: [], error: null }),
     visibleOpportunityRows.length
       ? admin.from('dossiers').select('id, opportunity_id, no_dossier').in('opportunity_id', visibleOpportunityRows.map((row) => String(row.id)))
@@ -525,7 +600,7 @@ export const getCrmOverviewHandler = async (req: express.Request, res: express.R
       prospectId,
       assignedTo: typeof row.assigned_to === 'string' ? row.assigned_to : null,
       assignedToName: typeof row.assigned_to === 'string' ? profileNames.get(row.assigned_to) || '' : '',
-      title: String(row.title),
+      title: formatOpportunityTitle(String(row.title), client.companyName || client.name),
       stage: String(row.stage),
       transportMode: typeof row.transport_mode === 'string' ? row.transport_mode : null,
       direction: typeof row.direction === 'string' ? row.direction : null,
@@ -662,7 +737,7 @@ export const listCrmClientsHandler = async (req: express.Request, res: express.R
     return;
   }
   let query = admin.from('prospects')
-    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, status, assigned_to', { count: 'exact' })
+    .select('id, name, company_name, contact_name, contact_role, email, phone, country, sector, notes, source, status, assigned_to', { count: 'exact' })
     .order('updated_at', { ascending: false }).range(offset, offset + limit - 1);
   const teamRead = await canSeeTeam(actor.id);
   if (status) query = query.eq('status', status);
@@ -906,7 +981,58 @@ export const updateCrmOpportunityHandler = async (req: express.Request, res: exp
     }
   }
   await audit(req, actor, 'UPDATE_CRM_OPPORTUNITY', 'sales_opportunity', id, { stage: data.stage });
-  res.json({ opportunity: data });
+  const { data: linkedQuote } = await admin.from('sales_quotes')
+    .select('id, quote_number, status')
+    .eq('opportunity_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkedQuote && data.stage) {
+    let nextQuoteStatus: string | null = null;
+    let nextSentAt: string | null = null;
+    let nextRespondedAt: string | null = null;
+
+    if (data.stage === 'quote_sent' && linkedQuote.status !== 'sent' && linkedQuote.status !== 'accepted') {
+      nextQuoteStatus = 'sent';
+      nextSentAt = new Date().toISOString();
+    } else if (data.stage === 'negotiation' && linkedQuote.status === 'draft') {
+      nextQuoteStatus = 'sent';
+      nextSentAt = new Date().toISOString();
+    } else if (data.stage === 'won' && linkedQuote.status !== 'accepted') {
+      nextQuoteStatus = 'accepted';
+      nextRespondedAt = new Date().toISOString();
+    } else if (data.stage === 'lost' && linkedQuote.status !== 'accepted' && linkedQuote.status !== 'rejected') {
+      nextQuoteStatus = 'rejected';
+      nextRespondedAt = new Date().toISOString();
+    } else if (data.stage === 'quote_preparation' && linkedQuote.status !== 'draft') {
+      nextQuoteStatus = 'draft';
+    }
+
+    if (nextQuoteStatus) {
+      const quotePatch: Record<string, unknown> = { status: nextQuoteStatus };
+      if (nextSentAt) quotePatch['sent_at'] = nextSentAt;
+      if (nextRespondedAt) quotePatch['responded_at'] = nextRespondedAt;
+      await admin.from('sales_quotes').update(quotePatch).eq('id', linkedQuote.id);
+      linkedQuote.status = nextQuoteStatus;
+    }
+  }
+
+  const { data: linkedDossier } = await admin.from('dossiers')
+    .select('id, no_dossier')
+    .eq('opportunity_id', id)
+    .maybeSingle();
+
+  const enrichedOpportunity = {
+    ...data,
+    quoteId: linkedQuote?.id || null,
+    quoteNumber: linkedQuote?.quote_number || null,
+    quoteStatus: linkedQuote?.status || null,
+    dossierId: linkedDossier?.id || null,
+    dossierNumber: linkedDossier?.no_dossier || null,
+  };
+
+  res.json({ opportunity: enrichedOpportunity });
 };
 
 export const createCrmActivityHandler = async (req: express.Request, res: express.Response): Promise<void> => {

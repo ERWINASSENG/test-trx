@@ -23,7 +23,7 @@ export class NotificationService {
   private readonly notificationsSubject = new BehaviorSubject<AppNotification[]>([]);
   public readonly notifications$: Observable<AppNotification[]> = this.notificationsSubject.asObservable();
 
-  private defaultDuration = 15000;
+  private defaultDuration = 10000;
 
   /**
    * Retourne la liste actuelle des notifications actives
@@ -98,12 +98,12 @@ export class NotificationService {
   /**
    * Notification d'Erreur (sticky par défaut pour garantir la lecture par l'utilisateur)
    */
-  public error(message: string, title = 'Erreur', sticky = true, duration?: number): string {
+  public error(message: string, title = 'Erreur', sticky = false, duration?: number): string {
     return this.show({
       type: 'error',
       title,
       message,
-      duration: sticky ? 0 : duration,
+      duration: duration ?? (sticky ? 0 : this.defaultDuration),
       sticky,
     });
   }

@@ -1,5 +1,8 @@
 <div class="w-full" id="root-dashboard-container">
   @switch (dashboardView()) {
+    @case ('commercial') {
+      <app-dashboard-commercial id="commercial-dashboard-section" />
+    }
     @case ('admin') {
       <app-dashboard-admin id="admin-dashboard-section" />
     }

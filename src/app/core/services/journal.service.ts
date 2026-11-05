@@ -5,6 +5,7 @@ import { NotificationService } from './notification.service';
 import { CashierService } from './cashier.service';
 import { AccessControlService } from './access-control.service';
 import { CreateJournalDto, Journal, JournalType, UpdateJournalDto } from '../models/journal.model';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 @Injectable({
   providedIn: 'root',
@@ -232,11 +233,11 @@ export class JournalService {
             },
           });
 
+          const resJson = await res.json().catch(() => null);
           if (res.ok) {
             if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
-            const resJson = await res.json();
             if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) return;
-            const serverList = resJson.journals;
+            const serverList = resJson?.journals;
             if (Array.isArray(serverList) && serverList.length > 0) {
               const mapped: Journal[] = serverList.map((row: Record<string, unknown>) => ({
                 id: String(row['id'] ?? ''),
@@ -260,11 +261,26 @@ export class JournalService {
             } else if (Array.isArray(serverList) && serverList.length === 0) {
               this._journals.set([this.defaultNativeCashJournal]);
               return;
+            } else {
+              this.notificationService.error('Le serveur a renvoyé une liste de journaux invalide.', 'Chargement impossible');
             }
+          } else {
+            this.notificationService.error(
+              getApiErrorMessage(resJson, `Impossible de charger les journaux (erreur HTTP ${res.status}).`),
+              'Chargement impossible'
+            );
           }
         } catch (apiErr) {
           console.warn('[JOURNAL] API Express /api/journals indisponible:', apiErr);
+          this.notificationService.error(
+            apiErr instanceof TypeError
+              ? 'Connexion au service des journaux impossible. Vérifiez votre connexion puis réessayez.'
+              : 'Une erreur est survenue lors du chargement des journaux.',
+            'Chargement impossible'
+          );
         }
+      } else {
+        this.notificationService.error('Votre session a expiré. Reconnectez-vous pour charger les journaux.', 'Authentification requise');
       }
 
       // The server is the authorization boundary; a failed response must not
@@ -272,6 +288,7 @@ export class JournalService {
       this._journals.set([this.defaultNativeCashJournal]);
     } catch (err) {
       console.error('Impossible de charger les journaux via l’API sécurisée:', err);
+      this.notificationService.error('Une erreur est survenue lors du chargement des journaux.', 'Chargement impossible');
       this._journals.set([this.defaultNativeCashJournal]);
     } finally {
       this._isLoading.set(false);
@@ -326,8 +343,8 @@ export class JournalService {
           body: JSON.stringify(payload),
         });
 
-        const resData = await res.json();
-        if (res.ok && resData.journal) {
+        const resData = await res.json().catch(() => null);
+        if (res.ok && resData?.journal) {
           const row = resData.journal;
           const inserted: Journal = {
             id: String(row.id),
@@ -347,13 +364,21 @@ export class JournalService {
           this.notificationService.success(`Le journal « ${inserted.name} » a été créé avec succès.`, 'Journal créé');
           return inserted;
         } else {
-          const errMsg = resData.error || 'Impossible de créer le journal.';
+          const errMsg = getApiErrorMessage(
+            resData,
+            `Impossible de créer le journal${res.ok ? ' : réponse serveur invalide' : ` (erreur HTTP ${res.status})`}.`
+          );
           this.notificationService.error(errMsg, 'Échec de création');
           return null;
         }
       } catch (err: unknown) {
         console.error('Erreur API création journal:', err);
-        this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+        this.notificationService.error(
+          err instanceof TypeError
+            ? 'Connexion au service des journaux impossible pour créer le journal. Vérifiez votre connexion puis réessayez.'
+            : 'Une erreur est survenue lors de la création du journal.',
+          'Échec de création'
+        );
         return null;
       }
     }
@@ -408,8 +433,8 @@ export class JournalService {
           body: JSON.stringify(payload),
         });
 
-        const resData = await res.json();
-        if (res.ok && resData.journal) {
+        const resData = await res.json().catch(() => null);
+        if (res.ok && resData?.journal) {
           const row = resData.journal;
           const updated: Journal = {
             id: String(row.id),
@@ -432,13 +457,21 @@ export class JournalService {
           this.notificationService.success(`Le journal « ${updated.name} » a été mis à jour avec succès.`, 'Journal modifié');
           return updated;
         } else {
-          const errMsg = resData.error || 'Impossible de mettre à jour le journal.';
+          const errMsg = getApiErrorMessage(
+            resData,
+            `Impossible de modifier le journal${res.ok ? ' : réponse serveur invalide' : ` (erreur HTTP ${res.status})`}.`
+          );
           this.notificationService.error(errMsg, 'Échec de modification');
           return null;
         }
       } catch (err: unknown) {
         console.error('Erreur API modification journal:', err);
-        this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+        this.notificationService.error(
+          err instanceof TypeError
+            ? 'Connexion au service des journaux impossible pour modifier le journal. Vérifiez votre connexion puis réessayez.'
+            : 'Une erreur est survenue lors de la modification du journal.',
+          'Échec de modification'
+        );
         return null;
       }
     }
@@ -503,12 +536,23 @@ export class JournalService {
             deletedCount++;
             deleteIds.push(journal.id);
           } else {
-            const json = await res.json();
-            this.notificationService.error(json.error || `Impossible de supprimer ${journal.name}`, 'Erreur suppression');
+            const payload = await res.json().catch(() => null);
+            this.notificationService.error(
+              getApiErrorMessage(payload, `Impossible de supprimer le journal « ${journal.name} » (erreur HTTP ${res.status}).`),
+              'Erreur de suppression'
+            );
           }
-        } catch {
-          // Ignorer erreur unitaire
+        } catch (error) {
+          this.notificationService.error(
+            error instanceof TypeError
+              ? `Connexion au service des journaux impossible pour supprimer « ${journal.name} ». Vérifiez votre connexion puis réessayez.`
+              : `Une erreur est survenue lors de la suppression du journal « ${journal.name} ».`,
+            'Erreur de suppression'
+          );
         }
+      } else {
+        this.notificationService.error('Votre session a expiré. Reconnectez-vous pour supprimer les journaux.', 'Authentification requise');
+        break;
       }
     }
 
@@ -598,9 +642,12 @@ export class JournalService {
         },
         body: JSON.stringify({ is_active: updatedState }),
       });
-      const payload = await response.json().catch(() => ({})) as { error?: string };
+      const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        this.notificationService.error(payload.error || 'Impossible de modifier le statut du journal.', 'Échec de modification');
+        this.notificationService.error(
+          getApiErrorMessage(payload, `Impossible de modifier le statut du journal (erreur HTTP ${response.status}).`),
+          'Échec de modification'
+        );
         return;
       }
       this._journals.update((list) =>
@@ -608,7 +655,12 @@ export class JournalService {
       );
     } catch (error) {
       console.error('Erreur API mise à jour du statut journal:', error);
-      this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+      this.notificationService.error(
+        error instanceof TypeError
+          ? 'Connexion au service des journaux impossible pour modifier le statut. Vérifiez votre connexion puis réessayez.'
+          : 'Une erreur est survenue lors de la modification du statut du journal.',
+        'Échec de modification'
+      );
     }
   }
 

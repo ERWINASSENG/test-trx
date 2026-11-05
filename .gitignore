@@ -57,3 +57,16 @@ Thumbs.db
 .graphify*
 .aidesigner/*
 !.aidesigner/.gitkeep
+
+# Markdown files
+*.md
+
+# TOML files
+*.toml
+
+# Python files
+*.py
+
+# Locally installed BMAD skills
+/.agents/skills/
+/skills-lock.json

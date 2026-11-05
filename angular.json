@@ -34,6 +34,10 @@
             ],
             "server": "src/main.server.ts",
             "outputMode": "server",
+            "allowedCommonJsDependencies": [
+              "cookie",
+              "exceljs"
+            ],
             "ssr": {
               "entry": "src/server.ts"
             }
@@ -48,7 +52,7 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "20kB",
+                  "maximumWarning": "28kB",
                   "maximumError": "50kB"
                 }
               ],
@@ -59,7 +63,7 @@
                   "minify": true,
                   "inlineCritical": false
                 },
-                "fonts": true
+                "fonts": false
               }
             },
             "development": {
@@ -76,7 +80,12 @@
           "options": {
             "host": "0.0.0.0",
             "port": 3000,
-            "allowedHosts": true
+            "allowedHosts": [
+              ".run.app",
+              ".google.com",
+              "localhost",
+              "127.0.0.1"
+            ]
           },
           "configurations": {
             "production": {

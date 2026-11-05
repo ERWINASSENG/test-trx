@@ -43,7 +43,7 @@ describe('CRM payload validation', () => {
       company_name: 'Transmex',
       email: 'sales@transmex.cm',
       country: 'Cameroun',
-      status: 'new',
+      status: 'converted',
     });
   });
 

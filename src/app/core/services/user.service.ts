@@ -4,6 +4,7 @@ import { CreateUserPayload, UpdateUserPayload, UserProfile } from '../models/aut
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { normalizeUserRole } from '../utils/role.utils';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 const USERS_STORAGE_KEY = 'transmex_users_store';
 
@@ -23,6 +24,24 @@ export class UserService {
       return configured();
     }
     return Boolean(configured);
+  }
+
+  private getOperationError(error: unknown, fallback: string, networkMessage: string): string {
+    if (error instanceof TypeError) return networkMessage;
+    if (error instanceof Error && error.message.trim()) return error.message.trim();
+    return fallback;
+  }
+
+  private async readApiPayload(response: Response): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  private async readApiError(response: Response, fallback: string): Promise<string> {
+    return getApiErrorMessage(await this.readApiPayload(response), fallback);
   }
 
   private async getAuthToken(): Promise<string> {
@@ -114,8 +133,10 @@ export class UserService {
 
       const res = await fetch('/api/system/collaborators', { method: 'GET', headers });
       if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || `Erreur serveur (${res.status}) lors du chargement des utilisateurs.`);
+        throw new Error(await this.readApiError(
+          res,
+          `Impossible de charger les utilisateurs (erreur HTTP ${res.status}).`
+        ));
       }
 
       const data = await res.json();
@@ -143,7 +164,11 @@ export class UserService {
 
       this._users.set(mapped);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors du chargement des utilisateurs';
+      const msg = this.getOperationError(
+        err,
+        'Impossible de charger les utilisateurs. Veuillez réessayer.',
+        'Connexion au service de gestion des utilisateurs impossible. Vérifiez votre connexion puis réessayez.'
+      );
       this._error.set(msg);
     } finally {
       this._isLoading.set(false);
@@ -200,26 +225,46 @@ export class UserService {
         }),
       });
 
-      const data = await res.json();
+      const data = await this.readApiPayload(res);
       if (!res.ok) {
-        throw new Error(data?.error || `Erreur serveur (${res.status}) lors de la création de l'utilisateur.`);
+        throw new Error(getApiErrorMessage(
+          data,
+          `Impossible de créer l’utilisateur (erreur HTTP ${res.status}).`
+        ));
       }
 
-      if (!data?.user) {
+      if (
+        typeof data !== 'object'
+        || data === null
+        || !('user' in data)
+        || typeof data.user !== 'object'
+        || data.user === null
+      ) {
         throw new Error('Réponse invalide du serveur de synchronisation.');
       }
+      const userData = data.user as Record<string, unknown>;
+      if (
+        typeof userData['id'] !== 'string'
+        || typeof userData['email'] !== 'string'
+        || typeof userData['firstName'] !== 'string'
+        || typeof userData['lastName'] !== 'string'
+        || typeof userData['role'] !== 'string'
+      ) {
+        throw new Error('Réponse invalide du serveur de synchronisation.');
+      }
+      const role = normalizeUserRole(userData['role']);
 
       const newUser: UserProfile = {
-        id: data.user.id,
-        email: data.user.email,
-        firstName: data.user.firstName,
-        lastName: data.user.lastName,
-        role: data.user.role,
-        roles: [data.user.role],
-        department: data.user.department,
-        phone: data.user.phone,
-        isActive: data.user.isActive ?? true,
-        createdAt: data.user.createdAt || new Date().toISOString(),
+        id: userData['id'],
+        email: userData['email'],
+        firstName: userData['firstName'],
+        lastName: userData['lastName'],
+        role,
+        roles: [role],
+        department: typeof userData['department'] === 'string' ? userData['department'] : undefined,
+        phone: typeof userData['phone'] === 'string' ? userData['phone'] : undefined,
+        isActive: typeof userData['isActive'] === 'boolean' ? userData['isActive'] : true,
+        createdAt: typeof userData['createdAt'] === 'string' ? userData['createdAt'] : new Date().toISOString(),
       };
 
       const updatedList = [newUser, ...this._users()];
@@ -228,7 +273,11 @@ export class UserService {
 
       return { success: true, user: newUser };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la création du compte';
+      const msg = this.getOperationError(
+        err,
+        'Impossible de créer l’utilisateur. Veuillez réessayer.',
+        'Connexion au service de gestion des utilisateurs impossible pour créer le compte. Vérifiez votre connexion puis réessayez.'
+      );
       this._error.set(msg);
       this._isLoading.set(false);
       return { success: false, error: msg };
@@ -259,15 +308,18 @@ export class UserService {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || `Erreur serveur (${res.status})`);
+        throw new Error(await this.readApiError(res, `Impossible de mettre à jour le profil (erreur HTTP ${res.status}).`));
       }
 
       this._isLoading.set(false);
       return { success: true };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la mise à jour du profil';
+      const msg = this.getOperationError(
+        err,
+        'Impossible de mettre à jour le profil. Veuillez réessayer.',
+        'Connexion au service de profil impossible. Vérifiez votre connexion puis réessayez.'
+      );
       this._error.set(msg);
       this._isLoading.set(false);
       return { success: false, error: msg };
@@ -293,15 +345,20 @@ export class UserService {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || `Erreur serveur (${res.status})`);
+      if (!res.ok) {
+        throw new Error(await this.readApiError(res, `Impossible de mettre à jour l’utilisateur (erreur HTTP ${res.status}).`));
+      }
 
       await this.loadInitialUsers();
       this._isLoading.set(false);
 
       return { success: true };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la mise à jour';
+      const msg = this.getOperationError(
+        err,
+        'Impossible de mettre à jour l’utilisateur. Veuillez réessayer.',
+        'Connexion au service de gestion des utilisateurs impossible pour mettre à jour ce compte. Vérifiez votre connexion puis réessayez.'
+      );
       this._error.set(msg);
       this._isLoading.set(false);
       return { success: false, error: msg };
@@ -322,6 +379,7 @@ export class UserService {
    */
   public async deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
     this._isLoading.set(true);
+    this._error.set(null);
     try {
       if (!this.isBrowser) throw new Error('La suppression nécessite un navigateur authentifié.');
 
@@ -330,14 +388,19 @@ export class UserService {
         method: 'DELETE',
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || `Erreur serveur (${res.status})`);
+      if (!res.ok) {
+        throw new Error(await this.readApiError(res, `Impossible de supprimer l’utilisateur (erreur HTTP ${res.status}).`));
+      }
 
       await this.loadInitialUsers();
       this._isLoading.set(false);
       return { success: true };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la suppression';
+      const msg = this.getOperationError(
+        err,
+        'Impossible de supprimer l’utilisateur. Veuillez réessayer.',
+        'Connexion au service de gestion des utilisateurs impossible pour supprimer ce compte. Vérifiez votre connexion puis réessayez.'
+      );
       this._error.set(msg);
       this._isLoading.set(false);
       return { success: false, error: msg };

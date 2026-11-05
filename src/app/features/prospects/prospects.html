@@ -1,43 +1,69 @@
-<main class="prospects-page" aria-labelledby="prospects-title">
-  <app-module-control-panel>
-    <div controlPanelStart class="prospects-title-group">
-      <div>
-        <p class="prospects-eyebrow">Développement commercial</p>
-        <h1 id="prospects-title">Contacts</h1>
-      </div>
-      @if (canCreate()) {
-        <button
-          type="button"
-          class="primary-action h-9 w-28 shrink-0 justify-center"
-          aria-label="Nouveau prospect"
-          title="Nouveau prospect"
-          (click)="openCreate()">
-          <mat-icon>add</mat-icon><span>Nouveau</span>
-        </button>
-      }
-    </div>
-
-    <div controlPanelEnd class="prospects-control-end">
-      <div class="view-switch" role="group" aria-label="Vue des prospects">
-        <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
-          <mat-icon>reorder</mat-icon>
-        </button>
-        <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
-          <mat-icon>view_kanban</mat-icon>
-        </button>
+<main class="prospects-page" [class.embedded-prospects]="embedded()" aria-labelledby="prospects-title">
+  @if (!embedded()) {
+    <app-module-control-panel>
+      <div controlPanelStart class="prospects-title-group">
+        @if (canCreate()) {
+          <button
+            type="button"
+            class="primary-action h-9 w-28 shrink-0 justify-center"
+            aria-label="Nouveau prospect"
+            title="Nouveau prospect"
+            (click)="openCreate()">
+            <mat-icon>add</mat-icon><span>Nouveau</span>
+          </button>
+        }
+        <div>
+          <p class="prospects-eyebrow">Développement commercial</p>
+          <h1 id="prospects-title">Contacts</h1>
+        </div>
       </div>
 
-      <div class="pagination" aria-label="Pagination des prospects">
-        <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
-        <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
-          <mat-icon>chevron_right</mat-icon>
-        </button>
+      <div controlPanelCenter class="w-full">
+        <form
+          class="prospects-control-search flex w-full min-w-0 items-center gap-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]"
+          (submit)="$event.preventDefault(); applyFilters()">
+          <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
+          <input
+            type="search"
+            id="prospects-search-input"
+            name="search"
+            aria-label="Rechercher dans les contacts"
+            placeholder="Nom, société ou contact"
+            [value]="searchDraft()"
+            (input)="searchDraft.set($any($event.target).value)"
+            class="min-w-[60px] flex-1 bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white" />
+          <button
+            type="submit"
+            class="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[#0b5ed7] dark:hover:bg-white/10 dark:hover:text-[#8cc2ff]"
+            aria-label="Lancer la recherche"
+            title="Rechercher">
+            <mat-icon class="!flex !h-4 !w-4 !items-center !justify-center !text-base">arrow_forward</mat-icon>
+          </button>
+        </form>
       </div>
-    </div>
-  </app-module-control-panel>
+
+      <div controlPanelEnd class="prospects-control-end">
+        <div class="view-switch" role="group" aria-label="Vue des prospects">
+          <button type="button" [class.active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'" aria-label="Vue liste" title="Vue liste" (click)="view.set('list')">
+            <mat-icon>reorder</mat-icon>
+          </button>
+          <button type="button" [class.active]="view() === 'kanban'" [attr.aria-pressed]="view() === 'kanban'" aria-label="Vue Kanban" title="Vue Kanban" (click)="view.set('kanban')">
+            <mat-icon>view_kanban</mat-icon>
+          </button>
+        </div>
+
+        <div class="pagination" aria-label="Pagination des prospects">
+          <span>{{ prospectService.total() }} résultat(s) · {{ currentPage() }} / {{ totalPages() }}</span>
+          <button type="button" class="icon-action" aria-label="Page précédente" [disabled]="currentPage() <= 1" (click)="goToPage(-1)">
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <button type="button" class="icon-action" aria-label="Page suivante" [disabled]="currentPage() >= totalPages()" (click)="goToPage(1)">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
+      </div>
+    </app-module-control-panel>
+  }
 
   @if (feedback()) {
     <p class="feedback" role="status">{{ feedback() }}</p>
@@ -60,6 +86,8 @@
               <input
                 type="checkbox"
                 class="odoo-checkbox"
+                id="prospects-select-all"
+                name="prospects-select-all"
                 [checked]="isAllSelected()"
                 (change)="toggleSelectAll()"
                 aria-label="Sélectionner tous les prospects"
@@ -198,6 +226,8 @@
                 <input
                   type="checkbox"
                   class="odoo-checkbox"
+                  [id]="'prospect-select-' + prospect.id"
+                  [name]="'prospect-select-' + prospect.id"
                   [checked]="isSelected(prospect.id)"
                   (change)="toggleSelect(prospect.id); $event.stopPropagation()"
                   (dblclick)="$event.stopPropagation()"
@@ -333,49 +363,86 @@
         <form [formGroup]="form" (ngSubmit)="saveProspect()">
           <div class="form-grid">
             <!-- Ligne 1 : Société | Contact principal -->
-            <label class="field">
+            <label class="field" for="prospect-company-name">
               Société *
-              <input formControlName="companyName" autocomplete="organization" placeholder="Nom de l'entreprise" />
+              <input
+                id="prospect-company-name"
+                name="companyName"
+                formControlName="companyName"
+                autocomplete="organization"
+                placeholder="Nom de l'entreprise" />
               @if (form.controls.companyName.touched && form.controls.companyName.invalid) {
                 <small class="field-error">La société est obligatoire (au moins 2 caractères).</small>
               }
             </label>
-            <label class="field">
+            <label class="field" for="prospect-contact-name">
               Contact principal
-              <input formControlName="contactName" autocomplete="name" placeholder="Nom du contact" />
+              <input
+                id="prospect-contact-name"
+                name="contactName"
+                formControlName="contactName"
+                autocomplete="name"
+                placeholder="Nom du contact" />
             </label>
 
             <!-- Ligne 2 : Fonction du contact | Secteur d'activité -->
-            <label class="field">
+            <label class="field" for="prospect-contact-role">
               Fonction du contact
-              <input formControlName="contactRole" placeholder="Ex: Directeur commercial, Responsable logistique…" />
+              <input
+                id="prospect-contact-role"
+                name="contactRole"
+                formControlName="contactRole"
+                placeholder="Ex: Directeur commercial, Responsable logistique…" />
             </label>
-            <label class="field">
+            <label class="field" for="prospect-sector">
               Secteur d'activité
-              <input formControlName="sector" placeholder="Ex: Commerce international, Logistique, Transit…" />
+              <input
+                id="prospect-sector"
+                name="sector"
+                formControlName="sector"
+                placeholder="Ex: Commerce international, Logistique, Transit…" />
             </label>
 
             <!-- Ligne 3 : Pays | Téléphone -->
-            <label class="field">
+            <label class="field" for="prospect-country">
               Pays
-              <input formControlName="country" autocomplete="country-name" placeholder="Ex: Cameroun, Côte d'Ivoire, France, Nigeria…" />
+              <input
+                id="prospect-country"
+                name="country"
+                formControlName="country"
+                autocomplete="country-name"
+                placeholder="Ex: Cameroun, Côte d'Ivoire, France, Nigeria…" />
             </label>
-            <label class="field">
+            <label class="field" for="prospect-phone">
               Téléphone
-              <input type="tel" formControlName="phone" autocomplete="tel" placeholder="+237 6..." />
+              <input
+                type="tel"
+                id="prospect-phone"
+                name="phone"
+                formControlName="phone"
+                autocomplete="tel"
+                placeholder="+237 6..." />
             </label>
 
             <!-- Ligne 4 : E-mail | Commercial attribué -->
-            <label class="field">
+            <label class="field" for="prospect-email">
               E-mail
-              <input type="email" formControlName="email" autocomplete="email" placeholder="contact@exemple.com" />
+              <input
+                type="email"
+                id="prospect-email"
+                name="email"
+                formControlName="email"
+                autocomplete="email"
+                placeholder="contact@exemple.com" />
               @if (form.controls.email.touched && form.controls.email.invalid) {
                 <small class="field-error">Adresse e-mail invalide.</small>
               }
             </label>
-            <label class="field">
+            <label class="field" for="prospect-assigned-to">
               Commercial attribué
               <select
+                id="prospect-assigned-to"
+                name="assignedTo"
                 formControlName="assignedTo"
                 aria-label="Commercial attribué"
                 class="h-9 w-full rounded border border-slate-300 dark:border-white/20 bg-white dark:bg-[#142a4a] px-2.5 py-1.5 text-xs text-slate-800 dark:text-white transition focus:border-[#0b5ed7] focus:outline-none focus:ring-2 focus:ring-[#0b5ed7]/15">

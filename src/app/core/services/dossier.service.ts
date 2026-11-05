@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
 import { Dossier, DossierExpenseSummary } from '../models/dossier.model';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface DossierPageRequest {
   limit?: number;
@@ -263,7 +264,7 @@ export class DossierService {
         }
       }
 
-      const payload = await response.json().catch(() => ({})) as T & { error?: string };
+      const payload: unknown = await response.json().catch(() => null);
       if ((this.authService.currentUser()?.id ?? null) !== requestedUserId) {
         return { success: false, error: 'La session a changé pendant la requête.' };
       }
@@ -275,11 +276,30 @@ export class DossierService {
           this.authService.handleUnauthorizedSession();
           return { success: false, error: 'Session expirée. Veuillez vous reconnecter.' };
         }
-        return { success: false, error: payload.error || `Erreur serveur (${response.status}).` };
+        const action = method === 'GET'
+          ? path === '/assignees'
+            ? 'charger la liste des responsables'
+            : path === '/expenses'
+              ? 'charger le rapport des dépenses'
+              : 'charger les dossiers'
+          : method === 'POST'
+            ? 'créer le dossier'
+            : 'modifier le dossier';
+        return {
+          success: false,
+          error: getApiErrorMessage(payload, `Impossible de ${action} (erreur HTTP ${response.status}).`),
+        };
       }
-      return { success: true, data: payload };
-    } catch {
-      return { success: false, error: 'Le serveur Dossiers est injoignable.' };
+      if (typeof payload !== 'object' || payload === null) {
+        return { success: false, error: 'Le service Dossiers a renvoyé une réponse invalide.' };
+      }
+      return { success: true, data: payload as T };
+    } catch (requestError: unknown) {
+      console.warn('Erreur pendant la requête au service Dossiers:', requestError);
+      const message = requestError instanceof TypeError
+        ? 'Connexion au service Dossiers impossible. Vérifiez votre connexion puis réessayez.'
+        : 'Impossible de vérifier la session ou de traiter la demande Dossiers. Réessayez.';
+      return { success: false, error: message };
     } finally {
       this._isLoading.set(false);
     }

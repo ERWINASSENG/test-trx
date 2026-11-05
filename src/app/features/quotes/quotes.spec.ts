@@ -3,8 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ExportService } from '../../core/services/export.service';
 import { QuoteService } from '../../core/services/quote.service';
-import { QuoteAssignee, QuoteContact, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
+import { QuoteAssignee, QuoteColumn, QuoteContact, QuoteTemplate, SalesQuote } from '../../core/models/quote.model';
 import { Prospect } from '../../core/models/prospect.model';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { QuotesComponent } from './quotes';
@@ -21,6 +22,11 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
   const mockLoading = signal<boolean>(false);
   const mockError = signal<string | null>(null);
   const mockRoute = { snapshot: { queryParamMap: { get: vi.fn().mockReturnValue(null) } } };
+
+  const mockExportService = {
+    exportQuotePdf: vi.fn().mockReturnValue(true),
+    exportQuotesPdf: vi.fn().mockReturnValue(true),
+  };
 
   const mockQuoteService = {
     quotes: mockQuotes,
@@ -102,6 +108,7 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
         { provide: QuoteService, useValue: mockQuoteService },
         { provide: AccessControlService, useValue: mockAccessControl },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: ExportService, useValue: mockExportService },
         { provide: ActivatedRoute, useValue: mockRoute },
       ],
     }).compileComponents();
@@ -156,34 +163,77 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.prospectId()).toBe('prospect-abc');
     expect(component.opportunityId()).toBe('opportunity-abc');
     expect(component.contactId()).toBe('contact-crm');
+    expect(component.title()).toBe('');
+    expect(component.currency()).toBe('');
+    expect(component.status()).toBe('draft');
+    expect(component.seaContactName()).toBe('Amina Nono');
   });
 
-  it('devrait ouvrir une fiche vierge avec toutes les cases décochées par défaut', () => {
+  it('devrait ouvrir une fiche vierge sans valeurs métier ni choix implicite', () => {
     component.openCreate();
     fixture.detectChanges();
 
     expect(component.isEditorOpen()).toBe(true);
     expect(component.editingId()).toBeNull();
-    expect(component.title()).toBe('Cotation Fret Maritime Transimex');
-    expect(component.currency()).toBe('XAF');
-    expect(component.seaPortOfLoading()).toBe('Douala Port (CMDLA)');
-    expect(component.seaIncoterm()).toBe('FOB');
-    expect(component.seaNeedInlandTransport()).toBe(false);
+    expect(component.title()).toBe('');
+    expect(component.currency()).toBe('');
+    expect(component.prospectId()).toBe('');
+    expect(component.contactId()).toBe('');
+    expect(component.opportunityId()).toBeNull();
+    expect(component.assignedTo()).toBe('');
+    expect(component.clientSearch()).toBe('');
+    expect(component.validUntil()).toBe('');
+    expect(component.seaContactName()).toBe('');
+    expect(component.seaPhone()).toBe('');
+    expect(component.seaEmail()).toBe('');
+    expect(component.seaAddress()).toBe('');
+    expect(component.seaGoodsType()).toBe('');
+    expect(component.seaGoodsDescription()).toBe('');
+    expect(component.seaGrossWeightKg()).toBeNull();
+    expect(component.seaTotalVolumeM3()).toBeNull();
+    expect(component.seaPackagesCount()).toBeNull();
+    expect(component.seaPackagingType()).toBe('');
+    expect(component.seaPortOfLoading()).toBe('');
+    expect(component.seaPortOfDischarge()).toBe('');
+    expect(component.seaIncoterm()).toBe('');
+    expect(component.seaNeedInlandTransport()).toBeNull();
+    expect(component.seaEstimatedDepartureDate()).toBeNull();
+    expect(component.seaEstimatedArrivalDate()).toBeNull();
     expect(component.serviceFcl()).toBe(false);
     expect(component.serviceLcl()).toBe(false);
     expect(component.serviceRoro()).toBe(false);
     expect(component.serviceBreakBulk()).toBe(false);
+    expect(component.serviceOther()).toBe('');
     expect(component.docCommercialInvoice()).toBe(false);
     expect(component.docPackingList()).toBe(false);
     expect(component.docCertificateOfOrigin()).toBe(false);
     expect(component.docMsdsTechnicalSheet()).toBe(false);
+    expect(component.docOther()).toBe('');
     expect(component.addonCustomsClearance()).toBe(false);
     expect(component.addonCargoInsurance()).toBe(false);
     expect(component.addonWarehousing()).toBe(false);
     expect(component.addonPortHandling()).toBe(false);
     expect(component.addonTracking()).toBe(false);
+    expect(component.status()).toBe('draft');
     expect(component.saveTemplate()).toBe(false);
     expect(component.columns().length).toBeGreaterThanOrEqual(3);
+    expect(component.rows()).toHaveLength(1);
+
+    const row = component.rows()[0];
+    expect(row).not.toHaveProperty('id');
+    expect(Object.keys(row).sort()).toEqual(component.columns().map((column) => column.id).sort());
+    for (const column of component.columns()) {
+      if (column.type === 'amount' || column.type === 'number') {
+        expect(row[column.id]).toBeNull();
+      } else if (column.type === 'checkbox') {
+        expect(row[column.id]).toBe(false);
+      } else {
+        expect(row[column.id]).toBe('');
+      }
+    }
+
+    const inlandTransport = fixture.nativeElement.querySelector('#field-inland') as HTMLSelectElement;
+    expect(inlandTransport.value).toBe('');
   });
 
   it('devrait pré-remplir les coordonnées de contact lors de la sélection d’un client existant', async () => {
@@ -247,6 +297,8 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     await component.onProspectSelected('prospect-abc');
     component.onContactSelected('contact-abc');
     component.assignedTo.set('usr-agent-01');
+    component.title.set('Fret maritime - Cacao');
+    component.currency.set('xaf');
 
     // Saisie des détails d'expédition et d'itinéraire
     component.seaGoodsType.set('Produits agricoles');
@@ -261,9 +313,13 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     component.serviceFcl.set(true);
 
     // Chiffrage
-    const amountCol = component.columns().find((c) => c.type === 'amount')!;
+    const totalCol = component.columns().find((column) => column.id === component.totalColumnId())!;
     component.rows.set([
-      { [component.columns()[0].id]: 'Fret maritime', [amountCol.id]: 1800000 },
+      {
+        ...component.rows()[0],
+        [component.columns()[0].id]: 'Fret maritime',
+        [totalCol.id]: 1800000,
+      },
     ]);
 
     await component.saveQuote();
@@ -272,6 +328,13 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     const passedInput = mockQuoteService.createQuote.mock.calls[0][0];
     expect(passedInput.prospectId).toBe('prospect-abc');
     expect(passedInput.contactId).toBe('contact-abc');
+    expect(passedInput.title).toBe('Fret maritime - Cacao');
+    expect(passedInput.currency).toBe('XAF');
+    expect(passedInput.rows).toHaveLength(1);
+    expect(passedInput.rows[0]).not.toHaveProperty('id');
+    expect(Object.keys(passedInput.rows[0]).sort()).toEqual(
+      passedInput.columns.map((column: QuoteColumn) => column.id).sort(),
+    );
     expect(passedInput.seaFreight).toBeDefined();
     expect(passedInput.seaFreight.goodsType).toBe('Produits agricoles');
     expect(passedInput.seaFreight.grossWeightKg).toBe(24000);
@@ -284,6 +347,8 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
 
   it('devrait afficher une erreur si l’utilisateur tente d’enregistrer sans sélectionner ou créer de client', async () => {
     component.openCreate();
+    component.title.set('Cotation maritime');
+    component.currency.set('XAF');
     component.clientSearch.set('');
     component.prospectId.set('');
 
@@ -293,4 +358,124 @@ describe('QuotesComponent (Fiche de cotation maritime Transimex)', () => {
     expect(component.error()).toContain('sélectionner un prospect/client destinataire');
     expect(component.isEditorOpen()).toBe(true);
   });
+
+  it('devrait refuser une devise vide avant tout appel au service', async () => {
+    component.openCreate();
+    component.title.set('Cotation maritime');
+    component.prospectId.set('prospect-abc');
+    component.currency.set('');
+
+    await component.saveQuote();
+
+    expect(mockQuoteService.createQuote).not.toHaveBeenCalled();
+    expect(component.error()).toContain('code devise de trois lettres');
+    expect(component.isEditorOpen()).toBe(true);
+  });
+
+  it('devrait conserver le choix « Non » en édition si une ancienne cotation ne précise pas le transport intérieur', () => {
+    const quote: SalesQuote = {
+      id: 'quote-legacy',
+      quoteNumber: 'COT-2026-000002',
+      prospectId: 'prospect-abc',
+      prospectName: 'Cameroun Trading SA',
+      assignedTo: null,
+      assignedToName: null,
+      createdBy: 'usr-agent-01',
+      title: 'Cotation ancienne',
+      currency: 'XAF',
+      columns: [],
+      rows: [],
+      totalColumnId: '',
+      totalAmount: 0,
+      status: 'draft',
+      validUntil: null,
+      seaFreight: {},
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+    };
+
+    component.openEdit(quote);
+    fixture.detectChanges();
+
+    expect(component.seaNeedInlandTransport()).toBe(false);
+    const inlandTransport = fixture.nativeElement.querySelector('#field-inland') as HTMLSelectElement;
+    expect(inlandTransport.value).toBe('no');
+  });
+
+  describe('Export PDF (unitaire et par sélection)', () => {
+    const testQuoteA: SalesQuote = {
+      id: 'quote-test-1',
+      quoteNumber: 'COT-2026-000001',
+      prospectId: 'prospect-abc',
+      prospectName: 'Cameroun Trading SA',
+      assignedTo: 'usr-agent-01',
+      assignedToName: 'Alberic Asseng',
+      createdBy: 'usr-agent-01',
+      title: 'Transport maritime Douala - Anvers',
+      currency: 'XAF',
+      columns: [],
+      rows: [],
+      totalColumnId: '',
+      totalAmount: 2500000,
+      status: 'accepted',
+      validUntil: '2026-12-31T00:00:00Z',
+      seaFreight: { portOfLoading: 'Douala', portOfDischarge: 'Anvers' },
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+    };
+
+    const testQuoteB: SalesQuote = {
+      id: 'quote-test-2',
+      quoteNumber: 'COT-2026-000002',
+      prospectId: 'prospect-abc',
+      prospectName: 'Cameroun Trading SA',
+      assignedTo: 'usr-agent-01',
+      assignedToName: 'Alberic Asseng',
+      createdBy: 'usr-agent-01',
+      title: 'Import FCL Le Havre - Kribi',
+      currency: 'XAF',
+      columns: [],
+      rows: [],
+      totalColumnId: '',
+      totalAmount: 4800000,
+      status: 'sent',
+      validUntil: '2026-11-30T00:00:00Z',
+      seaFreight: { portOfLoading: 'Le Havre', portOfDischarge: 'Kribi' },
+      createdAt: '2026-10-02T00:00:00Z',
+      updatedAt: '2026-10-02T00:00:00Z',
+    };
+
+    it('devrait exporter une cotation individuelle au format PDF et afficher un message de confirmation', async () => {
+      await component.exportQuotePdf(testQuoteA);
+
+      expect(mockExportService.exportQuotePdf).toHaveBeenCalledWith(testQuoteA);
+      expect(component.feedback()).toContain('COT-2026-000001');
+    });
+
+    it('devrait exporter les cotations cochées au format PDF avec feedback de succès', async () => {
+      mockQuotes.set([testQuoteA, testQuoteB]);
+      component.selectedQuoteIds.set(new Set(['quote-test-1', 'quote-test-2']));
+
+      expect(component.selectedCount()).toBe(2);
+
+      await component.exportSelectedQuotesPdf();
+
+      expect(mockExportService.exportQuotesPdf).toHaveBeenCalledWith([testQuoteA, testQuoteB]);
+      expect(component.feedback()).toContain('2 cotation(s) exportée(s)');
+      expect(component.isActionsMenuOpen()).toBe(false);
+    });
+
+    it('Sécurité : ne doit rien exporter et ne déclencher aucun appel si la sélection est vide', async () => {
+      mockQuotes.set([testQuoteA, testQuoteB]);
+      component.selectedQuoteIds.set(new Set());
+
+      expect(component.selectedCount()).toBe(0);
+
+      await component.exportSelectedQuotesPdf();
+
+      expect(mockExportService.exportQuotesPdf).not.toHaveBeenCalled();
+      expect(component.feedback()).toBeNull();
+    });
+  });
 });
+

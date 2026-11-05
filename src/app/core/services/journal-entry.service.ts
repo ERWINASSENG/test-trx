@@ -7,6 +7,7 @@ import {
   JournalChartData,
   JournalEntry,
 } from '../models/journal-entry.model';
+import { getApiErrorMessage } from '../utils/api-error.util';
 
 @Injectable({
   providedIn: 'root',
@@ -98,8 +99,17 @@ export class JournalEntryService {
       });
 
       if (res.ok) {
-        const json = await res.json();
-        const loaded: JournalEntry[] = (json.entries || []).map((row: Record<string, unknown>) => ({
+        const json: unknown = await res.json();
+        if (
+          typeof json !== 'object'
+          || json === null
+          || !('entries' in json)
+          || !Array.isArray(json.entries)
+        ) {
+          this.notificationService.error('Le serveur a renvoyé une liste d’écritures invalide.', 'Chargement impossible');
+          return [];
+        }
+        const loaded: JournalEntry[] = json.entries.map((row: Record<string, unknown>) => ({
           id: String(row['id']),
           journal_id: String(row['journal_id']),
           sequence_number: Number(row['sequence_number']) || 1,
@@ -126,8 +136,19 @@ export class JournalEntryService {
         this._entries.set(loaded);
         return loaded;
       }
+      const payload = await res.json().catch(() => null);
+      this.notificationService.error(
+        getApiErrorMessage(payload, `Impossible de charger les écritures (erreur HTTP ${res.status}).`),
+        'Chargement impossible'
+      );
     } catch (err) {
       console.warn('Erreur chargement écritures de journal:', err);
+      this.notificationService.error(
+        err instanceof TypeError
+          ? 'Connexion au service des écritures impossible. Vérifiez votre connexion puis réessayez.'
+          : 'Une erreur est survenue lors du chargement des écritures.',
+        'Chargement impossible'
+      );
     } finally {
       this._isLoading.set(false);
     }
@@ -170,8 +191,8 @@ export class JournalEntryService {
         body: JSON.stringify(dto),
       });
 
-      const resData = await res.json();
-      if (res.ok && resData.entry) {
+      const resData = await res.json().catch(() => null);
+      if (res.ok && resData?.entry) {
         const row = resData.entry;
         const inserted: JournalEntry = {
           id: String(row.id),
@@ -203,13 +224,21 @@ export class JournalEntryService {
         );
         return inserted;
       } else {
-        const err = resData.error || 'Impossible d’enregistrer l’écriture.';
+        const err = getApiErrorMessage(
+          resData,
+          `Impossible d’enregistrer l’écriture${res.ok ? ' : réponse serveur invalide' : ` (erreur HTTP ${res.status})`}.`
+        );
         this.notificationService.error(err, 'Échec de saisie');
         return null;
       }
     } catch (err: unknown) {
       console.error('Erreur réseau saisie écriture:', err);
-      this.notificationService.error('Erreur de communication avec le serveur.', 'Échec réseau');
+      this.notificationService.error(
+        err instanceof TypeError
+          ? 'Connexion au service comptable impossible pour enregistrer l’écriture. Vérifiez votre connexion puis réessayez.'
+          : 'Une erreur est survenue lors de l’enregistrement de l’écriture.',
+        'Échec de saisie'
+      );
       return null;
     } finally {
       this._isSubmitting.set(false);
@@ -243,17 +272,33 @@ export class JournalEntryService {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data: unknown = await res.json();
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+          this.notificationService.error('Le serveur a renvoyé des données de graphique invalides.', 'Chargement impossible');
+          return null;
+        }
+        const chartData = data as Record<string, unknown>;
         return {
-          journal_id: data.journal_id,
-          current_balance: Number(data.current_balance) || 0,
-          labels: Array.isArray(data.labels) ? data.labels : [],
-          balances: Array.isArray(data.balances) ? data.balances.map(Number) : [],
-          descriptions: Array.isArray(data.descriptions) ? data.descriptions : [],
+          journal_id: String(chartData['journal_id'] ?? journalId),
+          current_balance: Number(chartData['current_balance']) || 0,
+          labels: Array.isArray(chartData['labels']) ? chartData['labels'] : [],
+          balances: Array.isArray(chartData['balances']) ? chartData['balances'].map(Number) : [],
+          descriptions: Array.isArray(chartData['descriptions']) ? chartData['descriptions'] : [],
         };
       }
+      const payload = await res.json().catch(() => null);
+      this.notificationService.error(
+        getApiErrorMessage(payload, `Impossible de charger les données du graphique (erreur HTTP ${res.status}).`),
+        'Chargement impossible'
+      );
     } catch (err) {
       console.warn(`Erreur récupération données graphiques pour ${journalId}:`, err);
+      this.notificationService.error(
+        err instanceof TypeError
+          ? 'Connexion au service des graphiques impossible. Vérifiez votre connexion puis réessayez.'
+          : 'Une erreur est survenue lors du chargement des données du graphique.',
+        'Chargement impossible'
+      );
     }
 
     return null;

@@ -1,6 +1,7 @@
-import { PLATFORM_ID } from '@angular/core';
+import { PLATFORM_ID, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { CashierService } from './cashier.service';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -28,6 +29,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     TestBed.configureTestingModule({
       providers: [
         CashierService,
+        provideZonelessChangeDetection(),
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
           provide: NotificationService,
@@ -71,11 +73,13 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
+
     service = TestBed.inject(CashierService);
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    TestBed.resetTestingModule();
   });
 
   it('devrait être initialisé avec un solde nul et une liste vide', () => {
@@ -356,6 +360,91 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(service.currentBalance()).toBe(0);
   });
 
+  it('devrait afficher le motif serveur quand une opération annulée ne peut pas revenir en brouillon', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-cancelled',
+      date: '2026-10-01',
+      libelle: 'Opération annulée',
+      category: 'sortie',
+      status: 'cancelled',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: 'Une opération annulée ne peut pas être réactivée ou modifiée.',
+    }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(false);
+    expect(service.error()).toBe('Une opération annulée ne peut pas être réactivée ou modifiée.');
+    expect(service.allTransactions()[0].status).toBe('cancelled');
+  });
+
+  it('devrait indiquer une erreur de connexion distincte si le retour en brouillon ne joint pas le serveur', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-posted-network',
+      date: '2026-10-01',
+      libelle: 'Opération comptabilisée',
+      category: 'sortie',
+      status: 'posted',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(false);
+    expect(service.error()).toBe(
+      'Impossible de joindre le service de caisse. Vérifiez votre connexion puis réessayez.'
+    );
+    expect(service.allTransactions()[0].status).toBe('posted');
+  });
+
+  it('devrait remettre en brouillon une opération sélectionnée après confirmation du serveur', async () => {
+    const mapped = service.mapDatabaseOperations([{
+      id: 'tx-posted',
+      date: '2026-10-01',
+      libelle: 'Opération comptabilisée',
+      category: 'sortie',
+      status: 'posted',
+      montant: -10000,
+      selected: true,
+    }]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      count: 1,
+      data: [{ id: 'tx-posted', status: 'draft' }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(true);
+    expect(service.allTransactions()[0].status).toBe('draft');
+    expect(service.allTransactions()[0].selected).toBe(false);
+    expect(service.error()).toBeNull();
+  });
+
+  it('ne devrait pas appeler le serveur quand aucune opération n’est sélectionnée pour retour en brouillon', async () => {
+    const request = vi.fn();
+    globalThis.fetch = request as typeof globalThis.fetch;
+
+    const success = await service.resetSelectedToDraft();
+
+    expect(success).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('devrait filtrer les données réactivement avec les Signals de recherche', async () => {
     globalThis.fetch = (async () => {
       return new Response(
@@ -562,5 +651,117 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     expect(result.success).toBe(true);
     expect(service.filterState().pageIndex).toBe(0);
     expect(service.pagedTransactions()[0].id).toBe('draft-without-piece');
+  });
+
+  describe('postSelected (Comptabilisation en masse)', () => {
+    it('devrait comptabiliser les opérations sélectionnées en statut draft (cas nominal)', async () => {
+      const mockRows = [
+        {
+          id: 'draft-1',
+          date: '2026-10-01',
+          libelle: 'Carburant navette',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -25000,
+          selected: true,
+        },
+        {
+          id: 'draft-2',
+          date: '2026-10-02',
+          libelle: 'Fournitures bureau',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -10000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      let capturedBody: unknown = null;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = String(input);
+        if (init?.method === 'PATCH' && urlStr.includes('/api/cahier/operations/status')) {
+          capturedBody = JSON.parse(String(init.body));
+          return new Response(JSON.stringify({ success: true, count: 2 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ operations: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(true);
+      expect(capturedBody).toEqual({ ids: ['draft-2', 'draft-1'], status: 'posted' });
+      const txs = service.allTransactions();
+      expect(txs.every((t) => t.status === 'posted')).toBe(true);
+      expect(txs.every((t) => !t.selected)).toBe(true);
+    });
+
+    it('devrait informer l’utilisateur si toutes les opérations sélectionnées sont déjà comptabilisées', async () => {
+      const mockRows = [
+        {
+          id: 'posted-1',
+          date: '2026-10-01',
+          libelle: 'Paiement déjà validé',
+          category: 'entree' as const,
+          status: 'posted' as const,
+          montant: 50000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(service.allTransactions()[0].selected).toBe(false);
+    });
+
+    it('devrait refuser et positionner une erreur si l’API renvoie un statut d’erreur HTTP 403', async () => {
+      const mockRows = [
+        {
+          id: 'draft-unauthorized',
+          date: '2026-10-01',
+          libelle: 'Opération d’un autre utilisateur',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -15000,
+          selected: true,
+        },
+      ];
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = String(input);
+        if (init?.method === 'PATCH' && urlStr.includes('/api/cahier/operations/status')) {
+          return new Response(JSON.stringify({ error: 'Action refusée : vous ne pouvez modifier que les opérations que vous avez vous-même enregistrées.' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ operations: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const success = await service.postSelected();
+
+      expect(success).toBe(false);
+      expect(service.allTransactions()[0].status).toBe('draft');
+      expect(service.error()).toContain('Action refusée');
+    });
   });
 });

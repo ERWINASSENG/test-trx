@@ -277,4 +277,27 @@ describe('DossierService', () => {
     });
     expect(service.total()).toBe(0);
   });
+
+  it('distingue une panne réseau d’un refus HTTP', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(service.loadDossiers()).resolves.toBe(false);
+
+    expect(service.error()).toBe(
+      'Connexion au service Dossiers impossible. Vérifiez votre connexion puis réessayez.'
+    );
+  });
+
+  it('signale une réponse invalide au lieu de la présenter comme un chargement réussi', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => null,
+    });
+
+    await expect(service.loadDossiers()).resolves.toBe(false);
+
+    expect(service.dossiers()).toEqual([]);
+    expect(service.error()).toBe('Le service Dossiers a renvoyé une réponse invalide.');
+  });
 });

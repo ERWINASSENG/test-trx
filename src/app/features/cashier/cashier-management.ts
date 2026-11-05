@@ -201,6 +201,23 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     return isMainCashier && this.accessControlService.hasPermission('cashier.status_update');
   });
 
+  public readonly canPostCashierOperations = computed(() => {
+    const journalId = this.cashierService.activeJournalId();
+    const isMainCashier =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+
+    if (isMainCashier) {
+      return (
+        this.accessControlService.hasPermission('cashier.status_update') ||
+        this.accessControlService.hasPermission('cashier.update')
+      );
+    }
+    return this.accessControlService.hasPermission('journal_entries.update');
+  });
+
   // Données réactives issues du service
   public readonly pagedTransactions = this.cashierService.pagedTransactions;
   public readonly allTransactions = this.cashierService.allTransactions;
@@ -502,7 +519,6 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public ngOnInit(): void {
     void this.journalService.loadJournals();
     this.cashierService.loadTransactions();
-    void this.dossierService.loadAllDossiers();
 
     // Prise en compte du paramètre d'URL journalId (ex: depuis le Tableau de bord)
     this.route.queryParams.subscribe((params) => {
@@ -721,15 +737,35 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     await this.cashierService.duplicateSelected();
   }
 
+  public async onPostSelectedAction(): Promise<void> {
+    if (!this.canPostCashierOperations() || this.selectedCount() === 0 || this.isPosting()) return;
+    this.closeActionsMenu();
+    this.isPosting.set(true);
+    try {
+      await this.cashierService.postSelected();
+    } finally {
+      this.isPosting.set(false);
+    }
+  }
+
   public async onCancelSelectedAction(): Promise<void> {
-    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
-    if (this.isCancelling() || !confirm(`Annuler ${this.selectedCount()} opération(s) sélectionnée(s) ? Les numéros de pièce seront conservés.`)) return;
+    if (!this.canCancelCashierOperations() || this.selectedCount() === 0 || this.isCancelling()) return;
 
     this.isCancelling.set(true);
+    const countToCancel = this.selectedCount();
     this.closeActionsMenu();
     try {
       const success = await this.cashierService.cancelSelected();
-      if (!success && this.error()) console.warn('Avertissement annulation:', this.error());
+      if (success) {
+        this.notificationService.success(
+          countToCancel > 1
+            ? `${countToCancel} opérations ont été annulées avec succès.`
+            : 'L’opération a été annulée avec succès.',
+          'Annulation effectuée'
+        );
+      } else if (this.error()) {
+        console.warn('Avertissement annulation:', this.error());
+      }
     } finally {
       this.isCancelling.set(false);
     }
@@ -763,8 +799,15 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     this.cashierService.nextPage();
   }
 
+  private ensureDossiersLoaded(): void {
+    if (this.dossierService.dossiers().length === 0 && !this.dossierService.isLoading()) {
+      void this.dossierService.loadDossiers({ limit: 50 });
+    }
+  }
+
   public async startAddInline(): Promise<void> {
     if (!this.canEdit()) return;
+    this.ensureDossiersLoaded();
 
     // Règle d'or : fermer impérativement toute ligne existante en édition avant d'ouvrir la ligne d'ajout
     if (this.editingTxId()) {
@@ -940,6 +983,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public async startInlineEdit(tx: CashierTransaction): Promise<void> {
     if (!this.canEdit() || !this.canEditTransaction(tx)) return;
+    this.ensureDossiersLoaded();
     if (this.editingTxId() === tx.id) return;
 
     // Règle d'or : une seule ligne ouverte à la fois.

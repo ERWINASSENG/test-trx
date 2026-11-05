@@ -1,0 +1,109 @@
+// =============================================================================
+// CRM • Délais & Performance des Cotations — Styles SCSS
+// Composant Standalone Angular 21 (Design épuré shadcn/ui & slate)
+// =============================================================================
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+// ---------------------------------------------------------------------------
+// 1. TYPOGRAPHIE & MONOSPACE POUR CHIFFRES & MÉTRIQUES
+// ---------------------------------------------------------------------------
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-feature-settings: 'tnum' on, 'zero' on;
+}
+
+// ---------------------------------------------------------------------------
+// 2. ANIMATIONS & MICRO-INTERACTIONS
+// ---------------------------------------------------------------------------
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.view-transition {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+// ---------------------------------------------------------------------------
+// 3. BARRES DE DÉFILEMENT ÉPURÉES (CUSTOM SCROLLBAR)
+// ---------------------------------------------------------------------------
+.overflow-x-auto,
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 9999px;
+
+    &:hover {
+      background: rgba(100, 116, 139, 0.6);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. ACCESSIBILITÉ & FOCUS ÉPURÉ (WCAG 2.1 AA)
+// ---------------------------------------------------------------------------
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 1px;
+}
+
+:host-context(.dark) {
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid #f8fafc;
+    outline-offset: 1px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. POPOVER CALENDRIER & EFFETS D'OMBRE SHADCN
+// ---------------------------------------------------------------------------
+#calendar-popover {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+// ---------------------------------------------------------------------------
+// 6. ADAPTATION IMPRESSION
+// ---------------------------------------------------------------------------
+@media print {
+  #period-btn-7d,
+  #calendar-popover,
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  .border {
+    border-color: #cbd5e1 !important;
+  }
+}
+

@@ -1,4 +1,4 @@
-<main class="crm-page" aria-labelledby="crm-title">
+<main class="crm-page" aria-label="CRM Commercial">
   <app-module-control-panel>
     <div controlPanelStart class="flex items-center gap-2 sm:gap-3">
       @if (canCreateCurrentItem()) {
@@ -42,16 +42,6 @@
   </app-module-control-panel>
 
   <div class="crm-content">
-    <header class="crm-heading">
-      <div>
-        <p class="crm-eyebrow">Espace commercial</p>
-        <h1 id="crm-title">CRM Commercial</h1>
-        <p class="crm-subtitle">Du premier contact au dossier d’expédition, sans ressaisie client.</p>
-      </div>
-      @if (crmService.canManageTeam()) {
-        <span class="team-access">Vue équipe</span>
-      }
-    </header>
 
     @if (feedback()) { <p class="crm-feedback" role="status">{{ feedback() }}</p> }
     @if (crmService.error()) { <p class="crm-error" role="alert">{{ crmService.error() }}</p> }
@@ -72,70 +62,141 @@
         @if (canCreate()) { <button type="button" class="primary-action" (click)="openClientDialog()">Créer une fiche société</button> }
       </section>
     } @else {
-      <div class="pipeline-board" aria-label="Opportunités par étape">
+      <div class="pipeline-board" cdkDropListGroup aria-label="Opportunités par étape">
         @for (column of stageColumns(); track column.stage) {
-          <section class="pipeline-column" [class]="stageClass(column.stage)" [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">
+          <section
+            class="pipeline-column"
+            [class]="stageClass(column.stage)">
             <header class="pipeline-column-heading">
               <div><span class="stage-dot" aria-hidden="true"></span><h2>{{ column.label }}</h2></div>
               <span class="column-count">{{ column.opportunities.length }}</span>
             </header>
-            @for (opportunity of column.opportunities; track opportunity.id) {
-              <article class="opportunity-card">
-                <div class="card-topline">
-                  <span class="transport-chip">{{ modeLabel(opportunity.transportMode) }}</span>
-                  @if (opportunity.direction) { <span class="direction-label">{{ directionLabel(opportunity.direction) }}</span> }
-                  @if (canUpdate()) {
-                    <label class="sr-only" [for]="'stage-' + opportunity.id">Modifier l’étape de {{ opportunity.title }}</label>
-                    <select class="stage-select" [id]="'stage-' + opportunity.id" [value]="opportunity.stage"
-                      (change)="changeStage(opportunity, $any($event.target).value)">
-                      @for (stage of stages; track stage) { <option [value]="stage">{{ stageLabel(stage) }}</option> }
-                    </select>
-                  }
-                </div>
-                <h3>{{ opportunity.client.companyName || opportunity.client.name }}</h3>
-                <p class="opportunity-title">{{ opportunity.title }}</p>
-                @if (opportunity.origin || opportunity.destination) {
-                  <p class="route-line">{{ opportunity.origin || 'Origine à définir' }} <span>→</span> {{ opportunity.destination || 'Destination à définir' }}</p>
-                }
-                <div class="opportunity-value">{{ formatAmount(opportunity.estimatedValue, opportunity.currency) }}</div>
-                <div class="card-meta">
-                  <span>{{ opportunity.client.contactName || 'Contact à renseigner' }}</span>
-                  @if (opportunity.expectedCloseDate) {
-                    <span>{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
-                  }
-                  @if (opportunity.assignedToName) { <span>{{ opportunity.assignedToName }}</span> }
-                </div>
-                <div class="card-links">
-                  @if (opportunity.quoteNumber) {
-                    <a class="linked-record" [routerLink]="['/quotes']"
-                      [queryParams]="{ quoteId: opportunity.quoteId }">{{ opportunity.quoteNumber }}</a>
-                    @if (opportunity.quoteStatus) {
-                      <span class="linked-record quote-status">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+            <div
+              class="pipeline-column-cards"
+              cdkDropList
+              [id]="'stage-' + column.stage"
+              [cdkDropListData]="column"
+              (cdkDropListDropped)="onOpportunityDrop($event)"
+              [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">              @for (opportunity of column.opportunities; track opportunity.id) {
+                <article
+                  class="opportunity-card interactive-card rounded-xl border border-slate-200 bg-white text-slate-950 shadow-xs dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 transition-[border-color,box-shadow] hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 p-3.5 space-y-2.5"
+                  cdkDrag
+                  [cdkDragData]="opportunity"
+                  [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()"
+                  (click)="openOpportunityDialog(opportunity)"
+                  (keydown.enter)="openOpportunityDialog(opportunity)"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="'Modifier l’opportunité ' + opportunity.title">
+                  
+                  <!-- CardHeader : Badges & Titres (Shadcn UI) -->
+                  <div class="card-header space-y-1.5">
+                    <div class="card-topline flex items-center justify-between gap-2">
+                      <div class="card-badges flex flex-wrap gap-1.5">
+                        <span class="tag-badge mode inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors">{{ modeLabel(opportunity.transportMode) }}</span>
+                        @if (opportunity.direction) {
+                          <span class="tag-badge direction inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors">{{ directionLabel(opportunity.direction) }}</span>
+                        }
+                      </div>
+                    </div>
+                    <h3 class="client-company-title font-semibold text-sm leading-tight text-slate-900 dark:text-slate-100">{{ opportunity.client.companyName || opportunity.client.name }}</h3>
+                    <p class="opportunity-title text-xs text-slate-500 dark:text-slate-400">{{ opportunity.title }}</p>
+                  </div>
+
+                  <!-- CardContent : Itinéraire trade lane, Échéance & Montant -->
+                  <div class="card-content space-y-2.5 pt-1">
+                    @if (opportunity.origin || opportunity.destination) {
+                      <div class="trade-lane-route">
+                        <mat-icon aria-hidden="true">route</mat-icon>
+                        <span>{{ opportunity.origin || 'Origine à définir' }}</span>
+                        <span class="route-arrow">→</span>
+                        <span>{{ opportunity.destination || 'Destination à définir' }}</span>
+                      </div>
+                    } @else {
+                      <div class="trade-lane-route unset">
+                        <mat-icon aria-hidden="true">route</mat-icon>
+                        <span>Trajet à définir</span>
+                      </div>
                     }
-                  } @else if (opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
-                    <a class="text-link" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }">
-                      Créer une cotation
-                    </a>
-                  }
-                  @if (opportunity.dossierNumber) {
-                    <a class="linked-record" [routerLink]="['/dossiers']"
-                      [queryParams]="{ dossierId: opportunity.dossierId }">{{ opportunity.dossierNumber }}</a>
-                  } @else if (opportunity.stage === 'won' && canCreate()) {
-                    <button type="button" class="text-link" (click)="openDossierDialog(opportunity)">
-                      Créer le dossier
-                    </button>
-                  }
+
+                    <div class="card-meta flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                      <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                        @if (opportunity.expectedCloseDate) {
+                          <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
+                        }
+                        @if (opportunity.assignedToName) {
+                          <span class="meta-item truncate max-w-[100px]">{{ opportunity.assignedToName }}</span>
+                        }
+                      </div>
+                      @if (opportunity.estimatedValue) {
+                        <span class="opportunity-value font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
+                          {{ formatAmount(opportunity.estimatedValue, opportunity.currency || 'XAF') }}
+                        </span>
+                      }
+                    </div>
+
+                    @if (opportunity.quoteNumber || opportunity.dossierNumber || (opportunity.stage === 'won' && canCreate())) {
+                      <div class="card-links pt-1 flex flex-wrap items-center gap-2">
+                        @if (opportunity.quoteNumber) {
+                          <a class="linked-record inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-2 py-0.5 text-xs font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-slate-100" [routerLink]="['/quotes']"
+                            [queryParams]="{ quoteId: opportunity.quoteId }"
+                            (click)="$event.stopPropagation()">
+                            
+                            {{ opportunity.quoteNumber }}
+                          </a>
+                          @if (opportunity.quoteStatus) {
+                            <span class="linked-record quote-status text-xs font-medium text-slate-500">{{ quoteStatusLabel(opportunity.quoteStatus) }}</span>
+                          }
+                        }
+                        @if (opportunity.dossierNumber) {
+                          <a class="linked-record inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100" [routerLink]="['/dossiers']"
+                            [queryParams]="{ dossierId: opportunity.dossierId }"
+                            (click)="$event.stopPropagation()">
+                            
+                            {{ opportunity.dossierNumber }}
+                          </a>
+                        } @else if (opportunity.stage === 'won' && canCreate()) {
+                          <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors" (click)="openDossierDialog(opportunity); $event.stopPropagation()">
+                            
+                            Créer le dossier
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+
+                  <!-- CardFooter : Actions contextuelles Shadcn UI Button (Cotation, Relance, Rappel, Valider accord) -->
+                  <footer class="card-actions flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60 mt-1">
+                    @if (!opportunity.quoteNumber && opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
+                      <a class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }" (click)="$event.stopPropagation()">
+                        Cotation
+                      </a>
+                    }
+                    @if (opportunity.quoteNumber && (opportunity.stage === 'quote_sent' || opportunity.stage === 'negotiation') && canCreate()) {
+                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
+                        Relance
+                      </button>
+                    }
+                    @if (canCreate() && opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
+                      <button type="button" class="action-button icon-text-action inline-flex items-center justify-center rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 px-2.5 py-1 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
+                        Rappel
+                      </button>
+                    }
+                    @if (opportunity.stage === 'negotiation' && canUpdate()) {
+                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2.5 py-1 transition-colors cursor-pointer" (click)="openWinDialog(opportunity); $event.stopPropagation()">
+                        Valider accord
+                      </button>
+                    }
+                    <span class="sr-only">Étape : {{ column.label }}</span>
+                  </footer>
+                </article>
+              } @empty {
+                <div class="column-empty-state" aria-hidden="true">
+                  <mat-icon class="column-empty-icon">inbox</mat-icon>
+                  <span>Aucune opportunité</span>
                 </div>
-                <footer class="card-actions">
-                  @if (canCreate()) {
-                    <button type="button" class="icon-text-action" (click)="openActivityDialog(opportunity)">Ajouter un rappel</button>
-                  }
-                  <span class="sr-only">Étape : {{ column.label }}</span>
-                </footer>
-              </article>
-            } @empty {
-              <p class="column-empty">Aucune opportunité</p>
-            }
+              }
+            </div>
           </section>
         }
       </div>
@@ -143,54 +204,201 @@
     }
 
     @if (tab() === 'clients') {
-    @if (filteredClients().length === 0) {
-      <section class="crm-empty"><h2>Aucune société trouvée</h2><p>Créez ou recherchez une fiche dans ce fichier clients/prospects unique.</p></section>
-    } @else {
-      <div class="client-workspace">
-        <section class="client-list" aria-label="Sociétés et prospects">
-          @for (client of visibleClients(); track client.id) {
-            <button type="button" class="client-row" [class.selected]="selectedClientId() === client.id"
-              (click)="selectedClientId.set(client.id)">
-              <span class="client-monogram">{{ (client.companyName || client.name).slice(0, 1).toUpperCase() }}</span>
-              <span class="client-row-info"><strong>{{ client.companyName || client.name }}</strong><small>{{ client.country || 'Pays à renseigner' }} · {{ client.sector || 'Service à définir' }}</small></span>
-              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
-            </button>
-          }
-        </section>
-        @if (selectedClient(); as client) {
-          <article class="client-profile">
-            <header>
-              <div><p class="crm-eyebrow">Fiche société unique</p><h2>{{ client.companyName || client.name }}</h2>
-                <a class="text-link" [routerLink]="['/prospects']" [queryParams]="{ prospectId: client.id }">Ouvrir la fiche Contact</a>
-              </div>
-              <span class="client-status">{{ clientStatusLabel(client.status) }}</span>
-            </header>
-            <dl class="client-details">
-              <div><dt>Contact principal</dt><dd>{{ client.contactName || 'À renseigner' }}@if (client.contactRole) { <small>{{ client.contactRole }}</small> }</dd></div>
-              <div><dt>E-mail</dt><dd>{{ client.email || 'Non renseigné' }}</dd></div>
-              <div><dt>Téléphone</dt><dd>{{ client.phone || 'Non renseigné' }}</dd></div>
-              <div><dt>Pays / service</dt><dd>{{ client.country || 'À renseigner' }} · {{ client.sector || 'À définir' }}</dd></div>
-            </dl>
-            <div class="contacts-heading"><div><h3>Autres contacts</h3><span>{{ selectedClientContacts().length }}</span></div>
-              @if (canCreate()) { <button type="button" class="secondary-action" (click)="openContactDialog(client)">Ajouter un contact</button> }
-            </div>
-            @if (selectedClientContacts().length > 0) {
-              <div class="contact-list">
-                @for (contact of selectedClientContacts(); track contact.id) {
-                  <div class="contact-row" [class.focused-contact]="focusedContactId() === contact.id"><div><strong>{{ contact.fullName }}</strong><span>{{ contact.jobTitle || 'Fonction non précisée' }}</span></div><div class="contact-reach"><span>{{ contact.email || 'E-mail non renseigné' }}</span><span>{{ contact.phone || 'Téléphone non renseigné' }}</span></div></div>
-                }
-              </div>
-            } @else {
-              <p class="inline-empty">Ajoutez les interlocuteurs achats, opérations, finance ou douane de cette société.</p>
+      <div class="table-scroll crm-table-fullwidth">
+        <table class="prospects-table odoo-table" aria-label="Liste des clients">
+          <thead>
+            <tr class="odoo-head-row select-none">
+              <th scope="col" class="th-checkbox">
+                <input
+                  type="checkbox"
+                  class="odoo-checkbox"
+                  [checked]="isAllClientsSelected()"
+                  (change)="toggleSelectAllClients()"
+                  aria-label="Sélectionner tous les clients"
+                />
+              </th>
+              <th
+                scope="col"
+                class="th-client th-sortable"
+                [attr.aria-sort]="getClientAriaSort('client')"
+                (click)="toggleClientSort('client')"
+                (keydown.enter)="toggleClientSort('client')"
+                (keydown.space)="toggleClientSort('client'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par client">
+                <div class="th-header-label">
+                  <span>Client</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'client'">{{ getClientSortIcon('client') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-country th-sortable"
+                [attr.aria-sort]="getClientAriaSort('country')"
+                (click)="toggleClientSort('country')"
+                (keydown.enter)="toggleClientSort('country')"
+                (keydown.space)="toggleClientSort('country'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par pays">
+                <div class="th-header-label">
+                  <span>Pays</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'country'">{{ getClientSortIcon('country') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-sector th-sortable"
+                [attr.aria-sort]="getClientAriaSort('sector')"
+                (click)="toggleClientSort('sector')"
+                (keydown.enter)="toggleClientSort('sector')"
+                (keydown.space)="toggleClientSort('sector'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par secteur d'activité">
+                <div class="th-header-label">
+                  <span>Secteur d'activité</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'sector'">{{ getClientSortIcon('sector') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-contact th-sortable"
+                [attr.aria-sort]="getClientAriaSort('contact')"
+                (click)="toggleClientSort('contact')"
+                (keydown.enter)="toggleClientSort('contact')"
+                (keydown.space)="toggleClientSort('contact'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par contact principal">
+                <div class="th-header-label">
+                  <span>Contact principal</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'contact'">{{ getClientSortIcon('contact') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-phone th-sortable"
+                [attr.aria-sort]="getClientAriaSort('phone')"
+                (click)="toggleClientSort('phone')"
+                (keydown.enter)="toggleClientSort('phone')"
+                (keydown.space)="toggleClientSort('phone'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par téléphone">
+                <div class="th-header-label">
+                  <span>Téléphone</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'phone'">{{ getClientSortIcon('phone') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-email th-sortable"
+                [attr.aria-sort]="getClientAriaSort('email')"
+                (click)="toggleClientSort('email')"
+                (keydown.enter)="toggleClientSort('email')"
+                (keydown.space)="toggleClientSort('email'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par email">
+                <div class="th-header-label">
+                  <span>Email</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'email'">{{ getClientSortIcon('email') }}</mat-icon>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="th-status th-sortable"
+                [attr.aria-sort]="getClientAriaSort('status')"
+                (click)="toggleClientSort('status')"
+                (keydown.enter)="toggleClientSort('status')"
+                (keydown.space)="toggleClientSort('status'); $event.preventDefault()"
+                tabindex="0"
+                role="columnheader"
+                title="Trier par statut">
+                <div class="th-header-label">
+                  <span>Statut</span>
+                  <mat-icon class="sort-icon" [class.sort-active]="clientSortField() === 'status'">{{ getClientSortIcon('status') }}</mat-icon>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (client of sortedClients(); track client.id) {
+              <tr
+                class="odoo-data-row select-none cursor-pointer"
+                [class.odoo-row-selected]="isClientSelected(client.id)"
+                (click)="toggleSelectClient(client.id)">
+                <td class="td-checkbox">
+                  <input
+                    type="checkbox"
+                    class="odoo-checkbox"
+                    [checked]="isClientSelected(client.id)"
+                    (change)="toggleSelectClient(client.id); $event.stopPropagation()"
+                    [attr.aria-label]="'Sélectionner ' + (client.companyName || client.name)"
+                  />
+                </td>
+                <td class="td-client">
+                  <div class="client-cell">
+                    <div class="company-avatar" [style.background-color]="getAvatarBg(client.companyName || client.name)">
+                      <span>{{ getMonogram(client.companyName || client.name) }}</span>
+                    </div>
+                    <div class="client-text">
+                      <strong class="company-name">{{ client.companyName || client.name }}</strong>
+                      <small class="company-sub">{{ client.sector || 'Société' }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td class="td-country">
+                  <div class="country-cell">
+                    @if (getCountryFlag(client.country)) {
+                      <img
+                        class="country-flag"
+                        [src]="getCountryFlag(client.country)"
+                        [alt]="'Drapeau ' + (client.country || 'pays')"
+                        width="20"
+                        height="15"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                      />
+                    }
+                    <span class="country-name">{{ client.country || '—' }}</span>
+                  </div>
+                </td>
+                <td class="td-sector">
+                  <span class="sector-text">{{ client.sector || '—' }}</span>
+                </td>
+                <td class="td-contact">
+                  <div class="contact-text">
+                    <strong class="contact-name">{{ client.contactName || '—' }}</strong>
+                    @if (client.contactRole) {
+                      <small class="contact-sub">{{ client.contactRole }}</small>
+                    }
+                  </div>
+                </td>
+                <td class="td-phone">
+                  <span class="phone-text">{{ client.phone || '—' }}</span>
+                </td>
+                <td class="td-email">
+                  <span class="email-text">{{ client.email || '—' }}</span>
+                </td>
+                <td class="td-status">
+                  <span class="status-pill" [class]="getDisplayStatus(client.status).class">
+                    {{ getDisplayStatus(client.status).label }}
+                  </span>
+                </td>
+              </tr>
+            } @empty {
+              <tr class="odoo-empty-row">
+                <td colspan="8" class="text-center py-8 text-slate-500">
+                  Aucun client trouvé pour cette recherche.
+                </td>
+              </tr>
             }
-            <footer class="profile-actions">
-              @if (canCreate()) { <button type="button" class="primary-action" (click)="openOpportunityDialog(client.id)">Nouvelle opportunité</button> }
-              <a class="secondary-action" [routerLink]="['/crm-commercial']" [queryParams]="{ view: 'pipeline' }">Voir dans le pipeline</a>
-            </footer>
-          </article>
-        }
+          </tbody>
+        </table>
       </div>
-    }
     }
 
     @if (tab() === 'activities') {
@@ -244,7 +452,7 @@
   <div class="crm-backdrop" role="presentation" tabindex="-1" (click)="closeDialog()" (keydown.escape)="closeDialog()">
     <section class="crm-dialog" role="dialog" aria-modal="true" tabindex="-1" [attr.aria-labelledby]="'dialog-title-' + dialog()" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
       <header class="dialog-header"><div><p class="crm-eyebrow">CRM Commercial</p>
-        <h2 [id]="'dialog-title-' + dialog()">{{ dialog() === 'client' ? 'Nouvelle société' : dialog() === 'opportunity' ? 'Nouvelle opportunité' : dialog() === 'activity' ? 'Planifier un rappel' : dialog() === 'campaign' ? 'Planifier une campagne' : dialog() === 'win' ? 'Confirmer un contrat signé' : dialog() === 'dossier' ? 'Créer un dossier d’expédition' : 'Ajouter un contact' }}</h2>
+        <h2 [id]="'dialog-title-' + dialog()">{{ dialog() === 'client' ? 'Nouvelle société' : dialog() === 'opportunity' ? (editingOpportunityId() ? 'Modifier l’opportunité' : 'Nouvelle opportunité') : dialog() === 'activity' ? 'Planifier un rappel' : dialog() === 'campaign' ? 'Planifier une campagne' : dialog() === 'win' ? 'Confirmer un contrat signé' : dialog() === 'dossier' ? 'Créer un dossier d’expédition' : 'Ajouter un contact' }}</h2>
       </div><button type="button" class="close-action" (click)="closeDialog()">Fermer</button></header>
 
       @if (formError()) { <p class="crm-error" role="alert">{{ formError() }}</p> }
@@ -270,7 +478,7 @@
           <div class="form-three"><label>Poids (kg)<input name="weightKg" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().weightKg" (ngModelChange)="setOpportunity('weightKg', $event)" /></label><label>Volume (m³)<input name="volumeM3" type="number" min="0" step="0.001" [ngModel]="opportunityDraft().volumeM3" (ngModelChange)="setOpportunity('volumeM3', $event)" /></label><label>Incoterm<input name="incoterm" maxlength="20" [ngModel]="opportunityDraft().incoterm" (ngModelChange)="setOpportunity('incoterm', $event)" /></label></div>
           <div class="form-three"><label>Valeur estimée<input name="estimatedValue" type="number" min="0" step="0.01" [ngModel]="opportunityDraft().estimatedValue" (ngModelChange)="setOpportunity('estimatedValue', $event)" /></label><label>Devise<input name="currency" maxlength="3" [ngModel]="opportunityDraft().currency" (ngModelChange)="setOpportunity('currency', $event)" /></label><label>Clôture prévue<input name="expectedCloseDate" type="date" [ngModel]="opportunityDraft().expectedCloseDate" (ngModelChange)="setOpportunity('expectedCloseDate', $event)" /></label></div>
           <label>Notes<textarea name="notes" rows="2" maxlength="10000" [ngModel]="opportunityDraft().notes" (ngModelChange)="setOpportunity('notes', $event)"></textarea></label>
-          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">Ajouter au pipeline</button></footer>
+          <footer class="dialog-actions"><button type="button" class="secondary-action" (click)="closeDialog()">Annuler</button><button type="submit" class="primary-action" [disabled]="isSaving()">{{ editingOpportunityId() ? 'Enregistrer les modifications' : 'Ajouter au pipeline' }}</button></footer>
         </form>
       }
 

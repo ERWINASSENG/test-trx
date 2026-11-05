@@ -35,6 +35,7 @@ export const routes: Routes = [
     path: '',
     component: MainLayout,
     canActivate: [authGuard],
+    canActivateChild: [authGuard],
     children: [
       {
         path: 'apps',
@@ -51,6 +52,16 @@ export const routes: Routes = [
         canActivate: [roleGuard],
         data: { permission: 'module.dashboard.view' },
         title: 'Transmex - Tableau de Bord',
+      },
+      {
+        path: 'dashboard/crm',
+        loadComponent: () =>
+          import('./features/dashboard/dashboard-manager/crm-timing/crm-timing').then(
+            (m) => m.CrmTimingComponent
+          ),
+        canActivate: [roleGuard],
+        data: { permission: 'module.crm_performance.view' },
+        title: 'Transmex - CRM • Délais & Cotations',
       },
       {
         path: 'prospects',
