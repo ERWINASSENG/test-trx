@@ -224,6 +224,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly isAddingRow = this.cashierService.isAddingRow;
   public readonly isSubmitting = signal<boolean>(false);
   public readonly isCancelling = signal<boolean>(false);
+  public readonly isPosting = signal<boolean>(false);
   public readonly isFilterDropdownOpen = signal<boolean>(false);
   public readonly isActionsMenuOpen = signal<boolean>(false);
   public readonly searchControl = new FormControl<string>('', {
@@ -294,6 +295,10 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly selectedCount = computed(() => {
     return this.cashierService.allTransactions().filter((t) => t.selected).length;
   });
+
+  public readonly hasSelectedDrafts = computed(() =>
+    this.cashierService.allTransactions().some((transaction) => transaction.selected && transaction.status === 'draft')
+  );
 
   // Pagination au format exact : "01-02 / 02" ou "00-00 / 00"
   public readonly paginationLabel = computed(() => {
@@ -691,6 +696,23 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public onExportAction(): void {
     this.cashierService.exportTransactions(this.selectedCount() > 0);
     this.closeActionsMenu();
+  }
+
+  public onSelectAllDraftsAction(): void {
+    this.cashierService.selectAllDrafts();
+    this.closeActionsMenu();
+  }
+
+  public async onPostSelectedAction(): Promise<void> {
+    if (!this.canCancelCashierOperations() || !this.hasSelectedDrafts() || this.isPosting()) return;
+
+    this.isPosting.set(true);
+    this.closeActionsMenu();
+    try {
+      await this.cashierService.postSelectedDrafts();
+    } finally {
+      this.isPosting.set(false);
+    }
   }
 
   public async onDuplicateAction(): Promise<void> {

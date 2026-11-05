@@ -1430,6 +1430,55 @@ export class CashierService implements OnDestroy {
     return false;
   }
 
+  public async postSelectedDrafts(): Promise<boolean> {
+    const selectedIds = this._transactions()
+      .filter((transaction) => transaction.selected && transaction.status === 'draft')
+      .map((transaction) => transaction.id);
+
+    if (selectedIds.length === 0) return true;
+
+    this._error.set(null);
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
+        token = sessionData.session?.access_token || null;
+      } catch {
+        // Ignorer
+      }
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const response = await fetch('/api/cahier/operations/status', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ ids: selectedIds, status: 'posted' }),
+      });
+
+      if (response.ok) {
+        this._transactions.update((items) =>
+          items.map((item) => selectedIds.includes(item.id) ? { ...item, status: 'posted', selected: false } : item)
+        );
+        this.recalculateRunningBalances();
+        void this.loadCashierSummary();
+        return true;
+      }
+
+      const errJson = await response.json().catch(() => ({}));
+      this.setError(errJson.error || `Erreur lors de la comptabilisation (${response.status})`);
+    } catch {
+      this.setError('Le service de caisse est temporairement indisponible. Veuillez réessayer.');
+    }
+
+    return false;
+  }
+
   /**
    * Insérer dans une feuille de calcul (génère un classeur TSV/Excel détaillé avec formules de totaux)
    */
@@ -1789,6 +1838,17 @@ export class CashierService implements OnDestroy {
       items.map((item) =>
         displayedIds.has(item.id) ? { ...item, selected: shouldSelect } : item
       )
+    );
+  }
+
+  public selectAllDrafts(): void {
+    const draftIds = new Set(
+      this.filteredTransactions()
+        .filter((transaction) => transaction.status === 'draft')
+        .map((transaction) => transaction.id)
+    );
+    this._transactions.update((items) =>
+      items.map((item) => draftIds.has(item.id) ? { ...item, selected: true } : item)
     );
   }
 

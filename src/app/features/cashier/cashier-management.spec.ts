@@ -172,6 +172,60 @@ describe('CashierManagement', () => {
     expect(actionsMenu?.textContent).toContain('Annuler');
   });
 
+  it('permet de sélectionner tous les brouillons depuis le menu Actions', () => {
+    const mapped = service.mapDatabaseOperations([
+      { id: 'draft-selected', date: '2026-10-04', libelle: 'Brouillon sélectionné', category: 'sortie', status: 'draft', montant: -1000 },
+      { id: 'draft-unselected', date: '2026-10-03', libelle: 'Autre brouillon', category: 'sortie', status: 'draft', montant: -2000 },
+      { id: 'posted-unselected', date: '2026-10-02', libelle: 'Opération comptabilisée', category: 'sortie', status: 'posted', montant: -3000 },
+    ]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    service.toggleSelectTransaction('draft-selected');
+    fixture.detectChanges();
+
+    const actionsButton = fixture.nativeElement.querySelector('#cashier-control-actions') as HTMLButtonElement;
+    actionsButton.click();
+    fixture.detectChanges();
+
+    const selectDraftsButton = [...fixture.nativeElement.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent?.includes('Sélectionner tous les brouillons')) as HTMLButtonElement | undefined;
+    expect(selectDraftsButton).toBeTruthy();
+    selectDraftsButton?.click();
+    fixture.detectChanges();
+
+    const selected = new Map(service.allTransactions().map((transaction) => [transaction.id, transaction.selected]));
+    expect(selected.get('draft-selected')).toBe(true);
+    expect(selected.get('draft-unselected')).toBe(true);
+    expect(selected.get('posted-unselected')).toBe(false);
+  });
+
+  it('comptabilise les brouillons sélectionnés depuis le menu Actions', async () => {
+    const mapped = service.mapDatabaseOperations([
+      { id: 'draft-to-post', date: '2026-10-04', libelle: 'Brouillon à comptabiliser', category: 'sortie', status: 'draft', montant: -1000 },
+      { id: 'draft-untouched', date: '2026-10-03', libelle: 'Brouillon non sélectionné', category: 'sortie', status: 'draft', montant: -2000 },
+      { id: 'posted-untouched', date: '2026-10-02', libelle: 'Déjà comptabilisé', category: 'sortie', status: 'posted', montant: -3000 },
+    ]);
+    (service as unknown as { _transactions: { set: (value: unknown) => void } })._transactions.set(mapped);
+    service.toggleSelectTransaction('draft-to-post');
+    service.toggleSelectTransaction('posted-untouched');
+    fixture.detectChanges();
+
+    const actionsButton = fixture.nativeElement.querySelector('#cashier-control-actions') as HTMLButtonElement;
+    actionsButton.click();
+    fixture.detectChanges();
+
+    const postButton = [...fixture.nativeElement.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent?.includes('Comptabiliser')) as HTMLButtonElement | undefined;
+    expect(postButton).toBeTruthy();
+    postButton?.click();
+    await fixture.whenStable();
+
+    const transactions = new Map(service.allTransactions().map((transaction) => [transaction.id, transaction]));
+    expect(transactions.get('draft-to-post')?.status).toBe('posted');
+    expect(transactions.get('draft-untouched')?.status).toBe('draft');
+    expect(transactions.get('posted-untouched')?.status).toBe('posted');
+    expect(transactions.get('posted-untouched')?.selected).toBe(true);
+  });
+
   it('devrait être initialisé avec une caisse vide par défaut', () => {
     expect(component.pagedTransactions().length).toBe(0);
     expect(component.currentBalance()).toBe(0);
