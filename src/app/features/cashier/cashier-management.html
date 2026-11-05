@@ -86,9 +86,7 @@
                       <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-rose-500">cancel</mat-icon>
                       Annuler
                     </button>
-                  }
-                  @if (canResetToDraftCashierOperations()) {
-                    <button type="button" (click)="onResetToDraftAction()" id="cashier-action-reset-draft" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-normal text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10" role="menuitem">
+                    <button type="button" (click)="onResetToDraftAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-normal text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10" role="menuitem">
                       Remettre en brouillon
                     </button>
                   }

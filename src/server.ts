@@ -12,12 +12,7 @@ import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
-import {
-  formatPersistedPieceComptable,
-  isCancelledCashierStatusTransitionBlocked,
-  normalizeDateToDay,
-  requiresCashierDraftBeforeEdit,
-} from './server/cashier.utils';
+import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
@@ -304,7 +299,6 @@ interface DuplicateCandidateRow {
   date: string;
   libelle: string;
   montant: number;
-  status: string | null;
   service?: string | null;
   no_dossier?: string | null;
 }
@@ -335,7 +329,7 @@ const checkDuplicateCashierTransaction = async (
   // Requête optimisée ciblée sur le jour et le montant pour éviter les balayages complets de table
   let candidateQuery = adminClient
     .from('cashier_transactions')
-    .select('id, date, libelle, montant, status, service, no_dossier')
+    .select('id, date, libelle, montant, service, no_dossier')
     .or(`montant.eq.${candidate.montant},montant.eq.${-candidate.montant},montant.eq.${absMontant},montant.eq.${-absMontant}`);
 
   if (normDay) {
@@ -344,19 +338,13 @@ const checkDuplicateCashierTransaction = async (
 
   const { data: candidates, error } = await candidateQuery;
 
-  if (error) {
-    throw new Error('Cashier duplicate check failed');
-  }
-  if (!candidates || candidates.length === 0) {
+  if (error || !candidates || candidates.length === 0) {
     return { isDuplicate: false };
   }
 
   const rows = candidates as unknown as DuplicateCandidateRow[];
   const duplicate = rows.find((c: DuplicateCandidateRow) => {
     if (candidate.idToExclude && c.id === candidate.idToExclude) {
-      return false;
-    }
-    if (c.status === 'cancelled') {
       return false;
     }
 
@@ -991,15 +979,17 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
       res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
       return;
     }
-    if (
-      isCancelledCashierStatusTransitionBlocked(
-        rowsToCheck.map((row) => row.status),
-        newStatus,
-        userRole
-      )
-    ) {
-      res.status(409).json({ error: 'Une opération annulée ne peut pas être réactivée ou modifiée.' });
-      return;
+    const hasCancelledRows = rowsToCheck.some((row) => row.status === 'cancelled');
+    if (hasCancelledRows) {
+      if (newStatus === 'draft') {
+        if (userRole !== 'admin') {
+          res.status(403).json({ error: 'Seul un administrateur est autorisé à remettre en brouillon une opération annulée.' });
+          return;
+        }
+      } else if (newStatus !== 'cancelled') {
+        res.status(409).json({ error: 'Une opération annulée ne peut pas être modifiée directement sans être d’abord remise en brouillon par un administrateur.' });
+        return;
+      }
     }
 
     // Contrôle d'habilitation et d'appartenance :
@@ -1112,23 +1102,16 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
         details: { piece_comptable: row.piece_comptable, status: 'cancelled' },
         ipAddress: req.ip || null,
       })));
-    } else if (newStatus === 'draft') {
-      await Promise.all((updatedRows || []).map((row) => {
-        const previousStatus = rowsToCheck.find((c) => c.id === row.id)?.status || null;
-        return writeAuditLog(adminClient, {
-          userId: callerId,
-          userEmail: authenticatedUser?.email,
-          userRole,
-          action: previousStatus === 'cancelled' ? 'RESET_CANCELLED_OPERATION' : 'RESET_TO_DRAFT_OPERATION',
-          entityId: row.id,
-          details: {
-            piece_comptable: row.piece_comptable,
-            status: 'draft',
-            previous_status: previousStatus,
-          },
-          ipAddress: req.ip || null,
-        });
-      }));
+    } else if (newStatus === 'draft' && hasCancelledRows) {
+      await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
+        userId: callerId,
+        userEmail: authenticatedUser?.email,
+        userRole,
+        action: 'RESET_CANCELLED_OPERATION',
+        entityId: row.id,
+        details: { piece_comptable: row.piece_comptable, status: 'draft', previous_status: 'cancelled' },
+        ipAddress: req.ip || null,
+      })));
     }
 
     const enriched = (updatedRows || []).map((r) => formatPersistedPieceComptable(r));
