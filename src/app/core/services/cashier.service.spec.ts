@@ -1,4 +1,5 @@
-import { Injector, PLATFORM_ID, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
+import { PLATFORM_ID, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CashierService } from './cashier.service';
@@ -25,8 +26,9 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
-    const injector = Injector.create({
+    TestBed.configureTestingModule({
       providers: [
+        CashierService,
         provideZonelessChangeDetection(),
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
@@ -71,11 +73,13 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
-    service = runInInjectionContext(injector, () => new CashierService());
+
+    service = TestBed.inject(CashierService);
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    TestBed.resetTestingModule();
   });
 
   it('devrait être initialisé avec un solde nul et une liste vide', () => {
