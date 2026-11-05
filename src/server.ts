@@ -979,22 +979,25 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
       res.status(404).json({ error: 'Une ou plusieurs opérations sont introuvables.' });
       return;
     }
-    if (newStatus !== 'cancelled' && rowsToCheck.some((row) => row.status === 'cancelled')) {
-      res.status(409).json({ error: 'Une opération annulée ne peut pas être réactivée ou modifiée.' });
-      return;
+    const hasCancelledRows = rowsToCheck.some((row) => row.status === 'cancelled');
+    if (hasCancelledRows) {
+      if (newStatus === 'draft') {
+        if (userRole !== 'admin') {
+          res.status(403).json({ error: 'Seul un administrateur est autorisé à remettre en brouillon une opération annulée.' });
+          return;
+        }
+      } else if (newStatus !== 'cancelled') {
+        res.status(409).json({ error: 'Une opération annulée ne peut pas être modifiée directement sans être d’abord remise en brouillon par un administrateur.' });
+        return;
+      }
     }
 
     // Contrôle d'habilitation et d'appartenance :
-    // - Les administrateurs peuvent modifier le statut de toutes les opérations.
-    // - Pour la comptabilisation (newStatus === 'posted'), la caissière autorisée (disposant de cashier.status_update) est habilitée à comptabiliser les écritures de caisse.
-    // - Pour les autres changements (annulation / remise en brouillon hors profil habilité), chaque utilisateur ne peut agir que sur ses propres écritures.
-    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere';
-    if (!isAuthorizedCashier && newStatus === 'posted') {
-      res.status(403).json({ error: 'Seul un administrateur ou une caissière autorisée peut comptabiliser des opérations de caisse.' });
-      return;
-    }
-
-    if (userRole !== 'admin' && !(isAuthorizedCashier && newStatus === 'posted')) {
+    // - Les administrateurs et caissières autorisées (disposant de la permission cashier.status_update)
+    //   sont habilités à gérer le statut (comptabiliser, annuler, remettre en brouillon) des opérations de caisse.
+    // - Pour les autres utilisateurs non habilités à la gestion de caisse, la modification est restreinte à leurs propres écritures.
+    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere' || userRole === 'manager';
+    if (!isAuthorizedCashier) {
       if (!callerId) {
         res.status(403).json({ error: 'Utilisateur non identifié. Modification de statut refusée.' });
         return;
@@ -1097,6 +1100,16 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
         action: 'CANCEL_OPERATION',
         entityId: row.id,
         details: { piece_comptable: row.piece_comptable, status: 'cancelled' },
+        ipAddress: req.ip || null,
+      })));
+    } else if (newStatus === 'draft' && hasCancelledRows) {
+      await Promise.all((updatedRows || []).map((row) => writeAuditLog(adminClient, {
+        userId: callerId,
+        userEmail: authenticatedUser?.email,
+        userRole,
+        action: 'RESET_CANCELLED_OPERATION',
+        entityId: row.id,
+        details: { piece_comptable: row.piece_comptable, status: 'draft', previous_status: 'cancelled' },
         ipAddress: req.ip || null,
       })));
     }

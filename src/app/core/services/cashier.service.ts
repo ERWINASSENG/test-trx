@@ -1167,9 +1167,14 @@ export class CashierService implements OnDestroy {
   }
 
   public async cancelSelected(): Promise<boolean> {
-    const selectedIds = this.caisseTransactions()
-      .filter((t) => t.selected)
-      .map((t) => t.id);
+    const selected = this.journalTransactions().filter((t) => t.selected);
+    let selectedIds = selected.map((t) => t.id);
+
+    if (selectedIds.length === 0) {
+      selectedIds = this._transactions()
+        .filter((t) => t.selected)
+        .map((t) => t.id);
+    }
 
     if (selectedIds.length === 0) return true;
     return this.cancelTransactions(selectedIds);

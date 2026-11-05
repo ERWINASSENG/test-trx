@@ -231,4 +231,43 @@ describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', (
     expect(verified.missingSequences.length).toBe(0);
     expect(verified.maxSequence).toBe(4);
   });
+
+  it('journalise correctement un événement RESET_CANCELLED_OPERATION', async () => {
+    const mockInsert = vi.fn().mockResolvedValue({ error: null });
+    const mockClient = {
+      from: vi.fn().mockReturnValue({ insert: mockInsert }),
+    } as unknown as SupabaseClient;
+
+    await writeAuditLog(mockClient, {
+      userId: 'admin-user-uuid',
+      userEmail: 'admin@transimex.cm',
+      userRole: 'admin',
+      action: 'RESET_CANCELLED_OPERATION',
+      entityId: 'operation-cancelled-789',
+      details: {
+        piece_comptable: 'CSH1/2026/00012',
+        status: 'draft',
+        previous_status: 'cancelled',
+      },
+      ipAddress: '127.0.0.1',
+    });
+
+    expect(mockClient.from).toHaveBeenCalledWith('audit_logs');
+    expect(mockInsert).toHaveBeenCalledWith([
+      {
+        user_id: 'admin-user-uuid',
+        user_email: 'admin@transimex.cm',
+        user_role: 'admin',
+        action: 'RESET_CANCELLED_OPERATION',
+        entity_type: 'cashier_transaction',
+        entity_id: 'operation-cancelled-789',
+        details: {
+          piece_comptable: 'CSH1/2026/00012',
+          status: 'draft',
+          previous_status: 'cancelled',
+        },
+        ip_address: '127.0.0.1',
+      },
+    ]);
+  });
 });
