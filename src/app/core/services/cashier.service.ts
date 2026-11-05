@@ -286,7 +286,7 @@ export class CashierService implements OnDestroy {
 
         this._transactions.update((curr) => {
           const withoutThisJournal = curr.filter((t) => t.journalId !== journalId && t.journal_id !== journalId);
-          return [...withoutThisJournal, ...mappedOps];
+          return this.deduplicateById([...withoutThisJournal, ...mappedOps]);
         });
 
         this.recalculateRunningBalances();
@@ -604,7 +604,7 @@ export class CashierService implements OnDestroy {
                 t.journalId !== 'CSH1' &&
                 !t.pieceComptable?.startsWith('CSH1')
             );
-            return [...mappedTransactions, ...bankOps];
+            return this.deduplicateById([...mappedTransactions, ...bankOps]);
           });
         } else {
           this._transactions.set([]);
@@ -778,7 +778,7 @@ export class CashierService implements OnDestroy {
         updatedAt: bankEntryResult['updated_at'] ? String(bankEntryResult['updated_at']) : undefined,
       };
 
-      this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
+      this._transactions.update((currentOps) => this.deduplicateById([operationToStore, ...currentOps]));
       if (refreshSummary) void this.loadCashierSummary();
       return { success: true, operation: operationToStore };
     }
@@ -872,7 +872,7 @@ export class CashierService implements OnDestroy {
     };
 
     // Étape 4 (RÉACTIVITÉ INSTANTANÉE) : Mise à jour immédiate du Signal Angular 19
-    this._transactions.update((currentOps) => [operationToStore, ...currentOps]);
+    this._transactions.update((currentOps) => this.deduplicateById([operationToStore, ...currentOps]));
     this.setPageIndex(0);
     this.recalculateRunningBalances();
     if (refreshSummary) void this.loadCashierSummary();
@@ -1167,9 +1167,14 @@ export class CashierService implements OnDestroy {
   }
 
   public async cancelSelected(): Promise<boolean> {
-    const selectedIds = this.caisseTransactions()
-      .filter((t) => t.selected)
-      .map((t) => t.id);
+    const selected = this.journalTransactions().filter((t) => t.selected);
+    let selectedIds = selected.map((t) => t.id);
+
+    if (selectedIds.length === 0) {
+      selectedIds = this._transactions()
+        .filter((t) => t.selected)
+        .map((t) => t.id);
+    }
 
     if (selectedIds.length === 0) return true;
     return this.cancelTransactions(selectedIds);
@@ -1359,7 +1364,7 @@ export class CashierService implements OnDestroy {
         const createdRows = (resJson.data || []) as CashierDbRow[];
         const mapped = createdRows.map((r) => this.mapSingleDbRow(r));
 
-        this._transactions.update((currentList) => [...mapped, ...currentList]);
+        this._transactions.update((currentList) => this.deduplicateById([...mapped, ...currentList]));
         this.recalculateRunningBalances();
         void this.loadCashierSummary();
         this.toggleSelectAll(false);
@@ -1693,6 +1698,15 @@ export class CashierService implements OnDestroy {
     }
     const time = new Date(dStr).getTime();
     return isNaN(time) ? 0 : time;
+  }
+
+  private deduplicateById(items: CashierTransaction[]): CashierTransaction[] {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      if (!item.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
   }
 
   /**

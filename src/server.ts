@@ -304,6 +304,7 @@ interface DuplicateCandidateRow {
   date: string;
   libelle: string;
   montant: number;
+  status: string | null;
   service?: string | null;
   no_dossier?: string | null;
 }
@@ -334,7 +335,7 @@ const checkDuplicateCashierTransaction = async (
   // Requête optimisée ciblée sur le jour et le montant pour éviter les balayages complets de table
   let candidateQuery = adminClient
     .from('cashier_transactions')
-    .select('id, date, libelle, montant, service, no_dossier')
+    .select('id, date, libelle, montant, status, service, no_dossier')
     .or(`montant.eq.${candidate.montant},montant.eq.${-candidate.montant},montant.eq.${absMontant},montant.eq.${-absMontant}`);
 
   if (normDay) {
@@ -343,13 +344,19 @@ const checkDuplicateCashierTransaction = async (
 
   const { data: candidates, error } = await candidateQuery;
 
-  if (error || !candidates || candidates.length === 0) {
+  if (error) {
+    throw new Error('Cashier duplicate check failed');
+  }
+  if (!candidates || candidates.length === 0) {
     return { isDuplicate: false };
   }
 
   const rows = candidates as unknown as DuplicateCandidateRow[];
   const duplicate = rows.find((c: DuplicateCandidateRow) => {
     if (candidate.idToExclude && c.id === candidate.idToExclude) {
+      return false;
+    }
+    if (c.status === 'cancelled') {
       return false;
     }
 
@@ -996,16 +1003,11 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
     }
 
     // Contrôle d'habilitation et d'appartenance :
-    // - Les administrateurs peuvent modifier le statut de toutes les opérations.
-    // - Pour la comptabilisation (newStatus === 'posted'), la caissière autorisée (disposant de cashier.status_update) est habilitée à comptabiliser les écritures de caisse.
-    // - Pour les autres changements (annulation / remise en brouillon hors profil habilité), chaque utilisateur ne peut agir que sur ses propres écritures.
-    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere';
-    if (!isAuthorizedCashier && newStatus === 'posted') {
-      res.status(403).json({ error: 'Seul un administrateur ou une caissière autorisée peut comptabiliser des opérations de caisse.' });
-      return;
-    }
-
-    if (userRole !== 'admin' && !(isAuthorizedCashier && newStatus === 'posted')) {
+    // - Les administrateurs et caissières autorisées (disposant de la permission cashier.status_update)
+    //   sont habilités à gérer le statut (comptabiliser, annuler, remettre en brouillon) des opérations de caisse.
+    // - Pour les autres utilisateurs non habilités à la gestion de caisse, la modification est restreinte à leurs propres écritures.
+    const isAuthorizedCashier = userRole === 'admin' || userRole === 'caissiere' || userRole === 'manager';
+    if (!isAuthorizedCashier) {
       if (!callerId) {
         res.status(403).json({ error: 'Utilisateur non identifié. Modification de statut refusée.' });
         return;
@@ -1117,7 +1119,7 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
           userId: callerId,
           userEmail: authenticatedUser?.email,
           userRole,
-          action: 'RESET_TO_DRAFT_OPERATION',
+          action: previousStatus === 'cancelled' ? 'RESET_CANCELLED_OPERATION' : 'RESET_TO_DRAFT_OPERATION',
           entityId: row.id,
           details: {
             piece_comptable: row.piece_comptable,

@@ -1,6 +1,6 @@
-import { PLATFORM_ID } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { Injector, PLATFORM_ID, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { CashierService } from './cashier.service';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
@@ -25,9 +25,9 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
-    TestBed.configureTestingModule({
+    const injector = Injector.create({
       providers: [
-        CashierService,
+        provideZonelessChangeDetection(),
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
           provide: NotificationService,
@@ -71,7 +71,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
-    service = TestBed.inject(CashierService);
+    service = runInInjectionContext(injector, () => new CashierService());
   });
 
   afterEach(() => {

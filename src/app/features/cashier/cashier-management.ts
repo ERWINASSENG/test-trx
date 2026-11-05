@@ -738,14 +738,23 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async onCancelSelectedAction(): Promise<void> {
-    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
-    if (this.isCancelling() || !confirm(`Annuler ${this.selectedCount()} opération(s) sélectionnée(s) ? Les numéros de pièce seront conservés.`)) return;
+    if (!this.canCancelCashierOperations() || this.selectedCount() === 0 || this.isCancelling()) return;
 
     this.isCancelling.set(true);
+    const countToCancel = this.selectedCount();
     this.closeActionsMenu();
     try {
       const success = await this.cashierService.cancelSelected();
-      if (!success && this.error()) console.warn('Avertissement annulation:', this.error());
+      if (success) {
+        this.notificationService.success(
+          countToCancel > 1
+            ? `${countToCancel} opérations ont été annulées avec succès.`
+            : 'L’opération a été annulée avec succès.',
+          'Annulation effectuée'
+        );
+      } else if (this.error()) {
+        console.warn('Avertissement annulation:', this.error());
+      }
     } finally {
       this.isCancelling.set(false);
     }
