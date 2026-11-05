@@ -69,6 +69,10 @@
                       Dupliquer
                     </button>
                   }
+                  <button type="button" (click)="onSelectAllDraftsAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10 sm:whitespace-nowrap" role="menuitem">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">done_all</mat-icon>
+                      Sélectionner tous les brouillons
+                    </button>
                   @if (canPostCashierOperations()) {
                     <button
                       type="button"

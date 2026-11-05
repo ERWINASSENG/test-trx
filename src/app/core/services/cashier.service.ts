@@ -1968,6 +1968,31 @@ export class CashierService implements OnDestroy {
   }
 
   /**
+   * Sélectionne tous les brouillons ('draft') du journal actif
+   * et désélectionne les opérations d'autres statuts.
+   * Retourne le nombre total de brouillons sélectionnés.
+   */
+  public selectAllDrafts(): number {
+    const activeJournalTransactions = this.journalTransactions();
+    const draftIds = new Set(
+      activeJournalTransactions
+        .filter((t) => t.status === 'draft')
+        .map((t) => t.id)
+    );
+
+    this._transactions.update((items) =>
+      items.map((item) => {
+        if (draftIds.has(item.id)) {
+          return { ...item, selected: true };
+        }
+        return item.selected ? { ...item, selected: false } : item;
+      })
+    );
+
+    return draftIds.size;
+  }
+
+  /**
    * ───────────────────────────────────────────────────────────────────────────
    * SYNCHRONISATION EN TEMPS RÉEL (SUPABASE REALTIME WEBSOCKET)
    * ───────────────────────────────────────────────────────────────────────────
