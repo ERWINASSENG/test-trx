@@ -1,4 +1,4 @@
-import { PLATFORM_ID } from '@angular/core';
+import { PLATFORM_ID, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -28,6 +28,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        CashierService,
         provideZonelessChangeDetection(),
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
@@ -72,7 +73,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
-    service = runInInjectionContext(injector, () => new CashierService());
+    service = TestBed.inject(CashierService);
   });
 
   afterEach(() => {
@@ -760,6 +761,88 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       expect(success).toBe(false);
       expect(service.allTransactions()[0].status).toBe('draft');
       expect(service.error()).toContain('Action refusée');
+    });
+  });
+
+  describe('selectAllDrafts', () => {
+    it('devrait sélectionner uniquement les opérations en brouillon du journal actif et désélectionner les autres', () => {
+      const mockRows = [
+        {
+          id: 'draft-1',
+          date: '2026-10-01',
+          libelle: 'Brouillon 1',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -5000,
+          selected: false,
+        },
+        {
+          id: 'posted-1',
+          date: '2026-10-02',
+          libelle: 'Comptabilisé 1',
+          category: 'entree' as const,
+          status: 'posted' as const,
+          montant: 20000,
+          selected: true,
+        },
+        {
+          id: 'draft-2',
+          date: '2026-10-03',
+          libelle: 'Brouillon 2',
+          category: 'sortie' as const,
+          status: 'draft' as const,
+          montant: -12000,
+          selected: false,
+        },
+        {
+          id: 'cancelled-1',
+          date: '2026-10-04',
+          libelle: 'Annulé 1',
+          category: 'sortie' as const,
+          status: 'cancelled' as const,
+          montant: -8000,
+          selected: true,
+        },
+      ];
+
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      const count = service.selectAllDrafts();
+
+      expect(count).toBe(2);
+      const all = service.allTransactions();
+      const draft1 = all.find((t) => t.id === 'draft-1');
+      const draft2 = all.find((t) => t.id === 'draft-2');
+      const posted1 = all.find((t) => t.id === 'posted-1');
+      const cancelled1 = all.find((t) => t.id === 'cancelled-1');
+
+      expect(draft1?.selected).toBe(true);
+      expect(draft2?.selected).toBe(true);
+      expect(posted1?.selected).toBe(false);
+      expect(cancelled1?.selected).toBe(false);
+    });
+
+    it('devrait retourner 0 si aucun brouillon n’est présent', () => {
+      const mockRows = [
+        {
+          id: 'posted-1',
+          date: '2026-10-02',
+          libelle: 'Comptabilisé 1',
+          category: 'entree' as const,
+          status: 'posted' as const,
+          montant: 20000,
+          selected: false,
+        },
+      ];
+
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      const count = service.selectAllDrafts();
+
+      expect(count).toBe(0);
+      expect(service.allTransactions()[0].selected).toBe(false);
     });
   });
 });
