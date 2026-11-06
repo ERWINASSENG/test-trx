@@ -710,6 +710,24 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     this.closeActionsMenu();
   }
 
+  public onSelectAllDraftsAction(): void {
+    this.closeActionsMenu();
+    const count = this.cashierService.selectAllDrafts();
+    if (count > 0) {
+      this.notificationService.info(
+        count > 1
+          ? `${count} opérations en brouillon ont été sélectionnées.`
+          : '1 opération en brouillon a été sélectionnée.',
+        'Sélection des brouillons'
+      );
+    } else {
+      this.notificationService.info(
+        'Aucune opération en brouillon n’est disponible dans ce journal.',
+        'Sélection des brouillons'
+      );
+    }
+  }
+
   public async onDuplicateAction(): Promise<void> {
     if (!this.canEdit() || this.selectedCount() === 0) return;
     this.closeActionsMenu();
