@@ -1,4 +1,5 @@
-import { Injector, PLATFORM_ID, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
+import { PLATFORM_ID } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CashierService } from './cashier.service';
@@ -25,9 +26,9 @@ describe('CashierService - Architecture Hybride & Signals', () => {
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
-    const injector = Injector.create({
+    TestBed.configureTestingModule({
       providers: [
-        provideZonelessChangeDetection(),
+        CashierService,
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
           provide: NotificationService,
@@ -71,7 +72,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
-    service = runInInjectionContext(injector, () => new CashierService());
+    service = TestBed.inject(CashierService);
   });
 
   afterEach(() => {
@@ -759,5 +760,57 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       expect(service.allTransactions()[0].status).toBe('draft');
       expect(service.error()).toContain('Action refusée');
     });
+  });
+
+  it('devrait regrouper les opérations par année dans le tri par pièce comptable sans mélanger 2026 et 2023', () => {
+    const mockRows = [
+      {
+        id: 'tx-2023-16',
+        piece_comptable: 'CSH1/2023/00016',
+        date: '2023-09-11',
+        libelle: 'Apéritif pour la DG',
+        category: 'sortie' as const,
+        status: 'posted' as const,
+        montant: -22000,
+      },
+      {
+        id: 'tx-2026-01',
+        piece_comptable: 'CSH1/2026/00001',
+        date: '2026-10-03',
+        libelle: 'RAS1',
+        category: 'entree' as const,
+        status: 'posted' as const,
+        montant: 100000,
+      },
+      {
+        id: 'tx-2023-24',
+        piece_comptable: 'CSH1/2023/00024',
+        date: '2023-09-11',
+        libelle: 'Lavage AUTO DUSTER LT762FH',
+        category: 'sortie' as const,
+        status: 'posted' as const,
+        montant: -5000,
+      },
+      {
+        id: 'tx-2026-16',
+        piece_comptable: 'CSH1/2026/00016',
+        date: '2026-09-10',
+        libelle: 'Facture RTC/ 2640018',
+        category: 'sortie' as const,
+        status: 'posted' as const,
+        montant: -490400,
+      },
+    ];
+
+    const mapped = service.mapDatabaseOperations(mockRows);
+    (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+    const sortedPieces = service.filteredTransactions().map((t) => t.pieceComptable);
+    expect(sortedPieces).toEqual([
+      'CSH1/2026/00016',
+      'CSH1/2026/00001',
+      'CSH1/2023/00024',
+      'CSH1/2023/00016',
+    ]);
   });
 });

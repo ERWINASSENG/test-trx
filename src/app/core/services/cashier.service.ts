@@ -185,10 +185,20 @@ export class CashierService implements OnDestroy {
   }
 
   /**
-   * Extrait le numéro séquentiel numérique d'une référence de pièce comptable (ex: "CSH1/2026/00011" -> 11)
+   * Extrait la clé numérique de tri d'une référence de pièce comptable
+   * en combinant l'année et le numéro séquentiel (ex: "CSH1/2026/00011" -> 2026000011)
+   * afin de ne jamais mélanger des opérations d'années différentes.
    */
   public extractPieceSequence(piece?: string): number {
     if (!piece) return 0;
+    const yearSeqMatch = piece.match(/\/(\d{4})\/(\d+)$/);
+    if (yearSeqMatch) {
+      const year = parseInt(yearSeqMatch[1], 10);
+      const seq = parseInt(yearSeqMatch[2], 10);
+      if (Number.isFinite(year) && Number.isFinite(seq)) {
+        return year * 1_000_000 + seq;
+      }
+    }
     const match = piece.match(/\/(\d+)$/);
     return match ? parseInt(match[1], 10) : 0;
   }
