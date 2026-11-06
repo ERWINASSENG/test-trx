@@ -12,7 +12,12 @@ import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
-import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
+import {
+  formatPersistedPieceComptable,
+  isDuplicateCashierCandidate,
+  normalizeDateToDay,
+  requiresCashierDraftBeforeEdit,
+} from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
@@ -299,6 +304,7 @@ interface DuplicateCandidateRow {
   date: string;
   libelle: string;
   montant: number;
+  status?: string | null;
   service?: string | null;
   no_dossier?: string | null;
 }
@@ -307,6 +313,8 @@ interface DuplicateCandidateRow {
  * Vérifie si une transaction de caisse identique existe déjà en base de données.
  * Critères d'unicité stricts : Date (jour) + Montant + Libellé + N° de dossier/matricule + Service.
  * Bloque universellement la double saisie (que l'auteur soit le même caissier ou un autre).
+ * NOTE MÉTIER : Les opérations annulées (status === 'cancelled') sont exclues du contrôle
+ * afin de permettre de réimporter ou ressaisir une ligne légitimement annulée.
  */
 const checkDuplicateCashierTransaction = async (
   adminClient: SupabaseClient,
@@ -320,16 +328,12 @@ const checkDuplicateCashierTransaction = async (
   }
 ): Promise<{ isDuplicate: boolean; existing?: DuplicateCandidateRow }> => {
   const normDay = normalizeDateToDay(candidate.date);
-  const normLibelle = candidate.libelle.toLowerCase().trim().replace(/\s+/g, ' ');
-  const normNoDossier = (candidate.noDossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const normService = (candidate.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
-
   const absMontant = Math.abs(Number(candidate.montant));
 
   // Requête optimisée ciblée sur le jour et le montant pour éviter les balayages complets de table
   let candidateQuery = adminClient
     .from('cashier_transactions')
-    .select('id, date, libelle, montant, service, no_dossier')
+    .select('id, date, libelle, montant, status, service, no_dossier')
     .or(`montant.eq.${candidate.montant},montant.eq.${-candidate.montant},montant.eq.${absMontant},montant.eq.${-absMontant}`);
 
   if (normDay) {
@@ -343,29 +347,7 @@ const checkDuplicateCashierTransaction = async (
   }
 
   const rows = candidates as unknown as DuplicateCandidateRow[];
-  const duplicate = rows.find((c: DuplicateCandidateRow) => {
-    if (candidate.idToExclude && c.id === candidate.idToExclude) {
-      return false;
-    }
-
-    const cDay = normalizeDateToDay(c.date);
-    if (cDay !== normDay) return false;
-
-    // Comparaison du montant en valeur absolue arrondie
-    const cAbs = Math.abs(Number(c.montant));
-    if (Math.round(cAbs * 100) !== Math.round(absMontant * 100)) return false;
-
-    const cLib = String(c.libelle || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cLib !== normLibelle) return false;
-
-    const cDos = String(c.no_dossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cDos !== normNoDossier) return false;
-
-    const cSrv = String(c.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cSrv !== normService) return false;
-
-    return true;
-  });
+  const duplicate = rows.find((c: DuplicateCandidateRow) => isDuplicateCashierCandidate(candidate, c));
 
   return { isDuplicate: !!duplicate, existing: duplicate };
 };

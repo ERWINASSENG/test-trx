@@ -202,11 +202,13 @@ export function normalizePieceComptable(piece?: string | null): string {
  */
 export function findDuplicatePieceComptable<T extends {
   id?: string;
+  status?: string | null;
   pieceComptable?: string | null;
   piece_comptable?: string | null;
 }>(
   candidate: {
     id?: string;
+    status?: string | null;
     pieceComptable?: string | null;
     piece_comptable?: string | null;
   },
@@ -221,6 +223,10 @@ export function findDuplicatePieceComptable<T extends {
     if (candidate.id && item.id && candidate.id === item.id) {
       return false;
     }
+    // Une opération annulée ne bloque plus l'unicité
+    if (item.status === 'cancelled') {
+      return false;
+    }
     const itemPiece = normalizePieceComptable(item.pieceComptable ?? item.piece_comptable);
     return itemPiece === targetPiece;
   });
@@ -230,6 +236,8 @@ export function findDuplicatePieceComptable<T extends {
  * Recherche si une opération donnée est un doublon d'une liste d'opérations existantes :
  * 1. En priorité absolue : unicité stricte du numéro de pièce comptable si renseigné.
  * 2. En second lieu : empreinte métier (Date + Montant + Libellé + N° de dossier/matricule + Service).
+ * NOTE MÉTIER : Les opérations annulées (status === 'cancelled') sont exclues du contrôle
+ * afin de permettre de réimporter ou ressaisir une ligne légitimement annulée.
  * Retourne la transaction existante correspondante si trouvée, sinon undefined.
  */
 export function findDuplicateTransaction<T extends {
@@ -237,6 +245,7 @@ export function findDuplicateTransaction<T extends {
   date?: string | null;
   montant?: number | string | null;
   category?: string | null;
+  status?: string | null;
   libelle?: string | null;
   noDossier?: string | null;
   service?: string | null;
@@ -248,6 +257,7 @@ export function findDuplicateTransaction<T extends {
     date?: string | null;
     montant?: number | string | null;
     category?: string | null;
+    status?: string | null;
     libelle?: string | null;
     noDossier?: string | null;
     service?: string | null;
@@ -271,6 +281,10 @@ export function findDuplicateTransaction<T extends {
   return existingList.find((item) => {
     // Si on modifie une ligne existante, on ignore sa propre comparaison par ID
     if (candidate.id && item.id && candidate.id === item.id) {
+      return false;
+    }
+    // Une opération annulée ne bloque plus la détection de doublons
+    if (item.status === 'cancelled') {
       return false;
     }
     return generateTransactionFingerprint(item) === candidateFingerprint;
