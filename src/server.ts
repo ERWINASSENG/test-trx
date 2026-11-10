@@ -1148,13 +1148,103 @@ cashierOperationAliases.forEach((path) => {
   app.patch(`${path}/:id`, requireAuth, requirePermission('cashier.update'), updateOperationHandler);
 });
 
+/**
+ * Suppression d'opérations de caisse (DELETE /api/cahier/operations et /:id)
+ * Strictement réservée à l'administrateur (role === 'admin' et permission cashier.delete).
+ * Déclenche le recompactage automatique des pièces comptables sans trou en base.
+ */
+export const deleteOperationsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY manquante' });
+    return;
+  }
+
+  try {
+    const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { id?: string; email?: string; role?: string } | undefined;
+    const callerId = authenticatedUser?.id || null;
+    const userRole = authenticatedUser?.role;
+
+    if (userRole !== 'admin') {
+      res.status(403).json({ error: 'Seul un administrateur peut supprimer définitivement des opérations de caisse.' });
+      return;
+    }
+
+    let targetIds: string[] = [];
+    if (req.params['id']) {
+      targetIds = [req.params['id']];
+    } else if (Array.isArray(req.body?.ids)) {
+      targetIds = req.body.ids;
+    }
+
+    if (targetIds.length === 0) {
+      res.status(400).json({ error: 'Aucun identifiant d’opération fourni pour la suppression.' });
+      return;
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (targetIds.length > 100 || targetIds.some((id) => typeof id !== 'string' || !uuidRegex.test(id)) || new Set(targetIds).size !== targetIds.length) {
+      res.status(400).json({ error: 'La suppression accepte au maximum 100 identifiants UUID valides et distincts.' });
+      return;
+    }
+
+    const { data: rowsToDelete, error: fetchErr } = await adminClient
+      .from('cashier_transactions')
+      .select('id, piece_comptable, montant, libelle, date, status')
+      .in('id', targetIds);
+
+    if (fetchErr) {
+      console.error('[CASHIER_DELETE] Erreur lecture avant suppression:', fetchErr.message);
+      res.status(500).json({ error: 'Erreur lors de la vérification des opérations à supprimer.' });
+      return;
+    }
+
+    if (!rowsToDelete || rowsToDelete.length === 0) {
+      res.status(404).json({ error: 'Aucune opération correspondante trouvée.' });
+      return;
+    }
+
+    const { error: deleteErr } = await adminClient
+      .from('cashier_transactions')
+      .delete()
+      .in('id', rowsToDelete.map((r) => r.id));
+
+    if (deleteErr) {
+      console.error('[CASHIER_DELETE] Erreur suppression en base:', deleteErr.message);
+      res.status(500).json({ error: 'Erreur lors de la suppression des opérations en base de données.' });
+      return;
+    }
+
+    await Promise.all(rowsToDelete.map((row) => writeAuditLog(adminClient, {
+      userId: callerId,
+      userEmail: authenticatedUser?.email,
+      userRole,
+      action: 'DELETE_OPERATION',
+      entityId: row.id,
+      details: {
+        piece_comptable: row.piece_comptable,
+        libelle: row.libelle,
+        montant: row.montant,
+        status: row.status,
+        date: row.date,
+      },
+      ipAddress: req.ip || null,
+    })));
+
+    res.json({
+      success: true,
+      message: `${rowsToDelete.length} opération(s) supprimée(s) définitivement.`,
+      count: rowsToDelete.length,
+    });
+  } catch (err: unknown) {
+    console.error('Erreur deleteOperationsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la suppression des opérations.' });
+  }
+};
+
 cashierOperationAliases.forEach((path) => {
-  app.delete(`${path}/:id`, requireAuth, requirePermission('cashier.delete'), (_req, res) => {
-    res.status(410).json({ error: 'La suppression définitive est désactivée. Annulez l’opération pour conserver sa pièce comptable.' });
-  });
-  app.delete(path, requireAuth, requirePermission('cashier.delete'), (_req, res) => {
-    res.status(410).json({ error: 'La suppression définitive est désactivée. Annulez l’opération pour conserver sa pièce comptable.' });
-  });
+  app.delete(`${path}/:id`, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
+  app.delete(path, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
 });
 
 /**

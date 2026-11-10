@@ -460,4 +460,70 @@ describe('CashierManagement', () => {
       expect(postSelectedSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('Suppression définitive (Admin only avec recompactage)', () => {
+    it('devrait interdire la suppression définitive pour le rôle caissière', () => {
+      currentRole.set('caissiere');
+      expect(component.canDeleteCashierOperations()).toBe(false);
+    });
+
+    it('devrait autoriser la suppression définitive pour le rôle admin', () => {
+      currentRole.set('admin');
+      expect(component.canDeleteCashierOperations()).toBe(true);
+    });
+
+    it('devrait appeler cashierService.deleteSelected et afficher un message de succès pour l’admin', async () => {
+      currentRole.set('admin');
+      const deleteSelectedSpy = vi.spyOn(service, 'deleteSelected').mockResolvedValue(true);
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const successSpy = vi.spyOn(notificationService, 'success');
+
+      const mockOp = {
+        id: 'tx-delete-1',
+        date: '2026-10-05',
+        libelle: 'Opération à supprimer',
+        category: 'sortie' as const,
+        status: 'draft' as const,
+        montant: -10000,
+        selected: true,
+      };
+      const mapped = service.mapDatabaseOperations([mockOp]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      expect(component.selectedCount()).toBe(1);
+
+      await component.onDeleteSelectedAction();
+
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(deleteSelectedSpy).toHaveBeenCalled();
+      expect(successSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/supprimée définitivement/),
+        'Suppression effectuée'
+      );
+      expect(component.isDeleting()).toBe(false);
+    });
+
+    it('ne devrait pas appeler deleteSelected si l’administrateur annule la boîte de confirmation', async () => {
+      currentRole.set('admin');
+      const deleteSelectedSpy = vi.spyOn(service, 'deleteSelected');
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+      const mockOp = {
+        id: 'tx-delete-cancel',
+        date: '2026-10-05',
+        libelle: 'Opération non supprimée',
+        category: 'sortie' as const,
+        status: 'draft' as const,
+        montant: -10000,
+        selected: true,
+      };
+      const mapped = service.mapDatabaseOperations([mockOp]);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      await component.onDeleteSelectedAction();
+
+      expect(deleteSelectedSpy).not.toHaveBeenCalled();
+      expect(component.isDeleting()).toBe(false);
+    });
+  });
 });

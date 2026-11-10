@@ -27,6 +27,7 @@ import {
   Tooltip,
   Filler,
   ChartConfiguration,
+  ScriptableContext,
 } from 'chart.js';
 import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
@@ -240,24 +241,62 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const loadedBalance = list.reduce((total, tx) => total + (Number(tx.montant) || 0), 0);
-    let runningBalance = currentBalance - loadedBalance;
-    const labels: string[] = [];
-    const balances: number[] = [];
-    const descriptions: string[] = [];
+    const openingBalance = currentBalance - loadedBalance;
+    let runningBalance = openingBalance;
+
+    const dailyBuckets = new Map<
+      string,
+      { label: string; closingBalance: number; count: number; lastDescription: string }
+    >();
 
     for (const tx of list) {
-      runningBalance += tx.montant;
+      runningBalance += Number(tx.montant) || 0;
       const parsedDate = parseTransactionDate(tx.date);
-      const formattedDate = parsedDate.getTime() > 0
+      const isValidDate = parsedDate.getTime() > 0;
+      const dayKey = isValidDate
+        ? `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+        : tx.date || 'Opération';
+      const formattedDate = isValidDate
         ? parsedDate.toLocaleDateString('fr-FR', {
             day: '2-digit',
             month: 'short',
           })
         : tx.date || 'Opération';
+      const desc = tx.libelle || tx.typeDescription || 'Mouvement de caisse';
 
-      labels.push(formattedDate);
-      balances.push(runningBalance);
-      descriptions.push(tx.libelle || tx.typeDescription || 'Mouvement de caisse');
+      const existing = dailyBuckets.get(dayKey);
+      if (existing) {
+        existing.closingBalance = runningBalance;
+        existing.count += 1;
+        existing.lastDescription = desc;
+      } else {
+        dailyBuckets.set(dayKey, {
+          label: formattedDate,
+          closingBalance: runningBalance,
+          count: 1,
+          lastDescription: desc,
+        });
+      }
+    }
+
+    const labels: string[] = [];
+    const balances: number[] = [];
+    const descriptions: string[] = [];
+
+    for (const bucket of dailyBuckets.values()) {
+      labels.push(bucket.label);
+      balances.push(bucket.closingBalance);
+      descriptions.push(
+        bucket.count === 1
+          ? bucket.lastDescription
+          : `${bucket.count} opérations · Dernière : ${bucket.lastDescription}`
+      );
+    }
+
+    if (labels.length === 1) {
+      labels.unshift('Solde antérieur');
+      balances.unshift(openingBalance);
+      descriptions.unshift('Solde antérieur');
     }
 
     return { labels, balances, descriptions };
@@ -343,9 +382,6 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     if (!ctx) return;
 
     const data = this.chartData();
-    const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-    gradient.addColorStop(0, 'rgba(11, 94, 215, 0.22)');
-    gradient.addColorStop(1, 'rgba(11, 94, 215, 0.0)');
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
@@ -355,26 +391,39 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
           {
             label: 'Solde de caisse',
             data: data.balances,
-            borderColor: '#0b5ed7',
+            borderColor: '#3b82f6',
             borderWidth: 2.5,
-            backgroundColor: gradient,
+            backgroundColor: (context: ScriptableContext<'line'>) =>
+              this.createAreaGradient(context),
             fill: true,
-            tension: 0.35,
-            pointBackgroundColor: '#ffffff',
-            pointBorderColor: '#0b5ed7',
-            pointBorderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 7,
-            pointHoverBackgroundColor: '#0b5ed7',
+            cubicInterpolationMode: 'monotone',
+            tension: 0.3,
+            pointRadius: 0,
+            pointHitRadius: 12,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#3b82f6',
             pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2.5,
+            pointHoverBorderWidth: 2,
           },
         ],
       },
-      options: this.getCommonChartOptions(data.descriptions),
+      options: this.getCommonChartOptions(data.descriptions, data.balances),
     };
 
     this.caisseChartInstance = new Chart(ctx, config);
+  }
+
+  private createAreaGradient(context: ScriptableContext<'line'>): CanvasGradient | string {
+    const chart = context.chart;
+    const { ctx, chartArea } = chart;
+    if (!ctx) return 'rgba(59, 130, 246, 0.14)';
+    const top = chartArea ? chartArea.top : 0;
+    const bottom = chartArea ? chartArea.bottom : chart.height || 360;
+    const gradient = ctx.createLinearGradient(0, top, 0, Math.max(bottom, top + 1));
+    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.28)');
+    gradient.addColorStop(0.65, 'rgba(59, 130, 246, 0.08)');
+    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+    return gradient;
   }
 
   // Charge et affiche les graphiques pour tous les journaux bancaires/additionnels en parallèle
@@ -415,22 +464,22 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const labels = data.labels.length > 0 ? data.labels : ['Départ', 'Aujourd’hui'];
+    const balances = data.balances.length > 0 ? data.balances : [0, 0];
+
     const existing = this.journalChartsMap.get(journalId);
     if (existing) {
-      existing.data.labels = data.labels.length > 0 ? data.labels : ['Départ', 'Aujourd’hui'];
+      existing.data.labels = labels;
       if (existing.data.datasets[0]) {
-        existing.data.datasets[0].data = data.balances.length > 0 ? data.balances : [0, 0];
+        existing.data.datasets[0].data = balances;
+      }
+      const nextOptions = this.getCommonChartOptions(data.descriptions, balances);
+      if (nextOptions) {
+        existing.options = nextOptions;
       }
       existing.update('none');
       return;
     }
-
-    const labels = data.labels.length > 0 ? data.labels : ['Départ', 'Aujourd’hui'];
-    const balances = data.balances.length > 0 ? data.balances : [0, 0];
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, 220);
-    gradient.addColorStop(0, 'rgba(11, 94, 215, 0.22)');
-    gradient.addColorStop(1, 'rgba(11, 94, 215, 0.0)');
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
@@ -440,30 +489,34 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
           {
             label: 'Solde du journal',
             data: balances,
-            borderColor: '#0b5ed7',
-            borderWidth: 2.2,
-            backgroundColor: gradient,
+            borderColor: '#3b82f6',
+            borderWidth: 2.5,
+            backgroundColor: (context: ScriptableContext<'line'>) =>
+              this.createAreaGradient(context),
             fill: true,
-            tension: 0.35,
-            pointBackgroundColor: '#ffffff',
-            pointBorderColor: '#0b5ed7',
-            pointBorderWidth: 2,
-            pointRadius: 3.5,
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#0b5ed7',
+            cubicInterpolationMode: 'monotone',
+            tension: 0.3,
+            pointRadius: 0,
+            pointHitRadius: 12,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#3b82f6',
             pointHoverBorderColor: '#ffffff',
             pointHoverBorderWidth: 2,
           },
         ],
       },
-      options: this.getCommonChartOptions(data.descriptions),
+      options: this.getCommonChartOptions(data.descriptions, balances),
     };
 
     const newChart = new Chart(ctx, config);
     this.journalChartsMap.set(journalId, newChart);
   }
 
-  private getCommonChartOptions(descriptions: string[]): ChartConfiguration<'line'>['options'] {
+  private getCommonChartOptions(
+    descriptions: string[],
+    balances: number[] = []
+  ): ChartConfiguration<'line'>['options'] {
+    const minBalance = balances.length > 0 ? Math.min(...balances) : 0;
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -502,12 +555,14 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
             font: { size: 11 },
             maxRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 6,
+            maxTicksLimit: 7,
           },
           border: { display: false },
         },
         y: {
-          grid: { color: 'rgba(226, 232, 240, 0.5)' },
+          min: minBalance >= 0 ? 0 : undefined,
+          grace: '5%',
+          grid: { color: 'rgba(148, 163, 184, 0.12)' },
           ticks: {
             color: '#94a3b8',
             font: { size: 11 },
@@ -529,6 +584,10 @@ export class DashboardManager implements OnInit, AfterViewInit, OnDestroy {
     this.caisseChartInstance.data.labels = data.labels;
     if (this.caisseChartInstance.data.datasets[0]) {
       this.caisseChartInstance.data.datasets[0].data = data.balances;
+    }
+    const nextOptions = this.getCommonChartOptions(data.descriptions, data.balances);
+    if (nextOptions) {
+      this.caisseChartInstance.options = nextOptions;
     }
     this.caisseChartInstance.update('none');
   }

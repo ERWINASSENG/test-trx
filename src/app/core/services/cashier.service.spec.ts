@@ -28,7 +28,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        provideZonelessChangeDetection(),
+        CashierService,
         { provide: PLATFORM_ID, useValue: 'browser' },
         {
           provide: NotificationService,
@@ -72,7 +72,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
         },
       ],
     });
-    service = runInInjectionContext(injector, () => new CashierService());
+    service = TestBed.inject(CashierService);
   });
 
   afterEach(() => {

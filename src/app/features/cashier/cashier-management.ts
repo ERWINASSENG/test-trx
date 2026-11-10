@@ -218,6 +218,17 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
     return this.accessControlService.hasPermission('journal_entries.update');
   });
 
+  public readonly canDeleteCashierOperations = computed(() => {
+    const journalId = this.cashierService.activeJournalId();
+    const isMainCashier =
+      !journalId ||
+      journalId === 'native-caisse-principal' ||
+      journalId === 'CSH1' ||
+      this.cashierService.activeJournalPrefix() === 'CSH1';
+    const role = this.authService.currentRole();
+    return isMainCashier && role === 'admin' && this.accessControlService.hasPermission('cashier.delete');
+  });
+
   // Données réactives issues du service
   public readonly pagedTransactions = this.cashierService.pagedTransactions;
   public readonly allTransactions = this.cashierService.allTransactions;
@@ -241,6 +252,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly isAddingRow = this.cashierService.isAddingRow;
   public readonly isSubmitting = signal<boolean>(false);
   public readonly isCancelling = signal<boolean>(false);
+  public readonly isDeleting = signal<boolean>(false);
   public readonly isPosting = signal<boolean>(false);
   public readonly isFilterDropdownOpen = signal<boolean>(false);
   public readonly isActionsMenuOpen = signal<boolean>(false);
@@ -765,6 +777,37 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       }
     } finally {
       this.isCancelling.set(false);
+    }
+  }
+
+  public async onDeleteSelectedAction(): Promise<void> {
+    if (!this.canDeleteCashierOperations() || this.selectedCount() === 0 || this.isDeleting()) return;
+
+    const countToDelete = this.selectedCount();
+    const confirmMessage = countToDelete > 1
+      ? `Êtes-vous sûr de vouloir supprimer définitivement ces ${countToDelete} opérations ? Les numéros de pièces seront automatiquement recompactés sans aucun trou.`
+      : 'Êtes-vous sûr de vouloir supprimer définitivement cette opération ? Les numéros de pièces seront automatiquement recompactés sans aucun trou.';
+
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+      return;
+    }
+
+    this.isDeleting.set(true);
+    this.closeActionsMenu();
+    try {
+      const success = await this.cashierService.deleteSelected();
+      if (success) {
+        this.notificationService.success(
+          countToDelete > 1
+            ? `${countToDelete} opérations ont été supprimées définitivement.`
+            : 'L’opération a été supprimée définitivement.',
+          'Suppression effectuée'
+        );
+      } else if (this.error()) {
+        this.notificationService.error(this.error() || 'Erreur lors de la suppression.', 'Erreur');
+      }
+    } finally {
+      this.isDeleting.set(false);
     }
   }
 

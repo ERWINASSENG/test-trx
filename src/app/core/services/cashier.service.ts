@@ -1317,6 +1317,87 @@ export class CashierService implements OnDestroy {
 
   /**
    * ───────────────────────────────────────────────────────────────────────────
+   * 3bis. SUPPRESSION DÉFINITIVE D'OPÉRATIONS (ADMIN ONLY AVEC RECOMPACTAGE SANS TROU)
+   * ───────────────────────────────────────────────────────────────────────────
+   */
+  public async deleteTransaction(id: string): Promise<boolean> {
+    if (!id) return false;
+    return this.deleteTransactions([id]);
+  }
+
+  public async deleteSelected(): Promise<boolean> {
+    const selected = this.journalTransactions().filter((t) => t.selected);
+    let selectedIds = selected.map((t) => t.id);
+
+    if (selectedIds.length === 0) {
+      selectedIds = this._transactions()
+        .filter((t) => t.selected)
+        .map((t) => t.id);
+    }
+
+    if (selectedIds.length === 0) return true;
+    return this.deleteTransactions(selectedIds);
+  }
+
+  private async deleteTransactions(targetIds: string[]): Promise<boolean> {
+    if (targetIds.length === 0) return true;
+
+    this._error.set(null);
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
+        token = sessionData.session?.access_token || null;
+      } catch {
+        // Ignorer
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let response: Response;
+    try {
+      response = await fetch('/api/cahier/operations', {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ ids: targetIds }),
+      });
+    } catch (networkError: unknown) {
+      console.warn('Erreur réseau lors de la suppression des opérations:', networkError);
+      this.setError('Impossible de joindre le service de caisse pour supprimer les opérations. Vérifiez votre connexion puis réessayez.');
+      return false;
+    }
+
+    if (!response.ok) {
+      const errorPayload: unknown = await response.json().catch(() => null);
+      const serverMessage = getApiErrorMessage(
+        errorPayload,
+        `Impossible de supprimer les opérations (erreur HTTP ${response.status}).`
+      );
+      this.setError(serverMessage);
+      return false;
+    }
+
+    // Retirer immédiatement les lignes supprimées du Signal local
+    this._transactions.update((items) =>
+      items.filter((it) => !targetIds.includes(it.id))
+    );
+    this.recalculateRunningBalances();
+    this.toggleSelectAll(false);
+
+    // Recharger la liste complète et le solde pour synchroniser la renumérotation sans trou effectuée par le trigger DB
+    await this.loadTransactions();
+    await this.loadCashierSummary();
+
+    return true;
+  }
+
+  /**
+   * ───────────────────────────────────────────────────────────────────────────
    * 4. EXPORT DES OPÉRATIONS DE CAISSE (DÉLÉGUÉ À EXPORTSERVICE)
    * ───────────────────────────────────────────────────────────────────────────
    * Exporte soit les lignes sélectionnées, soit l'ensemble des opérations filtrées visibles.
