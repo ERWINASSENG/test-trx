@@ -1153,8 +1153,9 @@ export const deleteOperationsHandler = async (req: express.Request, res: express
     }
 
     let targetIds: string[] = [];
-    if (req.params['id']) {
-      targetIds = [req.params['id']];
+    const rawId = req.params['id'];
+    if (rawId) {
+      targetIds = [Array.isArray(rawId) ? rawId[0] : rawId];
     } else if (Array.isArray(req.body?.ids)) {
       targetIds = req.body.ids;
     }
