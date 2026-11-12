@@ -451,10 +451,12 @@ export class AccessControlCenter implements OnInit, OnDestroy {
       this.userAssignmentError.set(result.error || 'Impossible d’attribuer ce rôle.');
       return;
     }
-    await this.accessControl.loadUserAccess(userId);
-    await this.accessControl.loadUsers();
     this.userRoleDraft.set('');
     this.setFeedback('Rôle attribué avec succès.');
+    await Promise.all([
+      this.accessControl.loadUserAccess(userId),
+      this.accessControl.loadUsers(200, true),
+    ]);
   }
 
   public async revokeRole(assignment: AccessUserRole): Promise<void> {
@@ -469,9 +471,11 @@ export class AccessControlCenter implements OnInit, OnDestroy {
       this.userAssignmentError.set(result.error || 'Impossible de retirer ce rôle.');
       return;
     }
-    await this.accessControl.loadUserAccess(userId);
-    await this.accessControl.loadUsers();
     this.setFeedback('Rôle retiré avec succès.');
+    await Promise.all([
+      this.accessControl.loadUserAccess(userId),
+      this.accessControl.loadUsers(200, true),
+    ]);
   }
 
   public async saveOverride(): Promise<void> {
