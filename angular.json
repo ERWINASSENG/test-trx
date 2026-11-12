@@ -69,8 +69,15 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true,
-              "externalDependencies": ["@google/genai"]
+              "sourceMap": false,
+              "externalDependencies": [
+                "@google/genai",
+                "express",
+                "express-rate-limit",
+                "helmet",
+                "jsonwebtoken",
+                "dotenv"
+              ]
             }
           },
           "defaultConfiguration": "production"

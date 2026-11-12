@@ -87,10 +87,10 @@
     </article>
   </section>
 
-  <!-- 2. Section Médiane : Entonnoir, Évolution CA et Réseau (Shadcn UI style) -->
+  <!-- 2. Section Médiane : Entonnoir et Évolution CA (Shadcn UI style) -->
   <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" aria-label="Tunnel et tendances des ventes">
     <!-- Entonnoir des ventes -->
-    <article class="lg:col-span-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
+    <article class="lg:col-span-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
       <div>
         <div class="mb-5">
           <h2 class="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
@@ -128,7 +128,7 @@
     </article>
 
     <!-- Évolution du chiffre d'affaires -->
-    <article class="lg:col-span-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
+    <article class="lg:col-span-7 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
       <div>
         <div class="mb-4">
           <h2 class="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
@@ -142,70 +142,6 @@
 
       <div class="relative w-full h-64">
         <canvas #revenueChartCanvas></canvas>
-      </div>
-    </article>
-
-    <!-- Notre réseau et nos activités -->
-    <article class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
-      <div>
-        <div class="mb-4">
-          <h2 class="text-base font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-            Notre réseau et nos activités
-          </h2>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Présence stratégique en Afrique Centrale
-          </p>
-        </div>
-
-        <!-- Carte SVG minimale de la sous-région CEMAC -->
-        <div class="relative w-full h-36 bg-slate-50 dark:bg-slate-900/40 rounded-lg p-2 flex items-center justify-center border border-slate-100 dark:border-slate-800/80 mb-5 overflow-hidden">
-          <svg viewBox="0 0 300 200" class="w-full h-full text-slate-300 dark:text-slate-700">
-            <path d="M 60,30 L 150,20 L 220,50 L 200,100 L 150,90 Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="0.5" />
-            <text x="175" y="45" font-size="9" fill="#94a3b8" font-family="system-ui">Tchad</text>
-
-            <path d="M 170,90 L 260,80 L 280,140 L 190,130 Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="0.5" />
-            <text x="220" y="115" font-size="9" fill="#94a3b8" font-family="system-ui">RCA</text>
-
-            <path d="M 120,140 L 190,140 L 200,190 L 130,190 Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="0.5" />
-            <text x="155" y="170" font-size="9" fill="#94a3b8" font-family="system-ui">Congo</text>
-
-            <path d="M 50,145 L 120,145 L 120,190 L 60,190 Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="0.5" />
-            <text x="75" y="170" font-size="9" fill="#94a3b8" font-family="system-ui">Gabon</text>
-
-            <path d="M 110,60 L 150,55 L 180,95 L 170,140 L 110,140 L 95,110 Z" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5" class="dark:fill-slate-800" />
-            <text x="122" y="100" font-size="10" font-weight="bold" fill="#ffffff" font-family="system-ui">Cameroun</text>
-
-            <path d="M 105,115 Q 140,50 170,45" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2" />
-            <path d="M 105,115 Q 160,105 210,110" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2" />
-            <path d="M 110,135 Q 140,155 160,165" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2,2" />
-
-            <circle cx="102" cy="115" r="4" fill="#ef4444" />
-            <text x="65" y="118" font-size="9" font-weight="bold" fill="#0f172a" class="dark:fill-slate-100" font-family="system-ui">Douala</text>
-
-            <circle cx="110" cy="135" r="4" fill="#ef4444" />
-            <text x="80" y="140" font-size="9" font-weight="bold" fill="#0f172a" class="dark:fill-slate-100" font-family="system-ui">Kribi</text>
-          </svg>
-        </div>
-
-        <!-- Liste d'infrastructures textuelle sobre (zéro icône) -->
-        <div class="space-y-3 text-xs">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800/60">
-            <span class="font-medium text-slate-900 dark:text-slate-100">Douala</span>
-            <span class="text-slate-500 dark:text-slate-400">Port principal</span>
-          </div>
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800/60">
-            <span class="font-medium text-slate-900 dark:text-slate-100">Kribi</span>
-            <span class="text-slate-500 dark:text-slate-400">Port en eau profonde</span>
-          </div>
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800/60">
-            <span class="font-medium text-slate-900 dark:text-slate-100">Réseau régional</span>
-            <span class="text-slate-500 dark:text-slate-400">Afrique Centrale</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="font-medium text-slate-900 dark:text-slate-100">Couverture mondiale</span>
-            <span class="text-slate-500 dark:text-slate-400">Corridors maritimes & aériens</span>
-          </div>
-        </div>
       </div>
     </article>
   </section>
