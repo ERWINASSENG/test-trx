@@ -1322,6 +1322,12 @@ app.put('/api/access-control/users/:userId/overrides', requireAuth, requirePermi
 app.delete('/api/access-control/users/:userId/overrides/:overrideId', requireAuth, requirePermission('access.users.override'), revokeUserPermissionOverrideHandler);
 app.get('/api/access-control/audit', requireAuth, requirePermission('access.audit.read'), listAccessAuditHandler);
 
+// Garde-fou pour toute route /api ou /api/* non reconnue :
+// garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Route API introuvable.' });
+});
+
 /**
  * Example Express Rest API endpoints can be defined here.
  * Uncomment and define endpoints as necessary.

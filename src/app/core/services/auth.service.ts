@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal, PLATFORM_ID, REQUEST } from '@angular/core';
+import { Injectable, computed, inject, signal, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { LoginCredentials, UserProfile, UserRole } from '../models/auth.model';
@@ -15,7 +15,6 @@ export class AuthService {
   private readonly router = inject(Router);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
-  private readonly serverRequest = inject(REQUEST, { optional: true });
 
   private sessionRestoredResolver!: () => void;
   public readonly sessionRestoredPromise: Promise<void>;
@@ -320,12 +319,7 @@ export class AuthService {
 
       if (!response.ok) {
         console.warn(`Lecture profil serveur échouée (HTTP ${response.status}).`);
-        let payload: unknown;
-        try {
-          payload = await response.json();
-        } catch {
-          payload = null;
-        }
+        const { data: payload } = await this.readJsonPayload(response);
         this.profileLoadError = this.getAuthErrorMessage(
           payload,
           response.status === 403
@@ -339,7 +333,14 @@ export class AuthService {
         return null;
       }
 
-      const payload = await response.json() as {
+      const { isJson, data } = await this.readJsonPayload(response);
+      if (!isJson || typeof data !== 'object' || data === null || Array.isArray(data)) {
+        console.warn('Lecture profil serveur interrompue : réponse JSON attendue.');
+        this.profileLoadError = 'Le service de vérification du profil a renvoyé une réponse invalide.';
+        return null;
+      }
+
+      const payload = data as {
         profile?: Record<string, unknown>;
         role?: string;
         customRole?: string | null;
@@ -632,26 +633,30 @@ export class AuthService {
   }
 
   private getProfileEndpoint(): string | null {
-    if (this.isBrowser) return '/api/profile/me';
+    // Sécurité : lecture du profil via /api/profile/me uniquement côté navigateur (requireAuth + rate-limit Express).
+    // En SSR, on évite toute boucle HTTP externe vers VERCEL_URL susceptible de renvoyer du HTML.
+    return this.isBrowser ? '/api/profile/me' : null;
+  }
 
-    if (typeof process !== 'undefined' && process.env) {
-      const configuredOrigin = process.env['APP_BASE_URL'] || process.env['VERCEL_URL'];
-      if (configuredOrigin) {
-        const baseUrl = configuredOrigin.startsWith('http')
-          ? configuredOrigin
-          : `https://${configuredOrigin}`;
-        return new URL('/api/profile/me', baseUrl).toString();
-      }
+  private async readJsonPayload(response: Response): Promise<{ isJson: boolean; data: unknown }> {
+    const contentType = typeof response.headers?.get === 'function'
+      ? response.headers.get('content-type')?.toLowerCase() ?? ''
+      : '';
+
+    if (contentType && !contentType.includes('application/json') && !contentType.includes('+json')) {
+      return { isJson: false, data: null };
     }
 
-    if (this.serverRequest && typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'production') {
-      const requestUrl = new URL(this.serverRequest.url);
-      if (requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1') {
-        return new URL('/api/profile/me', requestUrl.origin).toString();
-      }
+    if (typeof response.json !== 'function') {
+      return { isJson: false, data: null };
     }
 
-    return null;
+    try {
+      const data: unknown = await response.json();
+      return { isJson: true, data };
+    } catch {
+      return { isJson: false, data: null };
+    }
   }
 
   public setLocalSession(user: UserProfile, token: string): void {
@@ -667,24 +672,30 @@ export class AuthService {
    * Empêche toute perte ou rétrogradation de droits.
    */
   private async triggerServerRoleSync(accessToken: string): Promise<void> {
+    if (!this.isBrowser) return;
+
     try {
       const response = await fetch('/api/auth/sync-role', {
         method: 'POST',
         headers: {
+          Accept: 'application/json',
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
       });
 
       if (response.ok) {
-        const data = await response.json();
-        if (data && data.role && this._currentUser()) {
+        const { isJson, data } = await this.readJsonPayload(response);
+        const roleData = isJson && typeof data === 'object' && data !== null && !Array.isArray(data)
+          ? (data as { role?: unknown })
+          : null;
+        if (roleData && typeof roleData.role === 'string' && this._currentUser()) {
           const current = this._currentUser()!;
-          if (current.role !== data.role) {
+          if (current.role !== roleData.role) {
             const updatedProfile: UserProfile = {
               ...current,
-              role: data.role as UserRole,
-              roles: [data.role as UserRole],
+              role: roleData.role as UserRole,
+              roles: [roleData.role as UserRole],
             };
             this.setLocalSession(updatedProfile, accessToken);
           }
