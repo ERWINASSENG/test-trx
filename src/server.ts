@@ -22,7 +22,11 @@ import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from '.
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
-import { getDossierExpenseSummaryHandler, getOperationsHandler } from './server/cashier.read';
+import {
+  getDailyCashierReportHandler,
+  getDossierExpenseSummaryHandler,
+  getOperationsHandler,
+} from './server/cashier.read';
 import {
   assignDossierHandler,
   createDossierHandler,
@@ -1114,7 +1118,11 @@ const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transac
 cashierOperationAliases.forEach((path) => {
   app.get(path, requireAuth, requirePermission('cashier.read'), getOperationsHandler);
   app.get(`${path}/summary`, requireAuth, requirePermission('cashier.read'), getCashierSummaryHandler);
+  app.get(`${path}/daily-report`, requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
 });
+
+app.get('/api/cahier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
+app.get('/api/cashier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
 
 cashierOperationAliases.forEach((path) => {
   app.post(`${path}/duplicate`, requireAuth, requirePermission('cashier.duplicate'), duplicateOperationsHandler);

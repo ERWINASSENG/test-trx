@@ -46,3 +46,32 @@ export interface CashierFilterState {
   pageIndex: number;
   pageSize: number;
 }
+
+export interface DailyCashierReportItem {
+  id: string;
+  date: string; // Format DD/MM/YYYY
+  libelle: string;
+  noDossier?: string | null;
+  pieceComptable?: string | null;
+  partenaire?: string | null;
+  service?: string | null;
+  montant: number; // Valeur positive (absolue)
+  category: TransactionTypeCategory;
+}
+
+export interface DailyCashierReport {
+  date: string; // Format YYYY-MM-DD
+  displayDate: string; // Format DD/MM/YYYY
+  title: string; // Ex: "CAISSE TRX du 13/11/2026"
+  journalId: string;
+  journalName: string;
+  journalPrefix: string;
+  reportSolde: number;
+  recettes: DailyCashierReportItem[];
+  totalRecettes: number;
+  totalApresRecettes: number;
+  depenses: DailyCashierReportItem[];
+  totalDepenses: number;
+  soldeFinal: number;
+}
+

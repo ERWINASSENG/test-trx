@@ -159,6 +159,21 @@ export const routes: Routes = [
         title: 'Transmex - Caisse',
       },
       {
+        path: 'edition',
+        redirectTo: 'edition/rapport',
+        pathMatch: 'full',
+      },
+      {
+        path: 'edition/rapport',
+        loadComponent: () =>
+          import('./features/cashier/daily-report/cashier-daily-report').then(
+            (m) => m.CashierDailyReport
+          ),
+        canActivate: [roleGuard],
+        data: { permission: 'cashier.export' },
+        title: 'Transmex - Édition Rapport de Caisse',
+      },
+      {
         path: 'configuration',
         redirectTo: 'configuration/parametres',
         pathMatch: 'full',

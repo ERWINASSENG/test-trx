@@ -3,6 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import {
   CashierFilterState,
   CashierTransaction,
+  DailyCashierReport,
 } from '../models/cashier-transaction.model';
 import {
   findDuplicatePieceComptable,
@@ -1408,6 +1409,134 @@ export class CashierService implements OnDestroy {
     const dataset = onlySelected && selectedRows.length > 0 ? selectedRows : allFiltered;
 
     this.exportService.exportCashierTransactionsCsv(dataset);
+  }
+
+  /**
+   * Récupère depuis l'API serveur le rapport journalier de caisse complet
+   * (report de solde calculé en base + recettes/dépenses comptabilisées du jour).
+   */
+  public async fetchDailyReport(
+    dateIso: string,
+    journalId?: string | null
+  ): Promise<DailyCashierReport | null> {
+    if (!this.authService.currentUser() || !this.accessControl.hasPermission('cashier.export')) {
+      this.setError('Permission insuffisante : vous n’êtes pas autorisé à exporter le rapport de caisse.');
+      return null;
+    }
+
+    const normalizedDate = String(dateIso || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      this.setError('Veuillez sélectionner une date valide (AAAA-MM-JJ) pour exporter le rapport.');
+      return null;
+    }
+
+    this._error.set(null);
+
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
+        }
+      } catch {
+        // Ignorer l'erreur de session silencieusement et laisser la vérification du token agir
+      }
+    }
+
+    if (!token) {
+      this.setError('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+      return null;
+    }
+
+    const params = new URLSearchParams({ date: normalizedDate });
+    const cleanJournalId = typeof journalId === 'string' ? journalId.trim() : '';
+    if (cleanJournalId) {
+      params.set('journalId', cleanJournalId);
+    }
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+
+    try {
+      let response = await fetch(`/api/cahier/operations/daily-report?${params.toString()}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (response.status === 404) {
+        response = await fetch(`/api/cahier/daily-report?${params.toString()}`, {
+          method: 'GET',
+          headers,
+        });
+      }
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const serverMessage = getApiErrorMessage(
+          errorPayload,
+          `Impossible de charger le rapport journalier de caisse (erreur HTTP ${response.status}).`
+        );
+        this.setError(serverMessage);
+        return null;
+      }
+
+      const resJson = (await response.json().catch(() => null)) as {
+        report?: DailyCashierReport;
+      } | null;
+
+      if (!resJson?.report || !resJson.report.date) {
+        this.setError('Réponse invalide du serveur pour le rapport journalier de caisse.');
+        return null;
+      }
+
+      return resJson.report;
+    } catch (networkError: unknown) {
+      console.warn('Erreur réseau lors du chargement du rapport journalier de caisse:', networkError);
+      this.setError(
+        'Impossible de joindre le service de caisse pour générer le rapport. Vérifiez votre connexion puis réessayez.'
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Télécharge le rapport journalier de caisse (CAISSE TRX du JJ/MM/AAAA) au format PDF ou Excel (.xlsx).
+   */
+  public async exportDailyReport(
+    dateIso: string,
+    format: 'pdf' | 'xlsx',
+    journalId?: string | null
+  ): Promise<boolean> {
+    const report = await this.fetchDailyReport(dateIso, journalId);
+    if (!report) {
+      return false;
+    }
+
+    try {
+      const ok =
+        format === 'pdf'
+          ? this.exportService.exportDailyCashierReportPdf(report)
+          : await this.exportService.exportDailyCashierReportExcel(report);
+
+      if (ok) {
+        const formatLabel = format === 'pdf' ? 'PDF' : 'Excel (.xlsx)';
+        this.notificationService.success(
+          `Rapport ${report.title} exporté en ${formatLabel}.`,
+          'Export réussi'
+        );
+        return true;
+      }
+
+      this.setError('Impossible de générer le fichier d’export du rapport journalier de caisse.');
+      return false;
+    } catch (exportError: unknown) {
+      console.warn('Erreur lors de la génération du fichier rapport journalier:', exportError);
+      this.setError('Une erreur est survenue lors de la génération du fichier d’export.');
+      return false;
+    }
   }
 
   /**

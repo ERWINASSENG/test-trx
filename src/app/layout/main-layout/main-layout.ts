@@ -51,6 +51,7 @@ export class MainLayout implements OnInit {
   public readonly isMenuOpen = signal<boolean>(false);
   public readonly isUserDropdownOpen = signal<boolean>(false);
   public readonly isConfigDropdownOpen = signal<boolean>(false);
+  public readonly isEditionDropdownOpen = signal<boolean>(false);
   public readonly isNotificationsOpen = signal(false);
 
   // Thème actuel
@@ -80,6 +81,32 @@ export class MainLayout implements OnInit {
   public readonly isConfigActive = computed(() => {
     const url = this.currentUrl();
     return url ? url.includes('/configuration') || url.includes('/settings') : false;
+  });
+
+  // Indicateur si la route active est sous Édition (/edition/rapport)
+  public readonly isEditionActive = computed(() => {
+    const cleanPath = (this.currentUrl() || '').split(/[?#]/)[0];
+    return cleanPath === '/edition' || cleanPath.startsWith('/edition/');
+  });
+
+  // Le menu Édition n'apparaît que si l'utilisateur a cashier.export ET qu'il est sur Tableau de bord (/dashboard) ou Caisse (/caisse, /edition)
+  public readonly isEditionContextRoute = computed(() => {
+    const cleanPath = (this.currentUrl() || '').split(/[?#]/)[0];
+    return (
+      cleanPath === '/dashboard' ||
+      cleanPath === '/caisse' ||
+      cleanPath.startsWith('/caisse/') ||
+      cleanPath === '/edition' ||
+      cleanPath.startsWith('/edition/')
+    );
+  });
+
+  public readonly canShowEditionMenu = computed(() => {
+    return (
+      Boolean(this.currentUser()) &&
+      this.accessControl.hasPermission('cashier.export') &&
+      this.isEditionContextRoute()
+    );
   });
 
   // La caisse native est éditable par admin/caissière; un trésorier ne modifie que ses journaux.
@@ -195,6 +222,7 @@ export class MainLayout implements OnInit {
       event.stopPropagation();
     }
     this.closeConfigDropdown();
+    this.closeEditionDropdown();
     this.closeNotifications();
     this.isUserDropdownOpen.update((open) => !open);
   }
@@ -216,6 +244,8 @@ export class MainLayout implements OnInit {
       event.stopPropagation();
     }
     this.closeUserDropdown();
+    this.closeEditionDropdown();
+    this.closeNotifications();
     this.isConfigDropdownOpen.update((open) => !open);
   }
 
@@ -223,10 +253,26 @@ export class MainLayout implements OnInit {
     this.isConfigDropdownOpen.set(false);
   }
 
+  // --- Gestion du Menu Déroulant Édition (Rapport) ---
+  public toggleEditionDropdown(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.closeUserDropdown();
+    this.closeConfigDropdown();
+    this.closeNotifications();
+    this.isEditionDropdownOpen.update((open) => !open);
+  }
+
+  public closeEditionDropdown(): void {
+    this.isEditionDropdownOpen.set(false);
+  }
+
   public toggleNotifications(event?: Event): void {
     event?.stopPropagation();
     this.closeUserDropdown();
     this.closeConfigDropdown();
+    this.closeEditionDropdown();
     this.isNotificationsOpen.update((open) => !open);
     if (this.isNotificationsOpen()) void this.appNotificationService.load();
   }
@@ -257,6 +303,10 @@ export class MainLayout implements OnInit {
     if (!target.closest('#config-dropdown-container')) {
       this.closeConfigDropdown();
     }
+    // Si le clic s'est produit en dehors du menu déroulant Édition, on le ferme
+    if (!target.closest('#edition-dropdown-container')) {
+      this.closeEditionDropdown();
+    }
     if (!target.closest('#notifications-container')) {
       this.closeNotifications();
     }
@@ -265,6 +315,7 @@ export class MainLayout implements OnInit {
   public onEscape(): void {
     this.closeUserDropdown();
     this.closeConfigDropdown();
+    this.closeEditionDropdown();
     this.closeNotifications();
     this.closeMenu();
   }

@@ -58,7 +58,9 @@ describe('MainLayout Component', () => {
       imports: [MainLayout],
       providers: [
         provideRouter([
+          { path: 'dashboard', component: MainLayout },
           { path: 'caisse', component: MainLayout },
+          { path: 'edition/rapport', component: MainLayout },
           { path: 'dossiers', component: MainLayout },
           { path: 'configuration', component: MainLayout },
           { path: '**', component: MainLayout },
@@ -262,6 +264,32 @@ describe('MainLayout Component', () => {
 
     component.closeConfigDropdown();
     expect(component.isConfigDropdownOpen()).toBe(false);
+  });
+
+  it('affiche le bouton Édition uniquement avec cashier.export sur Tableau de bord et Caisse', async () => {
+    effectivePermissions.update((perms) => [
+      ...perms,
+      { permissionKey: 'cashier.export', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+    ]);
+
+    await component.router.navigateByUrl('/dashboard');
+    fixture.detectChanges();
+    expect(component.canShowEditionMenu()).toBe(true);
+    expect(fixture.nativeElement.querySelector('#nav-edition-dropdown-trigger')).not.toBeNull();
+
+    component.toggleEditionDropdown();
+    fixture.detectChanges();
+    expect(component.isEditionDropdownOpen()).toBe(true);
+    expect(fixture.nativeElement.querySelector('#menu-item-edition-rapport')).not.toBeNull();
+
+    await component.router.navigateByUrl('/caisse');
+    fixture.detectChanges();
+    expect(component.canShowEditionMenu()).toBe(true);
+
+    await component.router.navigateByUrl('/dossiers');
+    fixture.detectChanges();
+    expect(component.canShowEditionMenu()).toBe(false);
+    expect(fixture.nativeElement.querySelector('#nav-edition-dropdown-trigger')).toBeNull();
   });
 
   it('ne rend pas de Control Panel global sur la route initiale', () => {

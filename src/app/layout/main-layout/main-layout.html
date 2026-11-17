@@ -104,6 +104,41 @@
                 </a>
               }
             }
+
+            @if (canShowEditionMenu()) {
+              <div class="relative overflow-visible" id="edition-dropdown-container">
+                <button
+                  type="button"
+                  (click)="toggleEditionDropdown($event)"
+                  [class.text-slate-900]="isEditionActive() || isEditionDropdownOpen()"
+                  [class.dark:text-white]="isEditionActive() || isEditionDropdownOpen()"
+                  [class.font-semibold]="isEditionActive()"
+                  class="nav-link flex items-center gap-1 text-xs lg:text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors py-1 cursor-pointer bg-transparent border-0 outline-none"
+                  id="nav-edition-dropdown-trigger"
+                  [attr.aria-expanded]="isEditionDropdownOpen()"
+                  aria-haspopup="true">
+                  <span class="whitespace-nowrap">Édition</span>
+                </button>
+
+                @if (isEditionDropdownOpen()) {
+                  <div
+                    class="config-dropdown-panel absolute left-0 top-full mt-1.5 w-48 bg-white dark:bg-[#282d33] border border-slate-200 dark:border-[#343a40] rounded-lg shadow-2xl py-1.5 z-[9999]"
+                    id="nav-edition-dropdown-menu"
+                    role="menu"
+                    aria-orientation="vertical">
+                    <a
+                      routerLink="/edition/rapport"
+                      routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/10"
+                      (click)="closeEditionDropdown()"
+                      class="flex items-center px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                      id="menu-item-edition-rapport"
+                      role="menuitem">
+                      <span>Rapport</span>
+                    </a>
+                  </div>
+                }
+              </div>
+            }
           </nav>
         }
       </div>
@@ -430,6 +465,22 @@
                 <span>{{ item.label }}</span>
               </a>
             }
+          }
+
+          @if (canShowEditionMenu()) {
+            <div class="pt-2 pb-1 border-t border-slate-100 dark:border-white/5 space-y-1">
+              <div class="px-3 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Édition
+              </div>
+              <a
+                routerLink="/edition/rapport"
+                routerLinkActive="font-bold text-[#0b5ed7] dark:text-[#8cc2ff] bg-slate-100 dark:bg-white/5"
+                (click)="closeMenu()"
+                class="nav-link flex items-center pl-6 pr-3 py-2 rounded text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                id="edition-rapport-mobile">
+                <span>Rapport</span>
+              </a>
+            </div>
           }
         }
       </div>
