@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   OnInit,
   computed,
   inject,
@@ -26,6 +27,70 @@ export interface SelectableReportJournal {
   id: string;
   name: string;
   sequence_prefix: string;
+}
+
+export interface ReportCalendarDayItem {
+  date: string;
+  dayNumber: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  isSelected: boolean;
+  hasTransactions: boolean;
+}
+
+const MONTH_NAMES_FR = [
+  'Janvier',
+  'Février',
+  'Mars',
+  'Avril',
+  'Mai',
+  'Juin',
+  'Juillet',
+  'Août',
+  'Septembre',
+  'Octobre',
+  'Novembre',
+  'Décembre',
+];
+
+const MONTH_SHORT_FR = [
+  'Jan',
+  'Fév',
+  'Mar',
+  'Avr',
+  'Mai',
+  'Juin',
+  'Juil',
+  'Août',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Déc',
+];
+
+function toDayIso(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const trimmed = dateStr.trim();
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      const d = parts[0].padStart(2, '0');
+      const m = parts[1].padStart(2, '0');
+      const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      return `${y}-${m}-${d}`;
+    }
+  }
+  if (trimmed.includes('-')) {
+    const part = trimmed.split('T')[0].split(' ')[0];
+    const parts = part.split('-');
+    if (parts.length === 3) {
+      const y = parts[0].length === 2 ? `20${parts[0]}` : parts[0];
+      const m = parts[1].padStart(2, '0');
+      const d = parts[2].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return '';
 }
 
 function getTodayIso(): string {
@@ -70,6 +135,9 @@ function isValidIsoDateString(value: string): boolean {
   templateUrl: './cashier-daily-report.html',
   styleUrl: './cashier-daily-report.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:click)': 'onDocumentClick($event)',
+  },
 })
 export class CashierDailyReport implements OnInit {
   private readonly cashierService = inject(CashierService);
@@ -80,6 +148,11 @@ export class CashierDailyReport implements OnInit {
   private readonly notificationService = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly elementRef = inject(ElementRef, { optional: true });
+
+  public readonly selectedDate = signal<string>(getTodayIso());
+  public readonly isCalendarOpen = signal<boolean>(false);
+  public readonly calendarMonth = signal<Date>(new Date());
 
   public readonly dateControl = new FormControl<string>(getTodayIso(), {
     nonNullable: true,
@@ -98,6 +171,89 @@ export class CashierDailyReport implements OnInit {
   public readonly isLoading = signal<boolean>(false);
   public readonly errorMessage = signal<string | null>(null);
   public readonly isExporting = signal<'pdf' | 'xlsx' | null>(null);
+
+  public readonly selectedDateLabel = computed(() => {
+    const iso = this.selectedDate();
+    const parts = iso.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[2], 10);
+      const monthIdx = parseInt(parts[1], 10) - 1;
+      const year = parts[0];
+      const monthStr = MONTH_SHORT_FR[monthIdx] || parts[1];
+      return `${day} ${monthStr} ${year}`;
+    }
+    return iso;
+  });
+
+  public readonly calendarMonthTitle = computed(() => {
+    const d = this.calendarMonth();
+    return `${MONTH_NAMES_FR[d.getMonth()]} ${d.getFullYear()}`;
+  });
+
+  public readonly calendarDays = computed<ReportCalendarDayItem[]>(() => {
+    const currentMonthDate = this.calendarMonth();
+    const year = currentMonthDate.getFullYear();
+    const month = currentMonthDate.getMonth();
+    const todayIso = getTodayIso();
+    const selectedIso = this.selectedDate();
+
+    const caisseTxs = this.cashierService.caisseTransactions?.() ?? [];
+    const txDates = new Set(
+      caisseTxs
+        .filter((t) => t.status === 'posted')
+        .map((t) => toDayIso(t.date))
+    );
+
+    const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDaysCount = new Date(year, month, 0).getDate();
+
+    const items: ReportCalendarDayItem[] = [];
+
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      const dayNum = prevMonthDaysCount - i;
+      const prevMonth = month === 0 ? 11 : month - 1;
+      const prevYear = month === 0 ? year - 1 : year;
+      const iso = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      items.push({
+        date: iso,
+        dayNumber: dayNum,
+        isCurrentMonth: false,
+        isToday: iso === todayIso,
+        isSelected: iso === selectedIso,
+        hasTransactions: txDates.has(iso),
+      });
+    }
+
+    for (let dayNum = 1; dayNum <= totalDaysInMonth; dayNum++) {
+      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      items.push({
+        date: iso,
+        dayNumber: dayNum,
+        isCurrentMonth: true,
+        isToday: iso === todayIso,
+        isSelected: iso === selectedIso,
+        hasTransactions: txDates.has(iso),
+      });
+    }
+
+    const remaining = 42 - items.length;
+    for (let dayNum = 1; dayNum <= remaining; dayNum++) {
+      const nextMonth = month === 11 ? 0 : month + 1;
+      const nextYear = month === 11 ? year + 1 : year;
+      const iso = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      items.push({
+        date: iso,
+        dayNumber: dayNum,
+        isCurrentMonth: false,
+        isToday: iso === todayIso,
+        isSelected: iso === selectedIso,
+        hasTransactions: txDates.has(iso),
+      });
+    }
+
+    return items;
+  });
 
   public readonly canExport = computed(() =>
     this.accessControlService.hasPermission('cashier.export')
@@ -161,7 +317,12 @@ export class CashierDailyReport implements OnInit {
       ?.trim();
 
     if (queryDate && isValidIsoDateString(queryDate)) {
+      this.selectedDate.set(queryDate);
       this.dateControl.setValue(queryDate, { emitEvent: false });
+      const parts = queryDate.split('-');
+      this.calendarMonth.set(
+        new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
+      );
     }
 
     if (
@@ -176,6 +337,11 @@ export class CashierDailyReport implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((newDate) => {
         if (isValidIsoDateString(newDate)) {
+          this.selectedDate.set(newDate);
+          const parts = newDate.split('-');
+          this.calendarMonth.set(
+            new Date(Number(parts[0]), Number(parts[1]) - 1, 1)
+          );
           void this.loadPreview();
         }
       });
@@ -189,6 +355,70 @@ export class CashierDailyReport implements OnInit {
     void this.loadPreview();
   }
 
+  public toggleCalendar(event?: Event): void {
+    if (event) event.stopPropagation();
+    this.isCalendarOpen.update((open) => !open);
+  }
+
+  public closeCalendar(): void {
+    this.isCalendarOpen.set(false);
+  }
+
+  public selectDate(isoDate: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.selectedDate.set(isoDate);
+    this.dateControl.setValue(isoDate);
+    this.closeCalendar();
+  }
+
+  public selectToday(event?: Event): void {
+    if (event) event.stopPropagation();
+    const today = getTodayIso();
+    this.selectedDate.set(today);
+    this.calendarMonth.set(new Date());
+    if (this.dateControl.value !== today) {
+      this.dateControl.setValue(today);
+    } else {
+      void this.loadPreview();
+    }
+    this.closeCalendar();
+  }
+
+  public selectYesterday(event?: Event): void {
+    if (event) event.stopPropagation();
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const yesterday = `${y}-${m}-${day}`;
+    this.selectedDate.set(yesterday);
+    this.calendarMonth.set(d);
+    if (this.dateControl.value !== yesterday) {
+      this.dateControl.setValue(yesterday);
+    } else {
+      void this.loadPreview();
+    }
+    this.closeCalendar();
+  }
+
+  public navigateMonth(delta: number, event?: Event): void {
+    if (event) event.stopPropagation();
+    const current = this.calendarMonth();
+    const next = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+    this.calendarMonth.set(next);
+  }
+
+  public onDocumentClick(event: MouseEvent): void {
+    if (!this.isCalendarOpen()) return;
+    const target = event.target as HTMLElement | null;
+    const hostEl = this.elementRef?.nativeElement as HTMLElement | undefined;
+    const popoverContainer = hostEl?.querySelector('#period-selector-container');
+    if (popoverContainer && target && !popoverContainer.contains(target)) {
+      this.closeCalendar();
+    }
+  }
+
   public async loadPreview(): Promise<void> {
     if (!this.canExport()) {
       this.errorMessage.set(
@@ -198,7 +428,7 @@ export class CashierDailyReport implements OnInit {
       return;
     }
 
-    const targetDate = (this.dateControl.value || '').trim();
+    const targetDate = (this.dateControl.value || this.selectedDate() || '').trim();
     if (!isValidIsoDateString(targetDate)) {
       this.errorMessage.set(
         'Veuillez sélectionner une date valide au format AAAA-MM-JJ.'
@@ -238,7 +468,7 @@ export class CashierDailyReport implements OnInit {
     }
 
     let currentReport = this.report();
-    const targetDate = (this.dateControl.value || '').trim();
+    const targetDate = (this.dateControl.value || this.selectedDate() || '').trim();
     if (!currentReport || currentReport.date !== targetDate) {
       await this.loadPreview();
       currentReport = this.report();
