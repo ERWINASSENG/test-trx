@@ -278,7 +278,7 @@ describe('DashboardManager', () => {
     balanceSignal.set(450000);
   });
 
-  it('should process same-day transactions with entree before sortie so chart starts positive', () => {
+  it('should aggregate same-day transactions into a daily closing balance point with an opening anchor when only one day is present', () => {
     transactionsSignal.set([
       {
         id: 'tx-depense',
@@ -309,8 +309,53 @@ describe('DashboardManager', () => {
     fixture.detectChanges();
 
     const data = component.chartData();
-    expect(data.balances[0]).toBe(500000);
-    expect(data.balances[1]).toBe(42108);
+    expect(data.labels.length).toBe(2);
+    expect(data.labels[0]).toBe('Solde antérieur');
+    expect(data.balances).toEqual([0, 42108]);
+    expect(data.descriptions[1]).toBe('2 opérations · Dernière : Carburant et frais');
+
+    // Restore
+    transactionsSignal.set(mockTransactions);
+    balanceSignal.set(450000);
+  });
+
+  it('should aggregate multiple operations per day across several days into one closing point per day', () => {
+    transactionsSignal.set([
+      {
+        id: 'tx-d1-1',
+        date: '07/09/2026',
+        libelle: 'Approvisionnement matin',
+        category: 'entree',
+        status: 'posted',
+        montant: 1000000,
+      },
+      {
+        id: 'tx-d1-2',
+        date: '07/09/2026',
+        libelle: 'Achat fournitures',
+        category: 'sortie',
+        status: 'posted',
+        montant: -200000,
+      },
+      {
+        id: 'tx-d2-1',
+        date: '11/09/2026',
+        libelle: 'Frais douane',
+        category: 'sortie',
+        status: 'posted',
+        montant: -150000,
+      },
+    ]);
+    balanceSignal.set(650000);
+    fixture.detectChanges();
+
+    const data = component.chartData();
+    expect(data.labels.length).toBe(2);
+    expect(data.balances).toEqual([800000, 650000]);
+    expect(data.descriptions).toEqual([
+      '2 opérations · Dernière : Achat fournitures',
+      'Frais douane',
+    ]);
 
     // Restore
     transactionsSignal.set(mockTransactions);

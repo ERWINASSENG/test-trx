@@ -213,5 +213,61 @@ describe('CashierDuplicateUtil', () => {
       );
       expect(duplicate).toBeUndefined();
     });
+
+    it('ne devrait pas considérer comme doublon une opération existante au statut cancelled (Règle métier réimport)', () => {
+      const listWithCancelled = [
+        {
+          id: 'tx-cancelled-1',
+          date: '16/09/2026',
+          montant: -78000,
+          category: 'sortie',
+          libelle: 'Carburant Véhicule ras 1',
+          noDossier: 'DOS-2026-001',
+          service: 'COMMERCIAL',
+          status: 'cancelled',
+          pieceComptable: 'CSH1/2026/00001',
+        },
+      ];
+
+      const candidate = {
+        date: '16/09/2026',
+        montant: -78000,
+        category: 'sortie',
+        libelle: 'Carburant Véhicule ras 1',
+        noDossier: 'DOS-2026-001',
+        service: 'COMMERCIAL',
+      };
+
+      const duplicate = findDuplicateTransaction(candidate, listWithCancelled);
+      expect(duplicate).toBeUndefined();
+    });
+
+    it('devrait bloquer le doublon si l’opération existante identique est en draft ou posted', () => {
+      const listWithDraftAndPosted = [
+        {
+          id: 'tx-draft-1',
+          date: '16/09/2026',
+          montant: -78000,
+          category: 'sortie',
+          libelle: 'Carburant Véhicule ras 1',
+          noDossier: 'DOS-2026-001',
+          service: 'COMMERCIAL',
+          status: 'draft',
+        },
+      ];
+
+      const candidate = {
+        date: '16/09/2026',
+        montant: -78000,
+        category: 'sortie',
+        libelle: 'Carburant Véhicule ras 1',
+        noDossier: 'DOS-2026-001',
+        service: 'COMMERCIAL',
+      };
+
+      const duplicate = findDuplicateTransaction(candidate, listWithDraftAndPosted);
+      expect(duplicate).toBeDefined();
+      expect(duplicate?.id).toBe('tx-draft-1');
+    });
   });
 });

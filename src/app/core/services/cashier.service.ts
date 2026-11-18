@@ -3,6 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import {
   CashierFilterState,
   CashierTransaction,
+  DailyCashierReport,
 } from '../models/cashier-transaction.model';
 import {
   findDuplicatePieceComptable,
@@ -185,10 +186,20 @@ export class CashierService implements OnDestroy {
   }
 
   /**
-   * Extrait le numéro séquentiel numérique d'une référence de pièce comptable (ex: "CSH1/2026/00011" -> 11)
+   * Extrait la clé numérique de tri d'une référence de pièce comptable
+   * en combinant l'année et le numéro séquentiel (ex: "CSH1/2026/00011" -> 2026000011)
+   * afin de ne jamais mélanger des opérations d'années différentes.
    */
   public extractPieceSequence(piece?: string): number {
     if (!piece) return 0;
+    const yearSeqMatch = piece.match(/\/(\d{4})\/(\d+)$/);
+    if (yearSeqMatch) {
+      const year = parseInt(yearSeqMatch[1], 10);
+      const seq = parseInt(yearSeqMatch[2], 10);
+      if (Number.isFinite(year) && Number.isFinite(seq)) {
+        return year * 1_000_000 + seq;
+      }
+    }
     const match = piece.match(/\/(\d+)$/);
     return match ? parseInt(match[1], 10) : 0;
   }
@@ -1307,6 +1318,87 @@ export class CashierService implements OnDestroy {
 
   /**
    * ───────────────────────────────────────────────────────────────────────────
+   * 3bis. SUPPRESSION DÉFINITIVE D'OPÉRATIONS (ADMIN ONLY AVEC RECOMPACTAGE SANS TROU)
+   * ───────────────────────────────────────────────────────────────────────────
+   */
+  public async deleteTransaction(id: string): Promise<boolean> {
+    if (!id) return false;
+    return this.deleteTransactions([id]);
+  }
+
+  public async deleteSelected(): Promise<boolean> {
+    const selected = this.journalTransactions().filter((t) => t.selected);
+    let selectedIds = selected.map((t) => t.id);
+
+    if (selectedIds.length === 0) {
+      selectedIds = this._transactions()
+        .filter((t) => t.selected)
+        .map((t) => t.id);
+    }
+
+    if (selectedIds.length === 0) return true;
+    return this.deleteTransactions(selectedIds);
+  }
+
+  private async deleteTransactions(targetIds: string[]): Promise<boolean> {
+    if (targetIds.length === 0) return true;
+
+    this._error.set(null);
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data: sessionData } = await this.supabaseService.supabase.auth.getSession();
+        token = sessionData.session?.access_token || null;
+      } catch {
+        // Ignorer
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let response: Response;
+    try {
+      response = await fetch('/api/cahier/operations', {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ ids: targetIds }),
+      });
+    } catch (networkError: unknown) {
+      console.warn('Erreur réseau lors de la suppression des opérations:', networkError);
+      this.setError('Impossible de joindre le service de caisse pour supprimer les opérations. Vérifiez votre connexion puis réessayez.');
+      return false;
+    }
+
+    if (!response.ok) {
+      const errorPayload: unknown = await response.json().catch(() => null);
+      const serverMessage = getApiErrorMessage(
+        errorPayload,
+        `Impossible de supprimer les opérations (erreur HTTP ${response.status}).`
+      );
+      this.setError(serverMessage);
+      return false;
+    }
+
+    // Retirer immédiatement les lignes supprimées du Signal local
+    this._transactions.update((items) =>
+      items.filter((it) => !targetIds.includes(it.id))
+    );
+    this.recalculateRunningBalances();
+    this.toggleSelectAll(false);
+
+    // Recharger la liste complète et le solde pour synchroniser la renumérotation sans trou effectuée par le trigger DB
+    await this.loadTransactions();
+    await this.loadCashierSummary();
+
+    return true;
+  }
+
+  /**
+   * ───────────────────────────────────────────────────────────────────────────
    * 4. EXPORT DES OPÉRATIONS DE CAISSE (DÉLÉGUÉ À EXPORTSERVICE)
    * ───────────────────────────────────────────────────────────────────────────
    * Exporte soit les lignes sélectionnées, soit l'ensemble des opérations filtrées visibles.
@@ -1317,6 +1409,134 @@ export class CashierService implements OnDestroy {
     const dataset = onlySelected && selectedRows.length > 0 ? selectedRows : allFiltered;
 
     this.exportService.exportCashierTransactionsCsv(dataset);
+  }
+
+  /**
+   * Récupère depuis l'API serveur le rapport journalier de caisse complet
+   * (report de solde calculé en base + recettes/dépenses comptabilisées du jour).
+   */
+  public async fetchDailyReport(
+    dateIso: string,
+    journalId?: string | null
+  ): Promise<DailyCashierReport | null> {
+    if (!this.authService.currentUser() || !this.accessControl.hasPermission('cashier.export')) {
+      this.setError('Permission insuffisante : vous n’êtes pas autorisé à exporter le rapport de caisse.');
+      return null;
+    }
+
+    const normalizedDate = String(dateIso || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      this.setError('Veuillez sélectionner une date valide (AAAA-MM-JJ) pour exporter le rapport.');
+      return null;
+    }
+
+    this._error.set(null);
+
+    let token = this.authService.token();
+    if (!token && this.supabaseService.supabase) {
+      try {
+        const { data } = await this.supabaseService.supabase.auth.getSession();
+        if (data.session?.access_token) {
+          token = data.session.access_token;
+        }
+      } catch {
+        // Ignorer l'erreur de session silencieusement et laisser la vérification du token agir
+      }
+    }
+
+    if (!token) {
+      this.setError('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+      return null;
+    }
+
+    const params = new URLSearchParams({ date: normalizedDate });
+    const cleanJournalId = typeof journalId === 'string' ? journalId.trim() : '';
+    if (cleanJournalId) {
+      params.set('journalId', cleanJournalId);
+    }
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+
+    try {
+      let response = await fetch(`/api/cahier/operations/daily-report?${params.toString()}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (response.status === 404) {
+        response = await fetch(`/api/cahier/daily-report?${params.toString()}`, {
+          method: 'GET',
+          headers,
+        });
+      }
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const serverMessage = getApiErrorMessage(
+          errorPayload,
+          `Impossible de charger le rapport journalier de caisse (erreur HTTP ${response.status}).`
+        );
+        this.setError(serverMessage);
+        return null;
+      }
+
+      const resJson = (await response.json().catch(() => null)) as {
+        report?: DailyCashierReport;
+      } | null;
+
+      if (!resJson?.report || !resJson.report.date) {
+        this.setError('Réponse invalide du serveur pour le rapport journalier de caisse.');
+        return null;
+      }
+
+      return resJson.report;
+    } catch (networkError: unknown) {
+      console.warn('Erreur réseau lors du chargement du rapport journalier de caisse:', networkError);
+      this.setError(
+        'Impossible de joindre le service de caisse pour générer le rapport. Vérifiez votre connexion puis réessayez.'
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Télécharge le rapport journalier de caisse (CAISSE TRX du JJ/MM/AAAA) au format PDF ou Excel (.xlsx).
+   */
+  public async exportDailyReport(
+    dateIso: string,
+    format: 'pdf' | 'xlsx',
+    journalId?: string | null
+  ): Promise<boolean> {
+    const report = await this.fetchDailyReport(dateIso, journalId);
+    if (!report) {
+      return false;
+    }
+
+    try {
+      const ok =
+        format === 'pdf'
+          ? this.exportService.exportDailyCashierReportPdf(report)
+          : await this.exportService.exportDailyCashierReportExcel(report);
+
+      if (ok) {
+        const formatLabel = format === 'pdf' ? 'PDF' : 'Excel (.xlsx)';
+        this.notificationService.success(
+          `Rapport ${report.title} exporté en ${formatLabel}.`,
+          'Export réussi'
+        );
+        return true;
+      }
+
+      this.setError('Impossible de générer le fichier d’export du rapport journalier de caisse.');
+      return false;
+    } catch (exportError: unknown) {
+      console.warn('Erreur lors de la génération du fichier rapport journalier:', exportError);
+      this.setError('Une erreur est survenue lors de la génération du fichier d’export.');
+      return false;
+    }
   }
 
   /**
@@ -2025,6 +2245,31 @@ export class CashierService implements OnDestroy {
     this._transactions.update((items) =>
       items.map((item) => draftIds.has(item.id) ? { ...item, selected: true } : item)
     );
+  }
+
+  /**
+   * Sélectionne tous les brouillons ('draft') du journal actif
+   * et désélectionne les opérations d'autres statuts.
+   * Retourne le nombre total de brouillons sélectionnés.
+   */
+  public selectAllDrafts(): number {
+    const activeJournalTransactions = this.journalTransactions();
+    const draftIds = new Set(
+      activeJournalTransactions
+        .filter((t) => t.status === 'draft')
+        .map((t) => t.id)
+    );
+
+    this._transactions.update((items) =>
+      items.map((item) => {
+        if (draftIds.has(item.id)) {
+          return { ...item, selected: true };
+        }
+        return item.selected ? { ...item, selected: false } : item;
+      })
+    );
+
+    return draftIds.size;
   }
 
   /**

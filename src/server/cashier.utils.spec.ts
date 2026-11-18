@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateDossierExpenses,
   formatPersistedPieceComptable,
+  isDuplicateCashierCandidate,
   normalizeDateToDay,
   requiresCashierDraftBeforeEdit,
 } from './cashier.utils';
@@ -60,6 +61,72 @@ describe('cashier.utils', () => {
 
     it('permet à une caissière de modifier une opération en brouillon', () => {
       expect(requiresCashierDraftBeforeEdit('draft', 'caissiere')).toBe(false);
+    });
+  });
+
+  describe('isDuplicateCashierCandidate', () => {
+    const candidate = {
+      date: '2026-09-15',
+      montant: -25000,
+      libelle: 'ras 1',
+      service: 'COMMERCIAL',
+      noDossier: 'DOS-2026-001',
+    };
+
+    it('ne doit pas considérer comme doublon une opération existante au statut cancelled', () => {
+      const cancelledRow = {
+        id: 'op-cancelled',
+        date: '2026-09-15',
+        montant: -25000,
+        libelle: 'ras 1',
+        service: 'COMMERCIAL',
+        no_dossier: 'DOS-2026-001',
+        status: 'cancelled',
+      };
+
+      expect(isDuplicateCashierCandidate(candidate, cancelledRow)).toBe(false);
+    });
+
+    it('doit bloquer comme doublon une opération existante au statut draft', () => {
+      const draftRow = {
+        id: 'op-draft',
+        date: '2026-09-15',
+        montant: -25000,
+        libelle: 'ras 1',
+        service: 'COMMERCIAL',
+        no_dossier: 'DOS-2026-001',
+        status: 'draft',
+      };
+
+      expect(isDuplicateCashierCandidate(candidate, draftRow)).toBe(true);
+    });
+
+    it('doit bloquer comme doublon une opération existante au statut posted', () => {
+      const postedRow = {
+        id: 'op-posted',
+        date: '2026-09-15',
+        montant: -25000,
+        libelle: 'ras 1',
+        service: 'COMMERCIAL',
+        no_dossier: 'DOS-2026-001',
+        status: 'posted',
+      };
+
+      expect(isDuplicateCashierCandidate(candidate, postedRow)).toBe(true);
+    });
+
+    it('ignore la comparaison avec le même id lors d’une mise à jour', () => {
+      const selfRow = {
+        id: 'op-self',
+        date: '2026-09-15',
+        montant: -25000,
+        libelle: 'ras 1',
+        service: 'COMMERCIAL',
+        no_dossier: 'DOS-2026-001',
+        status: 'draft',
+      };
+
+      expect(isDuplicateCashierCandidate({ ...candidate, idToExclude: 'op-self' }, selfRow)).toBe(false);
     });
   });
 });

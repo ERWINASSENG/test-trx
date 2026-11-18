@@ -76,6 +76,10 @@
                       Dupliquer
                     </button>
                   }
+                  <button type="button" (click)="onSelectAllDraftsAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/10 sm:whitespace-nowrap" role="menuitem">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-slate-500 dark:text-slate-400">done_all</mat-icon>
+                      Sélectionner tous les brouillons
+                    </button>
                   @if (canPostCashierOperations()) {
                     <button
                       type="button"
@@ -101,6 +105,18 @@
                     </button>
                     <button type="button" (click)="onResetToDraftAction()" class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-normal text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10" role="menuitem">
                       Remettre en brouillon
+                    </button>
+                  }
+                  @if (canDeleteCashierOperations()) {
+                    <button
+                      type="button"
+                      (click)="onDeleteSelectedAction()"
+                      [disabled]="isDeleting()"
+                      class="flex w-full items-center gap-3 px-3.5 py-2 text-left font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/30"
+                      role="menuitem"
+                      id="cashier-action-delete">
+                      <mat-icon class="!h-4.5 !w-4.5 !text-[17px] text-red-500">delete_forever</mat-icon>
+                      Supprimer définitivement
                     </button>
                   }
                   <div class="my-1 border-t border-slate-200 dark:border-white/10"></div>
@@ -141,7 +157,7 @@
 
 
     <!-- Barre d'état Solde Actuel & Journal Actif -->
-    <div class="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-white/5">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 dark:border-white/5">
       <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
         <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-[#190056]/10 text-[#190056] dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff] border border-[#190056]/20 shadow-2xs select-none">
           <mat-icon class="!text-[13px] !w-3.5 !h-3.5">book</mat-icon>

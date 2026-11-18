@@ -1,0 +1,36 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.popover-enter {
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.caisse-trx-sheet-table {
+  font-family: Arial, Helvetica, sans-serif;
+  border: 1px solid #000000;
+}
+
+.sheet-cell {
+  border: 1px solid #000000;
+  padding: 5px 8px;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.sheet-solde-border {
+  border-top: 2px solid #000000;
+  border-bottom: 2px solid #000000;
+}

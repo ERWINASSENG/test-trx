@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ExportService } from './export.service';
 import { AuthService } from './auth.service';
-import { CashierTransaction } from '../models/cashier-transaction.model';
+import { CashierTransaction, DailyCashierReport } from '../models/cashier-transaction.model';
 import { SalesQuote } from '../models/quote.model';
 import { signal } from '@angular/core';
 import { vi } from 'vitest';
@@ -240,4 +240,167 @@ describe('ExportService', () => {
       expect(saveSpy).toHaveBeenCalledOnce();
     });
   });
+
+  describe('Daily Cashier Report Export (CAISSE TRX)', () => {
+    const sampleReport: DailyCashierReport = {
+      date: '2026-11-13',
+      displayDate: '13/11/2026',
+      title: 'CAISSE TRX du 13/11/2026',
+      journalId: 'native-caisse-principal',
+      journalName: 'Caisse Principale',
+      journalPrefix: 'CSH1',
+      reportSolde: 736291,
+      recettes: [
+        {
+          id: 'rec-1',
+          date: '13/11/2026',
+          libelle: 'APPROV CAISSE ; Retrait BCPME',
+          noDossier: null,
+          pieceComptable: 'CSH1/2026/00100',
+          partenaire: null,
+          service: 'DG',
+          montant: 20000000,
+          category: 'entree',
+        },
+        {
+          id: 'rec-2',
+          date: '13/11/2026',
+          libelle: 'Retour partiel de la provision',
+          noDossier: null,
+          pieceComptable: 'CSH1/2026/00101',
+          partenaire: 'M ZAKARI',
+          service: 'TRANSIT',
+          montant: 212500,
+          category: 'entree',
+        },
+      ],
+      totalRecettes: 20212500,
+      totalApresRecettes: 20948791,
+      depenses: [
+        {
+          id: 'dep-1',
+          date: '13/11/2026',
+          libelle: '=HYPERLINK("https://evil.example") Carburant',
+          noDossier: 'LTTR269AG',
+          pieceComptable: 'CSH1/2026/00102',
+          partenaire: 'ZAK/SONYA',
+          service: 'TRANSPORT',
+          montant: 7600000,
+          category: 'sortie',
+        },
+        {
+          id: 'dep-2',
+          date: '13/11/2026',
+          libelle: 'Règlement facture ENEO TRX',
+          noDossier: null,
+          pieceComptable: 'CSH1/2026/00103',
+          partenaire: null,
+          service: 'DG',
+          montant: 12734856,
+          category: 'sortie',
+        },
+      ],
+      totalDepenses: 20334856,
+      soldeFinal: 613935,
+    };
+
+    it('should neutralize Excel formula injection prefixes (S7)', () => {
+      expect(service.sanitizeExcelText('=SUM(A1:A2)')).toBe("'=SUM(A1:A2)");
+      expect(service.sanitizeExcelText('+CMD|calc')).toBe("'+CMD|calc");
+      expect(service.sanitizeExcelText('-100')).toBe("'-100");
+      expect(service.sanitizeExcelText('@evil')).toBe("'@evil");
+      expect(service.sanitizeExcelText('Carburant standard')).toBe('Carburant standard');
+      expect(service.sanitizeExcelText(null)).toBe('');
+    });
+
+    it('should return false when daily report is missing or invalid', async () => {
+      expect(service.exportDailyCashierReportPdf(null as unknown as DailyCashierReport)).toBe(false);
+      await expect(
+        service.exportDailyCashierReportExcel(null as unknown as DailyCashierReport)
+      ).resolves.toBe(false);
+    });
+
+    it('should export daily cashier report as PDF with sanitized filename', () => {
+      const doc = new jsPDF();
+      const saveSpy = vi.fn();
+      Object.defineProperty(doc, 'save', {
+        configurable: true,
+        value: (filename?: string) => {
+          saveSpy(filename);
+          return doc;
+        },
+      });
+      vi.spyOn(
+        service as unknown as { createPdfDocument: () => jsPDF },
+        'createPdfDocument'
+      ).mockReturnValue(doc);
+
+      const result = service.exportDailyCashierReportPdf(sampleReport);
+
+      expect(result).toBe(true);
+      expect(saveSpy).toHaveBeenCalledWith('CAISSE_TRX_2026-11-13.pdf');
+    });
+
+    it('should export daily cashier report as .xlsx workbook with exact sections and formula neutralization', async () => {
+      const captured: {
+        filename: string;
+        mime: string;
+        data: ArrayBuffer | Uint8Array | null;
+      } = {
+        filename: '',
+        mime: '',
+        data: null,
+      };
+
+      vi.spyOn(
+        service as unknown as {
+          downloadBinaryFile: (data: ArrayBuffer | Uint8Array, filename: string, mimeType: string) => void;
+        },
+        'downloadBinaryFile'
+      ).mockImplementation((data, filename, mimeType) => {
+        captured.data = data;
+        captured.filename = filename;
+        captured.mime = mimeType;
+      });
+
+      const result = await service.exportDailyCashierReportExcel(sampleReport);
+
+      expect(result).toBe(true);
+      expect(captured.filename).toBe('CAISSE_TRX_2026-11-13.xlsx');
+      expect(captured.mime).toBe(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      expect(captured.data).toBeTruthy();
+      if (!captured.data) {
+        throw new Error('Expected binary workbook payload');
+      }
+
+      const excelModule = await import('exceljs');
+      const ExcelJS = excelModule.default || excelModule;
+      const workbook = new ExcelJS.Workbook();
+      const bytes = captured.data instanceof Uint8Array ? captured.data : new Uint8Array(captured.data);
+      await workbook.xlsx.load(bytes as unknown as ArrayBuffer);
+
+      const sheet = workbook.getWorksheet('CAISSE TRX');
+      expect(sheet).toBeTruthy();
+      if (!sheet) {
+        throw new Error('Expected CAISSE TRX worksheet');
+      }
+      expect(sheet.getRow(1).getCell(1).value).toBe('CAISSE TRX du 13/11/2026');
+      expect(sheet.getRow(2).getCell(3).value).toBe(736291);
+
+      const values = sheet.getSheetValues().map((row) =>
+        Array.isArray(row) ? row.map((v) => String(v ?? '')).join(' | ') : ''
+      );
+      const flatText = values.join('\n');
+      expect(flatText).toContain('TOTAL\nRECETTES');
+      expect(flatText).toContain('20212500');
+      expect(flatText).toContain('20948791');
+      expect(flatText).toContain('20334856');
+      expect(flatText).toContain('613935');
+      expect(flatText).toContain('ZAK/SONYA');
+      expect(flatText).toContain('LTTR269AG');
+    });
+  });
 });
+

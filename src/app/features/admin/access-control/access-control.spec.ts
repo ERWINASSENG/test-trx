@@ -100,4 +100,26 @@ describe('AccessControlCenter', () => {
       vi.useRealTimers();
     }
   });
+
+  it('devrait afficher immédiatement "Rôle attribué avec succès." lors de l’attribution d’un rôle', async () => {
+    const service = {
+      assignRole: vi.fn().mockResolvedValue({ success: true }),
+      loadUserAccess: vi.fn().mockResolvedValue(true),
+      loadUsers: vi.fn().mockResolvedValue(true),
+    };
+    TestBed.configureTestingModule({
+      providers: [{ provide: AccessControlService, useValue: service }],
+    });
+    const component = TestBed.runInInjectionContext(() => new AccessControlCenter());
+    component.selectedUserId.set('user-1');
+    component.userRoleDraft.set('role-1');
+
+    await component.assignSelectedRole();
+
+    expect(service.assignRole).toHaveBeenCalledWith({ userId: 'user-1', roleId: 'role-1' });
+    expect(component.feedback()).toBe('Rôle attribué avec succès.');
+    expect(component.userRoleDraft()).toBe('');
+    expect(service.loadUserAccess).toHaveBeenCalledWith('user-1');
+    expect(service.loadUsers).toHaveBeenCalledWith(200, true);
+  });
 });

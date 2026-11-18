@@ -11,7 +11,15 @@
   </header>
 
   @if (feedback()) {
-    <p class="feedback success" role="status">{{ feedback() }}</p>
+    <div class="access-toast" role="status" aria-live="polite" id="access-feedback-toast">
+      <div class="access-toast-content">
+        <mat-icon class="access-toast-icon">check_circle</mat-icon>
+        <span class="access-toast-text">{{ feedback() }}</span>
+      </div>
+      <button type="button" class="access-toast-close" (click)="setFeedback(null)" aria-label="Fermer la notification" title="Fermer">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
   }
   @if (accessControl.error()) {
     <p class="feedback error" role="alert">{{ accessControl.error() }}</p>

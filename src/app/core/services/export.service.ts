@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { AuthService } from './auth.service';
-import { CashierTransaction } from '../models/cashier-transaction.model';
+import {
+  CashierTransaction,
+  DailyCashierReport,
+  DailyCashierReportItem,
+} from '../models/cashier-transaction.model';
 import { SalesQuote, QuoteColumn, QuoteRow } from '../models/quote.model';
 
 export interface CsvExportOptions {
@@ -11,6 +15,10 @@ export interface CsvExportOptions {
 }
 
 export interface PdfExportOptions {
+  filename?: string;
+}
+
+export interface DailyReportExportOptions {
   filename?: string;
 }
 
@@ -559,6 +567,480 @@ export class ExportService {
    */
   private sanitizeFilename(name: string): string {
     return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+
+  /**
+   * Génère et télécharge le rapport journalier de caisse en PDF
+   * Fidèle au modèle officiel "CAISSE TRX du JJ/MM/AAAA"
+   */
+  public exportDailyCashierReportPdf(
+    report: DailyCashierReport,
+    options?: DailyReportExportOptions
+  ): boolean {
+    if (!report || !report.date) {
+      return false;
+    }
+
+    const doc = this.createPdfDocument();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    const titleText = report.title || `CAISSE TRX du ${report.displayDate || report.date}`;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(titleText, pageWidth / 2, 16, { align: 'center' });
+
+    type PdfCell =
+      | string
+      | {
+          content: string;
+          styles?: {
+            fontStyle?: 'normal' | 'bold' | 'italic' | 'bolditalic';
+            fontSize?: number;
+            halign?: 'left' | 'center' | 'right';
+            valign?: 'top' | 'middle' | 'bottom';
+            fillColor?: [number, number, number];
+            textColor?: [number, number, number];
+          };
+        };
+
+    const bodyRows: PdfCell[][] = [];
+
+    // 1. Ligne REPORT SOLDE
+    bodyRows.push([
+      {
+        content: 'REPORT\nSOLDE',
+        styles: { fontStyle: 'bold', halign: 'left', valign: 'middle' },
+      },
+      '',
+      {
+        content: this.formatReportInteger(report.reportSolde),
+        styles: {
+          fontStyle: 'bold',
+          fontSize: 11,
+          halign: 'center',
+          valign: 'bottom',
+          fillColor: [217, 217, 217],
+        },
+      },
+      '',
+    ]);
+
+    // 2. En-tête RECETTES
+    bodyRows.push([
+      { content: 'RECETTES', styles: { fontStyle: 'bold', halign: 'left' } },
+      '',
+      '',
+      { content: 'N° pièce', styles: { fontStyle: 'bold', halign: 'left' } },
+    ]);
+
+    // 3. Lignes des RECETTES du jour
+    for (const item of report.recettes || []) {
+      bodyRows.push([
+        { content: item.date || report.displayDate, styles: { halign: 'right', valign: 'bottom' } },
+        { content: this.formatDailyReportLibelle(item), styles: { halign: 'left', valign: 'bottom' } },
+        {
+          content: this.formatReportAmount(item.montant, false),
+          styles: { halign: 'center', valign: 'bottom' },
+        },
+        {
+          content: this.formatDailyReportPieceCol(item),
+          styles: { halign: 'center', valign: 'bottom' },
+        },
+      ]);
+    }
+
+    // 2 lignes vides d'espacement comme sur le modèle CAISSE TRX
+    bodyRows.push(['', '', '', '']);
+    bodyRows.push(['', '', '', '']);
+
+    // 4. Ligne TOTAL RECETTES
+    bodyRows.push([
+      {
+        content: 'TOTAL\nRECETTES',
+        styles: { fontStyle: 'bold', halign: 'left', valign: 'middle' },
+      },
+      '',
+      {
+        content: this.formatReportInteger(report.totalRecettes),
+        styles: { fontStyle: 'bold', halign: 'center', valign: 'bottom' },
+      },
+      '',
+    ]);
+
+    // 5. Ligne TOTAL (REPORT SOLDE + TOTAL RECETTES)
+    bodyRows.push([
+      { content: 'TOTAL', styles: { fontStyle: 'bold', halign: 'left' } },
+      '',
+      {
+        content: this.formatReportInteger(report.totalApresRecettes),
+        styles: { fontStyle: 'bold', halign: 'center', valign: 'middle' },
+      },
+      '',
+    ]);
+
+    // 6. En-tête DEPENSES
+    bodyRows.push([
+      { content: 'DEPENSES', styles: { fontStyle: 'bold', halign: 'left' } },
+      '',
+      { content: 'MONTANT', styles: { fontStyle: 'bold', halign: 'left' } },
+      '',
+    ]);
+
+    // 7. Lignes des DEPENSES du jour (montants sur fond jaune clair #FFFF99, réf en rouge)
+    for (const item of report.depenses || []) {
+      bodyRows.push([
+        { content: item.date || report.displayDate, styles: { halign: 'right', valign: 'bottom' } },
+        { content: this.formatDailyReportLibelle(item), styles: { halign: 'left', valign: 'bottom' } },
+        {
+          content: this.formatReportAmount(item.montant, true),
+          styles: {
+            halign: 'right',
+            valign: 'bottom',
+            fillColor: [255, 255, 153],
+          },
+        },
+        {
+          content: this.formatDailyReportPieceCol(item),
+          styles: {
+            halign: 'center',
+            valign: 'bottom',
+            textColor: [192, 0, 0],
+          },
+        },
+      ]);
+    }
+
+    // Lignes vides avant TOTAL DEPENSES
+    bodyRows.push(['', '', '', '']);
+    bodyRows.push(['', '', '', '']);
+
+    // 8. Ligne TOTAL DEPENSES
+    bodyRows.push([
+      {
+        content: 'TOTAL\nDEPENSES',
+        styles: { fontStyle: 'bold', halign: 'left', valign: 'middle' },
+      },
+      '',
+      {
+        content: this.formatReportInteger(report.totalDepenses),
+        styles: {
+          fontStyle: 'bold',
+          halign: 'center',
+          valign: 'bottom',
+          fillColor: [217, 217, 217],
+        },
+      },
+      '',
+    ]);
+
+    // 9. Ligne SOLDE final
+    bodyRows.push([
+      {
+        content: 'SOLDE',
+        styles: {
+          fontStyle: 'bold',
+          fontSize: 11,
+          halign: 'left',
+          valign: 'middle',
+          fillColor: [217, 217, 217],
+        },
+      },
+      '',
+      {
+        content: this.formatReportInteger(report.soldeFinal),
+        styles: {
+          fontStyle: 'bold',
+          fontSize: 12,
+          halign: 'center',
+          valign: 'middle',
+          fillColor: [217, 217, 217],
+        },
+      },
+      '',
+    ]);
+
+    autoTable(doc, {
+      startY: 19,
+      margin: { left: margin, right: margin },
+      body: bodyRows,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: 9,
+        cellPadding: 1.6,
+        textColor: [0, 0, 0],
+        lineColor: [0, 0, 0],
+        lineWidth: 0.25,
+        minCellHeight: 6,
+      },
+      columnStyles: {
+        0: { cellWidth: 26 },
+        1: { cellWidth: 88 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 30 },
+      },
+    });
+
+    const safeDate = this.sanitizeFilename(report.date);
+    const filename = options?.filename || `CAISSE_TRX_${safeDate}.pdf`;
+    doc.save(filename);
+    return true;
+  }
+
+  /**
+   * Génère et télécharge le rapport journalier de caisse au format Excel (.xlsx)
+   * Fidèle au modèle officiel "CAISSE TRX du JJ/MM/AAAA" avec protection anti-injection de formules (S7)
+   */
+  public async exportDailyCashierReportExcel(
+    report: DailyCashierReport,
+    options?: DailyReportExportOptions
+  ): Promise<boolean> {
+    if (!report || !report.date) {
+      return false;
+    }
+
+    const excelModule = await import('exceljs');
+    const ExcelJS = excelModule.default || excelModule;
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TRANSIMEX S.A.';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('CAISSE TRX');
+    worksheet.columns = [
+      { key: 'colDate', width: 16 },
+      { key: 'colLibelle', width: 54 },
+      { key: 'colMontant', width: 20 },
+      { key: 'colPiece', width: 18 },
+    ];
+
+    const thinBorder = {
+      top: { style: 'thin' as const, color: { argb: 'FF000000' } },
+      left: { style: 'thin' as const, color: { argb: 'FF000000' } },
+      bottom: { style: 'thin' as const, color: { argb: 'FF000000' } },
+      right: { style: 'thin' as const, color: { argb: 'FF000000' } },
+    };
+
+    const mediumBoxBorder = {
+      top: { style: 'medium' as const, color: { argb: 'FF000000' } },
+      left: { style: 'medium' as const, color: { argb: 'FF000000' } },
+      bottom: { style: 'medium' as const, color: { argb: 'FF000000' } },
+      right: { style: 'medium' as const, color: { argb: 'FF000000' } },
+    };
+
+    const greyFill = {
+      type: 'pattern' as const,
+      pattern: 'solid' as const,
+      fgColor: { argb: 'FFD9D9D9' },
+    };
+
+    const yellowFill = {
+      type: 'pattern' as const,
+      pattern: 'solid' as const,
+      fgColor: { argb: 'FFFFFF99' },
+    };
+
+    // 1. Titre centré : CAISSE TRX du JJ/MM/AAAA
+    const titleText = this.sanitizeExcelText(
+      report.title || `CAISSE TRX du ${report.displayDate || report.date}`
+    );
+    const titleRow = worksheet.addRow([titleText, '', '', '']);
+    worksheet.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
+    titleRow.height = 24;
+    const titleCell = titleRow.getCell(1);
+    titleCell.font = { name: 'Calibri', size: 12, bold: true };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const applyRowBorders = (rowNumber: number): void => {
+      const row = worksheet.getRow(rowNumber);
+      for (let col = 1; col <= 4; col++) {
+        row.getCell(col).border = thinBorder;
+        row.getCell(col).font = { name: 'Calibri', size: 10 };
+      }
+    };
+
+    // 2. Ligne REPORT SOLDE
+    const reportRow = worksheet.addRow(['REPORT\nSOLDE', '', report.reportSolde, '']);
+    reportRow.height = 30;
+    applyRowBorders(reportRow.number);
+    reportRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    reportRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    reportRow.getCell(3).font = { name: 'Calibri', size: 12, bold: true };
+    reportRow.getCell(3).numFmt = '#,##0';
+    reportRow.getCell(3).alignment = { horizontal: 'center', vertical: 'bottom' };
+    reportRow.getCell(3).fill = greyFill;
+    reportRow.getCell(3).border = mediumBoxBorder;
+
+    // 3. En-tête RECETTES
+    const recettesHeaderRow = worksheet.addRow(['RECETTES', '', '', 'N° pièce']);
+    applyRowBorders(recettesHeaderRow.number);
+    recettesHeaderRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    recettesHeaderRow.getCell(4).font = { name: 'Calibri', size: 10, bold: true };
+
+    // 4. Lignes des RECETTES
+    for (const item of report.recettes || []) {
+      const row = worksheet.addRow([
+        this.sanitizeExcelText(item.date || report.displayDate),
+        this.sanitizeExcelText(this.formatDailyReportLibelle(item)),
+        item.montant,
+        this.sanitizeExcelText(this.formatDailyReportPieceCol(item)),
+      ]);
+      applyRowBorders(row.number);
+      row.getCell(1).alignment = { horizontal: 'right', vertical: 'bottom' };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'bottom', wrapText: true };
+      row.getCell(3).numFmt = '#,##0.00';
+      row.getCell(3).alignment = { horizontal: 'right', vertical: 'bottom' };
+      row.getCell(4).alignment = { horizontal: 'center', vertical: 'bottom' };
+    }
+
+    // 2 lignes vides d'espacement
+    const emptyRec1 = worksheet.addRow(['', '', '', '']);
+    applyRowBorders(emptyRec1.number);
+    const emptyRec2 = worksheet.addRow(['', '', '', '']);
+    applyRowBorders(emptyRec2.number);
+
+    // 5. Ligne TOTAL RECETTES
+    const totalRecettesRow = worksheet.addRow(['TOTAL\nRECETTES', '', report.totalRecettes, '']);
+    totalRecettesRow.height = 28;
+    applyRowBorders(totalRecettesRow.number);
+    totalRecettesRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    totalRecettesRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    totalRecettesRow.getCell(3).font = { name: 'Calibri', size: 10, bold: true };
+    totalRecettesRow.getCell(3).numFmt = '#,##0';
+    totalRecettesRow.getCell(3).alignment = { horizontal: 'center', vertical: 'bottom' };
+
+    // 6. Ligne TOTAL (REPORT SOLDE + TOTAL RECETTES)
+    const totalCumulRow = worksheet.addRow(['TOTAL', '', report.totalApresRecettes, '']);
+    applyRowBorders(totalCumulRow.number);
+    totalCumulRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    totalCumulRow.getCell(3).font = { name: 'Calibri', size: 10, bold: true };
+    totalCumulRow.getCell(3).numFmt = '#,##0';
+    totalCumulRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // 7. En-tête DEPENSES
+    const depensesHeaderRow = worksheet.addRow(['DEPENSES', '', 'MONTANT', '']);
+    applyRowBorders(depensesHeaderRow.number);
+    depensesHeaderRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    depensesHeaderRow.getCell(3).font = { name: 'Calibri', size: 10, bold: true };
+
+    // 8. Lignes des DEPENSES
+    for (const item of report.depenses || []) {
+      const row = worksheet.addRow([
+        this.sanitizeExcelText(item.date || report.displayDate),
+        this.sanitizeExcelText(this.formatDailyReportLibelle(item)),
+        item.montant,
+        this.sanitizeExcelText(this.formatDailyReportPieceCol(item)),
+      ]);
+      applyRowBorders(row.number);
+      row.getCell(1).alignment = { horizontal: 'right', vertical: 'bottom' };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'bottom', wrapText: true };
+      row.getCell(3).numFmt = '#,##0.0';
+      row.getCell(3).alignment = { horizontal: 'right', vertical: 'bottom' };
+      row.getCell(3).fill = yellowFill;
+      row.getCell(4).alignment = { horizontal: 'center', vertical: 'bottom' };
+      row.getCell(4).font = { name: 'Calibri', size: 10, color: { argb: 'FFC00000' } };
+    }
+
+    // 2 lignes vides avant TOTAL DEPENSES
+    const emptyDep1 = worksheet.addRow(['', '', '', '']);
+    applyRowBorders(emptyDep1.number);
+    const emptyDep2 = worksheet.addRow(['', '', '', '']);
+    applyRowBorders(emptyDep2.number);
+
+    // 9. Ligne TOTAL DEPENSES
+    const totalDepensesRow = worksheet.addRow(['TOTAL\nDEPENSES', '', report.totalDepenses, '']);
+    totalDepensesRow.height = 28;
+    applyRowBorders(totalDepensesRow.number);
+    totalDepensesRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+    totalDepensesRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    totalDepensesRow.getCell(3).font = { name: 'Calibri', size: 10, bold: true };
+    totalDepensesRow.getCell(3).numFmt = '#,##0';
+    totalDepensesRow.getCell(3).alignment = { horizontal: 'center', vertical: 'bottom' };
+    totalDepensesRow.getCell(3).fill = greyFill;
+
+    // 10. Ligne SOLDE final
+    const soldeFinalRow = worksheet.addRow(['SOLDE', '', report.soldeFinal, '']);
+    soldeFinalRow.height = 22;
+    applyRowBorders(soldeFinalRow.number);
+    soldeFinalRow.getCell(1).font = { name: 'Calibri', size: 12, bold: true };
+    soldeFinalRow.getCell(1).fill = greyFill;
+    soldeFinalRow.getCell(1).border = mediumBoxBorder;
+    soldeFinalRow.getCell(3).font = { name: 'Calibri', size: 12, bold: true };
+    soldeFinalRow.getCell(3).numFmt = '#,##0';
+    soldeFinalRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+    soldeFinalRow.getCell(3).fill = greyFill;
+    soldeFinalRow.getCell(3).border = mediumBoxBorder;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const safeDate = this.sanitizeFilename(report.date);
+    const filename = options?.filename || `CAISSE_TRX_${safeDate}.xlsx`;
+    this.downloadBinaryFile(
+      buffer,
+      filename,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    return true;
+  }
+
+  /**
+   * Neutralise l'injection de formules Excel (S7 : préfixe d'une apostrophe si commence par =, +, -, @, \t, \r)
+   */
+  public sanitizeExcelText(value: string | null | undefined): string {
+    if (!value) return '';
+    const str = String(value);
+    return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  }
+
+  public formatDailyReportLibelle(item: DailyCashierReportItem): string {
+    const libelle = (item.libelle || '').trim();
+    const dossier = (item.noDossier || '').trim();
+    if (dossier && !libelle.toLowerCase().includes(dossier.toLowerCase())) {
+      return `${dossier} ${libelle}`.trim();
+    }
+    return libelle;
+  }
+
+  public formatDailyReportPieceCol(item: DailyCashierReportItem): string {
+    if (item.partenaire && item.partenaire.trim()) {
+      return item.partenaire.trim();
+    }
+    if (item.pieceComptable && item.pieceComptable.trim()) {
+      return item.pieceComptable.trim();
+    }
+    return '';
+  }
+
+  public formatReportInteger(amount: number): string {
+    const rounded = Math.round(Number(amount) || 0);
+    return rounded.toLocaleString('fr-FR').replace(/[\u202F\u00A0]/g, ' ');
+  }
+
+  public formatReportAmount(amount: number, withSingleDecimal = false): string {
+    const num = Math.abs(Number(amount) || 0);
+    if (withSingleDecimal) {
+      return num
+        .toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        .replace(/[\u202F\u00A0]/g, ' ');
+    }
+    return num.toLocaleString('fr-FR').replace(/[\u202F\u00A0]/g, ' ');
+  }
+
+  protected downloadBinaryFile(
+    data: ArrayBuffer | Uint8Array,
+    filename: string,
+    mimeType: string
+  ): void {
+    const part: BlobPart = data instanceof Uint8Array ? Uint8Array.from(data) : data;
+    const blob = new Blob([part], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   /**

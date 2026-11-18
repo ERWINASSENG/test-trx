@@ -12,12 +12,21 @@ import helmet from 'helmet';
 import { getSupabaseAdmin, requireAuth, updateExistingUserProfileRole } from './server/auth';
 import { getSupabaseConfigHandler } from './server/config';
 import { syncUserAccessRole } from './server/access-role-sync';
-import { formatPersistedPieceComptable, normalizeDateToDay, requiresCashierDraftBeforeEdit } from './server/cashier.utils';
+import {
+  formatPersistedPieceComptable,
+  isDuplicateCashierCandidate,
+  normalizeDateToDay,
+  requiresCashierDraftBeforeEdit,
+} from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
 import { deleteCollaboratorHandler, updateCollaboratorHandler } from './server/collaborators.manage';
-import { getDossierExpenseSummaryHandler, getOperationsHandler } from './server/cashier.read';
+import {
+  getDailyCashierReportHandler,
+  getDossierExpenseSummaryHandler,
+  getOperationsHandler,
+} from './server/cashier.read';
 import {
   assignDossierHandler,
   createDossierHandler,
@@ -299,6 +308,7 @@ interface DuplicateCandidateRow {
   date: string;
   libelle: string;
   montant: number;
+  status?: string | null;
   service?: string | null;
   no_dossier?: string | null;
 }
@@ -307,6 +317,8 @@ interface DuplicateCandidateRow {
  * Vérifie si une transaction de caisse identique existe déjà en base de données.
  * Critères d'unicité stricts : Date (jour) + Montant + Libellé + N° de dossier/matricule + Service.
  * Bloque universellement la double saisie (que l'auteur soit le même caissier ou un autre).
+ * NOTE MÉTIER : Les opérations annulées (status === 'cancelled') sont exclues du contrôle
+ * afin de permettre de réimporter ou ressaisir une ligne légitimement annulée.
  */
 const checkDuplicateCashierTransaction = async (
   adminClient: SupabaseClient,
@@ -320,16 +332,12 @@ const checkDuplicateCashierTransaction = async (
   }
 ): Promise<{ isDuplicate: boolean; existing?: DuplicateCandidateRow }> => {
   const normDay = normalizeDateToDay(candidate.date);
-  const normLibelle = candidate.libelle.toLowerCase().trim().replace(/\s+/g, ' ');
-  const normNoDossier = (candidate.noDossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  const normService = (candidate.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
-
   const absMontant = Math.abs(Number(candidate.montant));
 
   // Requête optimisée ciblée sur le jour et le montant pour éviter les balayages complets de table
   let candidateQuery = adminClient
     .from('cashier_transactions')
-    .select('id, date, libelle, montant, service, no_dossier')
+    .select('id, date, libelle, montant, status, service, no_dossier')
     .or(`montant.eq.${candidate.montant},montant.eq.${-candidate.montant},montant.eq.${absMontant},montant.eq.${-absMontant}`);
 
   if (normDay) {
@@ -343,29 +351,7 @@ const checkDuplicateCashierTransaction = async (
   }
 
   const rows = candidates as unknown as DuplicateCandidateRow[];
-  const duplicate = rows.find((c: DuplicateCandidateRow) => {
-    if (candidate.idToExclude && c.id === candidate.idToExclude) {
-      return false;
-    }
-
-    const cDay = normalizeDateToDay(c.date);
-    if (cDay !== normDay) return false;
-
-    // Comparaison du montant en valeur absolue arrondie
-    const cAbs = Math.abs(Number(c.montant));
-    if (Math.round(cAbs * 100) !== Math.round(absMontant * 100)) return false;
-
-    const cLib = String(c.libelle || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cLib !== normLibelle) return false;
-
-    const cDos = String(c.no_dossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cDos !== normNoDossier) return false;
-
-    const cSrv = String(c.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    if (cSrv !== normService) return false;
-
-    return true;
-  });
+  const duplicate = rows.find((c: DuplicateCandidateRow) => isDuplicateCashierCandidate(candidate, c));
 
   return { isDuplicate: !!duplicate, existing: duplicate };
 };
@@ -1132,7 +1118,11 @@ const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transac
 cashierOperationAliases.forEach((path) => {
   app.get(path, requireAuth, requirePermission('cashier.read'), getOperationsHandler);
   app.get(`${path}/summary`, requireAuth, requirePermission('cashier.read'), getCashierSummaryHandler);
+  app.get(`${path}/daily-report`, requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
 });
+
+app.get('/api/cahier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
+app.get('/api/cashier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
 
 cashierOperationAliases.forEach((path) => {
   app.post(`${path}/duplicate`, requireAuth, requirePermission('cashier.duplicate'), duplicateOperationsHandler);
@@ -1148,13 +1138,104 @@ cashierOperationAliases.forEach((path) => {
   app.patch(`${path}/:id`, requireAuth, requirePermission('cashier.update'), updateOperationHandler);
 });
 
+/**
+ * Suppression d'opérations de caisse (DELETE /api/cahier/operations et /:id)
+ * Strictement réservée à l'administrateur (role === 'admin' et permission cashier.delete).
+ * Déclenche le recompactage automatique des pièces comptables sans trou en base.
+ */
+export const deleteOperationsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY manquante' });
+    return;
+  }
+
+  try {
+    const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { id?: string; email?: string; role?: string } | undefined;
+    const callerId = authenticatedUser?.id || null;
+    const userRole = authenticatedUser?.role;
+
+    if (userRole !== 'admin') {
+      res.status(403).json({ error: 'Seul un administrateur peut supprimer définitivement des opérations de caisse.' });
+      return;
+    }
+
+    let targetIds: string[] = [];
+    const rawId = req.params['id'];
+    if (rawId) {
+      targetIds = [Array.isArray(rawId) ? rawId[0] : rawId];
+    } else if (Array.isArray(req.body?.ids)) {
+      targetIds = req.body.ids;
+    }
+
+    if (targetIds.length === 0) {
+      res.status(400).json({ error: 'Aucun identifiant d’opération fourni pour la suppression.' });
+      return;
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (targetIds.length > 100 || targetIds.some((id) => typeof id !== 'string' || !uuidRegex.test(id)) || new Set(targetIds).size !== targetIds.length) {
+      res.status(400).json({ error: 'La suppression accepte au maximum 100 identifiants UUID valides et distincts.' });
+      return;
+    }
+
+    const { data: rowsToDelete, error: fetchErr } = await adminClient
+      .from('cashier_transactions')
+      .select('id, piece_comptable, montant, libelle, date, status')
+      .in('id', targetIds);
+
+    if (fetchErr) {
+      console.error('[CASHIER_DELETE] Erreur lecture avant suppression:', fetchErr.message);
+      res.status(500).json({ error: 'Erreur lors de la vérification des opérations à supprimer.' });
+      return;
+    }
+
+    if (!rowsToDelete || rowsToDelete.length === 0) {
+      res.status(404).json({ error: 'Aucune opération correspondante trouvée.' });
+      return;
+    }
+
+    const { error: deleteErr } = await adminClient
+      .from('cashier_transactions')
+      .delete()
+      .in('id', rowsToDelete.map((r) => r.id));
+
+    if (deleteErr) {
+      console.error('[CASHIER_DELETE] Erreur suppression en base:', deleteErr.message);
+      res.status(500).json({ error: 'Erreur lors de la suppression des opérations en base de données.' });
+      return;
+    }
+
+    await Promise.all(rowsToDelete.map((row) => writeAuditLog(adminClient, {
+      userId: callerId,
+      userEmail: authenticatedUser?.email,
+      userRole,
+      action: 'DELETE_OPERATION',
+      entityId: row.id,
+      details: {
+        piece_comptable: row.piece_comptable,
+        libelle: row.libelle,
+        montant: row.montant,
+        status: row.status,
+        date: row.date,
+      },
+      ipAddress: req.ip || null,
+    })));
+
+    res.json({
+      success: true,
+      message: `${rowsToDelete.length} opération(s) supprimée(s) définitivement.`,
+      count: rowsToDelete.length,
+    });
+  } catch (err: unknown) {
+    console.error('Erreur deleteOperationsHandler:', err);
+    res.status(500).json({ error: 'Erreur interne lors de la suppression des opérations.' });
+  }
+};
+
 cashierOperationAliases.forEach((path) => {
-  app.delete(`${path}/:id`, requireAuth, requirePermission('cashier.delete'), (_req, res) => {
-    res.status(410).json({ error: 'La suppression définitive est désactivée. Annulez l’opération pour conserver sa pièce comptable.' });
-  });
-  app.delete(path, requireAuth, requirePermission('cashier.delete'), (_req, res) => {
-    res.status(410).json({ error: 'La suppression définitive est désactivée. Annulez l’opération pour conserver sa pièce comptable.' });
-  });
+  app.delete(`${path}/:id`, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
+  app.delete(path, requireAuth, requirePermission('cashier.delete'), deleteOperationsHandler);
 });
 
 /**
@@ -1248,6 +1329,12 @@ app.delete('/api/access-control/users/:userId/roles/:roleId', requireAuth, requi
 app.put('/api/access-control/users/:userId/overrides', requireAuth, requirePermission('access.users.override'), setUserPermissionOverrideHandler);
 app.delete('/api/access-control/users/:userId/overrides/:overrideId', requireAuth, requirePermission('access.users.override'), revokeUserPermissionOverrideHandler);
 app.get('/api/access-control/audit', requireAuth, requirePermission('access.audit.read'), listAccessAuditHandler);
+
+// Garde-fou pour toute route /api ou /api/* non reconnue :
+// garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Route API introuvable.' });
+});
 
 /**
  * Example Express Rest API endpoints can be defined here.

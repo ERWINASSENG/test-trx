@@ -270,4 +270,47 @@ describe('cashier.audit - auditPiecesComptablesHandler & Traçabilité Audit', (
       },
     ]);
   });
+
+  it('journalise correctement un événement DELETE_OPERATION', async () => {
+    const mockInsert = vi.fn().mockResolvedValue({ error: null });
+    const mockClient = {
+      from: vi.fn().mockReturnValue({ insert: mockInsert }),
+    } as unknown as SupabaseClient;
+
+    await writeAuditLog(mockClient, {
+      userId: 'admin-user-uuid',
+      userEmail: 'admin@transimex.cm',
+      userRole: 'admin',
+      action: 'DELETE_OPERATION',
+      entityId: 'operation-to-delete-456',
+      details: {
+        piece_comptable: 'CSH1/2026/00008',
+        libelle: 'Carburant navette',
+        montant: -25000,
+        status: 'posted',
+        date: '2026-10-02',
+      },
+      ipAddress: '192.168.1.10',
+    });
+
+    expect(mockClient.from).toHaveBeenCalledWith('audit_logs');
+    expect(mockInsert).toHaveBeenCalledWith([
+      {
+        user_id: 'admin-user-uuid',
+        user_email: 'admin@transimex.cm',
+        user_role: 'admin',
+        action: 'DELETE_OPERATION',
+        entity_type: 'cashier_transaction',
+        entity_id: 'operation-to-delete-456',
+        details: {
+          piece_comptable: 'CSH1/2026/00008',
+          libelle: 'Carburant navette',
+          montant: -25000,
+          status: 'posted',
+          date: '2026-10-02',
+        },
+        ip_address: '192.168.1.10',
+      },
+    ]);
+  });
 });

@@ -45,6 +45,62 @@ export const requiresCashierDraftBeforeEdit = (
   role: string | null | undefined
 ): boolean => role === 'caissiere' && status === 'posted';
 
+export interface CashierCandidateRow {
+  id?: string;
+  date: string;
+  montant: number;
+  libelle: string;
+  status?: string | null;
+  service?: string | null;
+  no_dossier?: string | null;
+}
+
+/**
+ * Vérifie si une transaction candidate correspond à une transaction existante selon les critères d'unicité.
+ * Règle métier stricte : les opérations annulées ('cancelled') sont explicitement ignorées.
+ */
+export const isDuplicateCashierCandidate = (
+  candidate: {
+    idToExclude?: string;
+    date: string;
+    montant: number;
+    libelle: string;
+    noDossier?: string | null;
+    service?: string | null;
+  },
+  existing: CashierCandidateRow
+): boolean => {
+  if (candidate.idToExclude && existing.id && candidate.idToExclude === existing.id) {
+    return false;
+  }
+  // Les opérations annulées ne bloquent plus la détection de doublons
+  if (existing.status === 'cancelled') {
+    return false;
+  }
+
+  const normCandidateDay = normalizeDateToDay(candidate.date);
+  const normExistingDay = normalizeDateToDay(existing.date);
+  if (normExistingDay !== normCandidateDay) return false;
+
+  const candidateAbs = Math.abs(Number(candidate.montant));
+  const existingAbs = Math.abs(Number(existing.montant));
+  if (Math.round(existingAbs * 100) !== Math.round(candidateAbs * 100)) return false;
+
+  const normCandidateLib = candidate.libelle.toLowerCase().trim().replace(/\s+/g, ' ');
+  const normExistingLib = String(existing.libelle || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (normExistingLib !== normCandidateLib) return false;
+
+  const normCandidateDos = (candidate.noDossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const normExistingDos = String(existing.no_dossier || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (normExistingDos !== normCandidateDos) return false;
+
+  const normCandidateSrv = (candidate.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const normExistingSrv = String(existing.service || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (normExistingSrv !== normCandidateSrv) return false;
+
+  return true;
+};
+
 export interface DossierExpenseTransaction {
   dossier_id?: unknown;
   status?: unknown;

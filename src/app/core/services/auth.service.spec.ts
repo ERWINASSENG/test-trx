@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { PLATFORM_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -338,5 +338,57 @@ describe('AuthService', () => {
     expect(routerSpy.navigate).toHaveBeenCalledWith(['/auth/login'], {
       queryParams: { returnUrl: '/dossiers' },
     });
+  });
+
+  it('rejette proprement une réponse HTML 200 (<!doctype html>) sans lever SyntaxError', async () => {
+    const user = createCachedUser();
+    configureSupabaseAuth(
+      { access_token: 'valid-token' },
+      { data: { user: { id: user.id, email: user.email } }, error: null }
+    );
+    const jsonSpy = vi.fn().mockRejectedValue(new SyntaxError('Unexpected token <'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+      json: jsonSpy,
+    }));
+
+    await service.restoreSession();
+
+    expect(jsonSpy).not.toHaveBeenCalled();
+    expect(service.currentUser()).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('Lecture profil serveur interrompue : réponse JSON attendue.');
+    warnSpy.mockRestore();
+  });
+
+  it('n’exécute aucun appel HTTP externe vers VERCEL_URL en rendu SSR', async () => {
+    const user = createCachedUser();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    configureSupabaseAuth(
+      { access_token: 'valid-token' },
+      { data: { user: { id: user.id, email: user.email } }, error: null }
+    );
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: PLATFORM_ID, useValue: 'server' },
+        { provide: Router, useValue: routerSpy },
+        { provide: SupabaseService, useValue: supabaseServiceMock },
+      ],
+    });
+    const ssrService = TestBed.inject(AuthService);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await ssrService.restoreSession();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ssrService.currentUser()).toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
