@@ -33,7 +33,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     label: 'Tableau de bord',
     description: 'Indicateurs, tableaux de bord et suivi d’activité',
     icon: '/assets/module-icons/board.svg',
-    matches: (p) => p.resourceKey === 'dashboard' || p.resourceKey === 'module.dashboard' || p.permissionKey.startsWith('dashboard.') || p.permissionKey === 'module.dashboard.view',
+    matches: (p) => ['dashboard', 'module.dashboard', 'module.crm_performance'].includes(p.resourceKey) || p.permissionKey.startsWith('dashboard.') || p.permissionKey === 'module.dashboard.view' || p.permissionKey === 'module.crm_performance.view',
   },
   {
     id: 'comptabilite',

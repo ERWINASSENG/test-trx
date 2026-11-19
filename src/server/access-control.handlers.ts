@@ -1,14 +1,67 @@
 import express from 'express';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { clearAccessRulesCache, isAccessScopeSupported, resolveEffectivePermissions } from './access-control';
 import { clearServerProfileCache, getSupabaseAdmin } from './auth';
 import type { ServerUserProfile } from './auth';
 import { isCanonicalAccessRoleKey } from './access-role-sync';
 import { clearUserProfileResponseCache } from './profile';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuid = (value: unknown): value is string =>
+  typeof value === 'string' && UUID_PATTERN.test(value);
+
+const singleParam = (value: string | string[] | undefined): string =>
+  Array.isArray(value) ? (value[0] || '') : (value || '');
+
 const actorIdFromRequest = (req: express.Request): string | null => {
   const user = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
   return user?.id || null;
 };
+
+const isCallerAdmin = (req: express.Request): boolean => {
+  const user = (req as unknown as Record<string, unknown>)['user'] as { role?: string } | undefined;
+  return user?.role === 'admin';
+};
+
+const isPrivilegedAccessPermission = (permissionKey: unknown): boolean =>
+  typeof permissionKey === 'string' &&
+  (permissionKey.startsWith('access.') || permissionKey === 'module.access_control.view');
+
+async function isTargetUserAdmin(adminClient: SupabaseClient, userId: string): Promise<boolean> {
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profile?.role === 'admin') {
+    return true;
+  }
+
+  const { data: adminRole } = await adminClient
+    .from('access_roles')
+    .select('id')
+    .eq('role_key', 'admin')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!adminRole?.id) {
+    return false;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: assignment } = await adminClient
+    .from('access_user_roles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('role_id', adminRole.id)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(assignment?.id);
+}
 
 const sendMutationError = (res: express.Response, error: { code?: string; message?: string }): void => {
   const responseByCode: Record<string, { status: number; message: string }> = {
@@ -313,7 +366,11 @@ export const listAccessUsersHandler = async (req: express.Request, res: express.
 };
 
 export const getRolePermissionsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
-  const roleId = req.params['roleId'];
+  const roleId = singleParam(req.params['roleId']);
+  if (!isUuid(roleId)) {
+    res.status(400).json({ error: 'Identifiant de rôle invalide.' });
+    return;
+  }
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
@@ -345,9 +402,8 @@ export const getRolePermissionsHandler = async (req: express.Request, res: expre
 };
 
 export const getUserAccessHandler = async (req: express.Request, res: express.Response): Promise<void> => {
-  const rawUserId = req.params['userId'];
-  const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
-  if (!userId) {
+  const userId = singleParam(req.params['userId']);
+  if (!isUuid(userId)) {
     res.status(400).json({ error: 'Identifiant utilisateur invalide.' });
     return;
   }
@@ -422,7 +478,11 @@ export const listAccessAuditHandler = async (req: express.Request, res: express.
     .limit(limit);
 
   const subjectUserId = req.query['userId'];
-  if (typeof subjectUserId === 'string' && subjectUserId) {
+  if (subjectUserId !== undefined && subjectUserId !== '') {
+    if (!isUuid(subjectUserId)) {
+      res.status(400).json({ error: 'Identifiant utilisateur invalide pour le filtre d’audit.' });
+      return;
+    }
     query = query.eq('subject_user_id', subjectUserId);
   }
 
@@ -443,26 +503,76 @@ export const createAccessRoleHandler = (req: express.Request, res: express.Respo
     description: req.body?.description,
   });
 
-export const updateAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> =>
-  runAccessMutation(req, res, 'role.update', {
-    roleId: req.params['roleId'],
+export const updateAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> => {
+  const roleId = singleParam(req.params['roleId']);
+  if (!isUuid(roleId)) {
+    res.status(400).json({ error: 'Identifiant de rôle invalide.' });
+    return Promise.resolve();
+  }
+  return runAccessMutation(req, res, 'role.update', {
+    roleId,
     label: req.body?.label,
     description: req.body?.description,
     isActive: req.body?.isActive,
   });
+};
 
-export const deleteAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> =>
-  runAccessMutation(req, res, 'role.delete', { roleId: req.params['roleId'] });
+export const deleteAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> => {
+  const roleId = singleParam(req.params['roleId']);
+  if (!isUuid(roleId)) {
+    res.status(400).json({ error: 'Identifiant de rôle invalide.' });
+    return Promise.resolve();
+  }
+  return runAccessMutation(req, res, 'role.delete', { roleId });
+};
 
-export const replaceRolePermissionsHandler = (req: express.Request, res: express.Response): Promise<void> => {
+export const replaceRolePermissionsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const roleId = singleParam(req.params['roleId']);
+  if (!isUuid(roleId)) {
+    res.status(400).json({ error: 'Identifiant de rôle invalide.' });
+    return;
+  }
+
   const grants = req.body?.grants;
   if (!Array.isArray(grants) || grants.some((grant: Record<string, unknown>) => !isAccessScopeSupported(grant['scope']))) {
     res.status(400).json({ error: 'Chaque permission doit utiliser un périmètre pris en charge par le serveur.' });
-    return Promise.resolve();
+    return;
   }
 
-  return runAccessMutation(req, res, 'role.permissions.replace', {
-    roleId: req.params['roleId'],
+  // S1 : Anti-élévation de privilèges pour tout non-admin
+  if (!isCallerAdmin(req)) {
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) {
+      res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
+      return;
+    }
+
+    const { data: targetRole, error: roleError } = await adminClient
+      .from('access_roles')
+      .select('id, role_key')
+      .eq('id', roleId)
+      .maybeSingle();
+
+    if (roleError) {
+      res.status(500).json({ error: 'Impossible de vérifier le rôle ciblé.' });
+      return;
+    }
+    if (!targetRole) {
+      res.status(404).json({ error: 'Rôle introuvable.' });
+      return;
+    }
+    if (targetRole.role_key === 'admin') {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut modifier les permissions du rôle administrateur.' });
+      return;
+    }
+    if (grants.some((grant: Record<string, unknown>) => isPrivilegedAccessPermission(grant['permissionKey']))) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut attribuer des permissions de gestion des accès.' });
+      return;
+    }
+  }
+
+  await runAccessMutation(req, res, 'role.permissions.replace', {
+    roleId,
     grants: grants.map((grant: Record<string, unknown>) => ({
       permissionKey: grant['permissionKey'],
       scope: grant['scope'],
@@ -471,13 +581,18 @@ export const replaceRolePermissionsHandler = (req: express.Request, res: express
 };
 
 export const assignAccessRoleHandler = async (req: express.Request, res: express.Response): Promise<void> => {
-  const rawUserId = req.params['userId'];
-  const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
+  const userId = singleParam(req.params['userId']);
   const roleId = req.body?.roleId;
+  const callerId = actorIdFromRequest(req);
   const adminClient = getSupabaseAdmin();
 
-  if (!userId || typeof roleId !== 'string' || !roleId) {
-    res.status(400).json({ error: 'Utilisateur et rôle sont obligatoires.' });
+  if (!isUuid(userId) || !isUuid(roleId)) {
+    res.status(400).json({ error: 'Utilisateur et rôle valides sont obligatoires.' });
+    return;
+  }
+
+  if (!callerId) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
   }
 
@@ -495,6 +610,22 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
   if (roleError || !role) {
     res.status(404).json({ error: 'Rôle actif introuvable.' });
     return;
+  }
+
+  // S1 : Anti-élévation de privilèges pour tout non-admin
+  if (!isCallerAdmin(req)) {
+    if (callerId === userId) {
+      res.status(403).json({ error: 'Action refusée : vous ne pouvez pas modifier votre propre rôle.' });
+      return;
+    }
+    if (role.role_key === 'admin') {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut attribuer le rôle administrateur.' });
+      return;
+    }
+    if (await isTargetUserAdmin(adminClient, userId)) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut modifier le rôle d’un compte administrateur.' });
+      return;
+    }
   }
 
   // Protection du dernier administrateur actif si changement de rôle
@@ -551,20 +682,90 @@ export const assignAccessRoleHandler = async (req: express.Request, res: express
   );
 };
 
-export const revokeAccessRoleHandler = (req: express.Request, res: express.Response): Promise<void> =>
-  runAccessMutation(req, res, 'user.role.revoke', {
-    userId: req.params['userId'],
-    roleId: req.params['roleId'],
-  });
+export const revokeAccessRoleHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const userId = singleParam(req.params['userId']);
+  const roleId = singleParam(req.params['roleId']);
+  const callerId = actorIdFromRequest(req);
 
-export const setUserPermissionOverrideHandler = (req: express.Request, res: express.Response): Promise<void> => {
-  if (!isAccessScopeSupported(req.body?.scope)) {
-    res.status(400).json({ error: 'Le périmètre doit être pris en charge par le serveur.' });
-    return Promise.resolve();
+  if (!isUuid(userId) || !isUuid(roleId)) {
+    res.status(400).json({ error: 'Identifiants utilisateur et rôle invalides.' });
+    return;
   }
 
-  return runAccessMutation(req, res, 'user.permission.override', {
-    userId: req.params['userId'],
+  if (!callerId) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+
+  if (!isCallerAdmin(req)) {
+    if (callerId === userId) {
+      res.status(403).json({ error: 'Action refusée : vous ne pouvez pas révoquer votre propre rôle.' });
+      return;
+    }
+
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) {
+      res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
+      return;
+    }
+
+    const { data: targetRole } = await adminClient
+      .from('access_roles')
+      .select('role_key')
+      .eq('id', roleId)
+      .maybeSingle();
+
+    if (targetRole?.role_key === 'admin' || await isTargetUserAdmin(adminClient, userId)) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut révoquer un rôle administrateur.' });
+      return;
+    }
+  }
+
+  await runAccessMutation(req, res, 'user.role.revoke', { userId, roleId });
+};
+
+export const setUserPermissionOverrideHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const userId = singleParam(req.params['userId']);
+  const callerId = actorIdFromRequest(req);
+
+  if (!isUuid(userId)) {
+    res.status(400).json({ error: 'Identifiant utilisateur invalide.' });
+    return;
+  }
+
+  if (!callerId) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+
+  if (!isAccessScopeSupported(req.body?.scope)) {
+    res.status(400).json({ error: 'Le périmètre doit être pris en charge par le serveur.' });
+    return;
+  }
+
+  if (!isCallerAdmin(req)) {
+    if (callerId === userId) {
+      res.status(403).json({ error: 'Action refusée : vous ne pouvez pas définir d’exception sur votre propre compte.' });
+      return;
+    }
+    if (isPrivilegedAccessPermission(req.body?.permissionKey)) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut accorder ou modifier une permission de gestion des accès.' });
+      return;
+    }
+
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) {
+      res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
+      return;
+    }
+    if (await isTargetUserAdmin(adminClient, userId)) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut modifier les exceptions d’un compte administrateur.' });
+      return;
+    }
+  }
+
+  await runAccessMutation(req, res, 'user.permission.override', {
+    userId,
     permissionKey: req.body?.permissionKey,
     effect: req.body?.effect,
     scope: req.body?.scope,
@@ -573,8 +774,40 @@ export const setUserPermissionOverrideHandler = (req: express.Request, res: expr
   });
 };
 
-export const revokeUserPermissionOverrideHandler = (req: express.Request, res: express.Response): Promise<void> =>
-  runAccessMutation(req, res, 'user.permission.override.revoke', {
-    userId: req.params['userId'],
-    overrideId: req.params['overrideId'],
+export const revokeUserPermissionOverrideHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const userId = singleParam(req.params['userId']);
+  const overrideId = singleParam(req.params['overrideId']);
+  const callerId = actorIdFromRequest(req);
+
+  if (!isUuid(userId) || !isUuid(overrideId)) {
+    res.status(400).json({ error: 'Identifiants utilisateur et exception invalides.' });
+    return;
+  }
+
+  if (!callerId) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+
+  if (!isCallerAdmin(req)) {
+    if (callerId === userId) {
+      res.status(403).json({ error: 'Action refusée : vous ne pouvez pas révoquer une exception sur votre propre compte.' });
+      return;
+    }
+
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) {
+      res.status(503).json({ error: 'Le service d’autorisations est indisponible.' });
+      return;
+    }
+    if (await isTargetUserAdmin(adminClient, userId)) {
+      res.status(403).json({ error: 'Action refusée : seul un administrateur peut modifier les exceptions d’un compte administrateur.' });
+      return;
+    }
+  }
+
+  await runAccessMutation(req, res, 'user.permission.override.revoke', {
+    userId,
+    overrideId,
   });
+};

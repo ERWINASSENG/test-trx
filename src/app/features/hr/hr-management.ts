@@ -35,6 +35,14 @@ export class HrManagement implements OnInit {
   public readonly isAdmin = this.authService.isAdmin;
   public readonly dynamicRoles = this.accessControlService.roles;
   public readonly canReadUsers = computed(() => this.accessControlService.hasPermission('users.read'));
+  public readonly canCreateUsers = computed(() => this.accessControlService.hasPermission('users.create'));
+  public readonly canUpdateUsers = computed(() => this.accessControlService.hasPermission('users.update'));
+  public readonly canAssignRoles = computed(() =>
+    this.isAdmin() || this.accessControlService.hasPermission('access.users.assign_roles')
+  );
+  public readonly canReadRoles = computed(() =>
+    this.isAdmin() || this.accessControlService.hasPermission('access.roles.read')
+  );
 
   public readonly availableRoles = computed<DisplayRoleOption[]>(() => {
     const rolesMap = new Map<string, DisplayRoleOption>();
@@ -64,13 +72,37 @@ export class HrManagement implements OnInit {
     return Array.from(rolesMap.values());
   });
 
+  public readonly selectableRoles = computed<DisplayRoleOption[]>(() => {
+    const all = this.availableRoles();
+    if (this.isAdmin()) return all;
+    if (this.canAssignRoles()) return all.filter((role) => role.id !== 'admin');
+    return all.filter((role) => role.id === 'employe');
+  });
+
+  public readonly canChangeRoleInModal = computed<boolean>(() => {
+    if (!this.canAssignRoles()) return false;
+    const editId = this.editingUserId();
+    const currentUserId = this.authService.currentUser()?.id;
+    if (editId && currentUserId && editId === currentUserId && !this.isAdmin()) {
+      return false;
+    }
+    return true;
+  });
+
+  public canEditUser(user: UserProfile): boolean {
+    if (!this.canUpdateUsers()) return false;
+    const isTargetAdmin = user.role === 'admin' || user.customRole === 'admin';
+    if (isTargetAdmin && !this.isAdmin()) return false;
+    return true;
+  }
+
   public ngOnInit(): void {
     if (this.canReadUsers()) {
       void this.userService.loadInitialUsers();
     } else {
       this.userService.clearAllUsers();
     }
-    if (this.isAdmin()) void this.accessControlService.loadRoles();
+    if (this.canReadRoles()) void this.accessControlService.loadRoles();
   }
 
   public retryLoadUsers(): void {
@@ -79,7 +111,7 @@ export class HrManagement implements OnInit {
     } else {
       this.userService.clearAllUsers();
     }
-    if (this.isAdmin()) void this.accessControlService.loadRoles();
+    if (this.canReadRoles()) void this.accessControlService.loadRoles();
   }
 
   public readonly selectedDepartment = signal<string>('all');
@@ -163,6 +195,7 @@ export class HrManagement implements OnInit {
   }
 
   public openCreateModal(): void {
+    if (!this.canCreateUsers()) return;
     this.editingUserId.set(null);
     this.errorMessage.set(null);
     this.successMessage.set(null);
@@ -179,6 +212,7 @@ export class HrManagement implements OnInit {
   }
 
   public openEditModal(user: UserProfile): void {
+    if (!this.canEditUser(user)) return;
     this.editingUserId.set(user.id);
     this.errorMessage.set(null);
     this.successMessage.set(null);
@@ -220,19 +254,28 @@ export class HrManagement implements OnInit {
       if (editId) {
         // Mode mise à jour du profil et rôle
         const existingUser = this.users().find((user) => user.id === editId);
-        const isCanonicalRole = Object.prototype.hasOwnProperty.call(ROLE_DEFINITIONS, formVal.role);
+        if (!existingUser || !this.canEditUser(existingUser)) {
+          throw new Error('Action refusée : vous ne disposez pas des droits requis pour modifier ce collaborateur.');
+        }
+
+        const allowRoleUpdate = this.canChangeRoleInModal();
+        const requestedRole = allowRoleUpdate ? formVal.role : (existingUser.customRole || existingUser.role);
+        const isCanonicalRole = Object.prototype.hasOwnProperty.call(ROLE_DEFINITIONS, requestedRole);
         const customRole = isCanonicalRole
           ? null
-          : this.dynamicRoles().find((role) => role.roleKey === formVal.role && role.isActive) || null;
+          : this.dynamicRoles().find((role) => role.roleKey === requestedRole && role.isActive) || null;
 
-        if (!isCanonicalRole && !customRole) {
+        if (allowRoleUpdate && !isCanonicalRole && !customRole) {
           throw new Error('Ce rôle personnalisé est introuvable ou inactif. Recharge la liste des rôles.');
         }
+
+        const currentRole = existingUser.customRole || existingUser.role;
+        const shouldSendCanonicalRole = allowRoleUpdate && isCanonicalRole && (this.isAdmin() || requestedRole !== currentRole);
 
         const res = await this.userService.updateUser(editId, {
           firstName: formVal.firstName.trim(),
           lastName: formVal.lastName.trim(),
-          ...(isCanonicalRole ? { role: formVal.role as UserRole } : {}),
+          ...(shouldSendCanonicalRole ? { role: requestedRole as UserRole } : {}),
           department: formVal.department.trim(),
           phone: formVal.phone.trim(),
         });
@@ -240,8 +283,7 @@ export class HrManagement implements OnInit {
           throw new Error(res.error || 'Échec de la mise à jour du collaborateur');
         }
 
-        const currentRole = existingUser?.customRole || existingUser?.role;
-        if (customRole && currentRole !== customRole.roleKey) {
+        if (allowRoleUpdate && customRole && currentRole !== customRole.roleKey) {
           const assignment = await this.accessControlService.assignRole({
             userId: editId,
             roleId: customRole.id,
@@ -252,14 +294,22 @@ export class HrManagement implements OnInit {
           await this.userService.loadInitialUsers();
         }
 
-        this.successMessage.set(`Collaborateur ${formVal.firstName} mis à jour avec le rôle ${this.getRoleLabel(formVal.role)}.`);
+        this.successMessage.set(
+          allowRoleUpdate
+            ? `Collaborateur ${formVal.firstName} mis à jour avec le rôle ${this.getRoleLabel(requestedRole)}.`
+            : `Profil du collaborateur ${formVal.firstName} mis à jour avec succès.`
+        );
       } else {
+        if (!this.canCreateUsers()) {
+          throw new Error('Action refusée : vous n’avez pas la permission de créer un collaborateur.');
+        }
+        const targetRole = (this.canAssignRoles() ? formVal.role : 'employe') as UserRole;
         // Mode création nouvel utilisateur avec rôle
         const res = await this.userService.createUser({
           email: formVal.email.trim().toLowerCase(),
           firstName: formVal.firstName.trim(),
           lastName: formVal.lastName.trim(),
-          role: formVal.role as UserRole,
+          role: targetRole,
           department: formVal.department.trim(),
           phone: formVal.phone.trim(),
           tempPassword: formVal.tempPassword.trim(),
@@ -267,7 +317,7 @@ export class HrManagement implements OnInit {
         if (!res.success) {
           throw new Error(res.error || 'Échec de la création du compte en base de données');
         }
-        this.successMessage.set(`Collaborateur ${formVal.firstName} créé avec succès. Rôle attribué : ${this.getRoleLabel(formVal.role)}.`);
+        this.successMessage.set(`Collaborateur ${formVal.firstName} créé avec succès. Rôle attribué : ${this.getRoleLabel(targetRole)}.`);
       }
 
       this.isModalOpen.set(false);

@@ -21,6 +21,7 @@ describe('HrManagement Component', () => {
   };
   let mockAuthService: {
     isAdmin: WritableSignal<boolean>;
+    currentUser: WritableSignal<UserProfile | null>;
   };
   let mockAccessControlService: {
     roles: () => { id: string; roleKey: string; label: string; description: string | null; isActive: boolean }[];
@@ -67,6 +68,7 @@ describe('HrManagement Component', () => {
 
     mockAuthService = {
       isAdmin: signal(true),
+      currentUser: signal<UserProfile | null>(sampleUsers[0]),
     };
 
     mockAccessControlService = {
@@ -79,7 +81,9 @@ describe('HrManagement Component', () => {
           isActive: true,
         },
       ]),
-      hasPermission: vi.fn((permission: string) => permission === 'users.read'),
+      hasPermission: vi.fn((permission: string) =>
+        ['users.read', 'users.create', 'users.update', 'access.roles.read', 'access.users.assign_roles'].includes(permission)
+      ),
       loadRoles: vi.fn().mockResolvedValue(undefined),
       assignRole: vi.fn().mockResolvedValue({ success: true }),
     };
@@ -251,5 +255,44 @@ describe('HrManagement Component', () => {
     component.closeModal();
     expect(component.isModalOpen()).toBe(false);
     expect(component.editingUserId()).toBeNull();
+  });
+
+  it('autorise un non-admin avec users.create/users.update sur les comptes non-admin sans permettre la modification de rôle ni des comptes admin', async () => {
+    mockAuthService.isAdmin.set(false);
+    mockAuthService.currentUser.set({ ...sampleUsers[1], id: 'usr-rh', role: 'manager' });
+    mockAccessControlService.hasPermission.mockImplementation((perm: string) =>
+      ['users.read', 'users.create', 'users.update'].includes(perm)
+    );
+
+    expect(component.canCreateUsers()).toBe(true);
+    expect(component.canUpdateUsers()).toBe(true);
+    expect(component.canAssignRoles()).toBe(false);
+    expect(component.canEditUser(sampleUsers[0])).toBe(false); // compte admin protégé
+    expect(component.canEditUser(sampleUsers[1])).toBe(true);
+    expect(component.selectableRoles().map((r) => r.id)).toEqual(['employe']);
+
+    component.openEditModal(sampleUsers[1]);
+    expect(component.canChangeRoleInModal()).toBe(false);
+    component.userForm.controls.department.setValue('Logistique');
+    await component.onSubmit();
+
+    expect(mockUserService.updateUser).toHaveBeenCalledWith(
+      'usr-2',
+      expect.not.objectContaining({ role: expect.anything() })
+    );
+  });
+
+  it('exclut le rôle admin de selectableRoles pour un non-admin ayant access.users.assign_roles et bloque l’auto-changement de rôle', () => {
+    mockAuthService.isAdmin.set(false);
+    mockAuthService.currentUser.set(sampleUsers[1]);
+    mockAccessControlService.hasPermission.mockImplementation((perm: string) =>
+      ['users.read', 'users.update', 'access.users.assign_roles', 'access.roles.read'].includes(perm)
+    );
+
+    expect(component.selectableRoles().some((r) => r.id === 'admin')).toBe(false);
+    expect(component.selectableRoles().some((r) => r.id === 'manager')).toBe(true);
+
+    component.openEditModal(sampleUsers[1]);
+    expect(component.canChangeRoleInModal()).toBe(false);
   });
 });

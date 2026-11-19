@@ -1332,9 +1332,9 @@ app.delete('/api/prospects/:id', requireAuth, requirePermission('prospects.delet
 // Module Dossiers : chaque opération possède une permission métier dédiée.
 app.get('/api/dossiers', requireAuth, requirePermission('dossiers.read'), listDossiersHandler);
 app.get('/api/dossiers/expenses', requireAuth, requirePermission('dossiers.read'), getDossierExpenseSummaryHandler);
-app.get('/api/dossiers/assignees', requireAuth, requirePermission('crm.team.manage'), listDossierAssigneesHandler);
+app.get('/api/dossiers/assignees', requireAuth, listDossierAssigneesHandler);
 app.post('/api/dossiers', requireAuth, requirePermission('dossiers.create'), createDossierHandler);
-app.patch('/api/dossiers/:id/assignment', requireAuth, requirePermission('crm.team.manage'), assignDossierHandler);
+app.patch('/api/dossiers/:id/assignment', requireAuth, assignDossierHandler);
 
 // Centre de gestion des accès : contrôles serveur dédiés à chaque capacité.
 app.get('/api/access-control/me', requireAuth, getMyAccessPermissionsHandler);

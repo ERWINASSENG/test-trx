@@ -22,31 +22,23 @@ export class Dashboard {
   public readonly currentUser = this.authService.currentUser;
 
   public readonly dashboardView = computed<DashboardViewType>(() => {
-    const user = this.currentUser();
-    const role = user?.role;
-    const customRole = user?.customRole;
-
-    if (customRole === 'commercial' || (role as string) === 'commercial') {
-      return 'commercial';
-    }
-
-    if (role === 'commercial') {
-      return 'commercial';
-    }
-
-    if (role === 'admin') {
+    if (this.accessControl.hasPermission('dashboard.admin.view')) {
       return 'admin';
     }
 
-    if (role === 'manager' || role === 'tresorier') {
+    if (this.accessControl.hasPermission('dashboard.manager.view')) {
       return 'manager';
     }
 
-    if (this.accessControl.hasPermission('module.crm.view') || this.accessControl.hasPermission('crm.read')) {
+    if (
+      this.accessControl.hasPermission('dashboard.commercial.view') ||
+      this.accessControl.hasPermission('module.crm.view') ||
+      this.accessControl.hasPermission('crm.read')
+    ) {
       return 'commercial';
     }
 
-    // Tous les autres profils basculent sur la vue collaborateur
+    // Repli fail-safe sur la vue collaborateur la moins privilégiée
     return 'employee';
   });
 }

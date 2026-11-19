@@ -1,7 +1,7 @@
 import express from 'express';
-import { UserRole } from '../app/core/models/auth.model';
+import { hasPermission } from './access-control';
 import { getSupabaseAdmin } from './auth';
-import { syncUserAccessRole } from './access-role-sync';
+import { isCanonicalAccessRoleKey, syncUserAccessRole } from './access-role-sync';
 
 /**
  * Création d'un collaborateur (POST /api/collaborators & /api/users)
@@ -12,6 +12,16 @@ import { syncUserAccessRole } from './access-role-sync';
  *   le compte `auth.users` est immédiatement révoqué pour éviter la prolifération de comptes fantômes ou sans permissions.
  */
 export const createCollaboratorHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as
+    | { id?: string; email?: string; role?: string }
+    | undefined;
+  const callerId = authenticatedUser?.id;
+  if (!callerId) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  const isCallerAdmin = authenticatedUser?.role === 'admin';
+
   const {
     email,
     password,
@@ -47,14 +57,32 @@ export const createCollaboratorHandler = async (req: express.Request, res: expre
     return;
   }
 
+  // S1 : Anti-élévation de privilèges côté serveur
+  if (!isCallerAdmin) {
+    if (rawRole === 'admin') {
+      res.status(403).json({
+        error: 'Action refusée : seul un administrateur peut créer un compte administrateur.',
+      });
+      return;
+    }
+    if (rawRole !== 'employe') {
+      const canAssignRoles = await hasPermission(callerId, 'access.users.assign_roles', undefined);
+      if (!canAssignRoles) {
+        res.status(403).json({
+          error: 'Action refusée : vous n’avez pas la permission d’attribuer un rôle spécifique lors de la création.',
+        });
+        return;
+      }
+    }
+  }
+
   const adminClient = getSupabaseAdmin();
   if (!adminClient) {
     res.status(503).json({ error: 'Service d’administration indisponible : SUPABASE_SERVICE_ROLE_KEY non configurée' });
     return;
   }
 
-  const canonicalRoles: UserRole[] = ['admin', 'manager', 'tresorier', 'caissiere', 'comptable', 'employe'];
-  const isCanonical = canonicalRoles.includes(rawRole as UserRole);
+  const isCanonical = isCanonicalAccessRoleKey(rawRole);
 
   if (!isCanonical) {
     const { data: dynamicRole, error: roleCheckError } = await adminClient
@@ -138,7 +166,7 @@ export const createCollaboratorHandler = async (req: express.Request, res: expre
 
     // Étape 3 : Affectation atomique du rôle dans access_user_roles
     try {
-      await syncUserAccessRole(adminClient, authUserId, computedRole, authUserId, 'legacy_profile');
+      await syncUserAccessRole(adminClient, authUserId, computedRole, callerId, 'legacy_profile');
     } catch (roleError: unknown) {
       console.error('Échec affectation access_user_roles:', roleError);
       // Rollback du profil et de l'utilisateur auth

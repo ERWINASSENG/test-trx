@@ -18,18 +18,24 @@ interface DossierActor {
 const getActor = (req: express.Request): DossierActor | undefined =>
   (req as unknown as Record<string, unknown>)['user'] as DossierActor | undefined;
 
-const canManageCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+const canAssignDossiers = async (actorId: string, role?: string): Promise<boolean> => {
   if (role === 'admin') return true;
-  return hasPermission(actorId, 'crm.team.manage', undefined);
+  const [assign, teamManage] = await Promise.all([
+    hasPermission(actorId, 'dossiers.assign', undefined),
+    hasPermission(actorId, 'crm.team.manage', undefined),
+  ]);
+  return assign || teamManage;
 };
 
-const canReadCrmTeam = async (actorId: string, role?: string): Promise<boolean> => {
+const canReadAllDossiers = async (actorId: string, role?: string): Promise<boolean> => {
   if (role === 'admin') return true;
-  const [read, manage] = await Promise.all([
+  const [readAll, assign, teamRead, teamManage] = await Promise.all([
+    hasPermission(actorId, 'dossiers.read_all', undefined),
+    hasPermission(actorId, 'dossiers.assign', undefined),
     hasPermission(actorId, 'crm.team.read', undefined),
     hasPermission(actorId, 'crm.team.manage', undefined),
   ]);
-  return read || manage;
+  return readAll || assign || teamRead || teamManage;
 };
 
 export const listDossiersHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -61,7 +67,7 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
     .range(offset, offset + limit - 1);
 
   if (actor?.id) {
-    const hasGlobalTeamView = await canReadCrmTeam(actor.id, actor.role);
+    const hasGlobalTeamView = await canReadAllDossiers(actor.id, actor.role);
     if (!hasGlobalTeamView) {
       // S1: L'acteur ne voit que les dossiers assignés à lui ou créés par lui
       query = query.or(`assigned_to.eq.${actor.id},created_by.eq.${actor.id}`);
@@ -99,12 +105,21 @@ export const listDossiersHandler = async (req: express.Request, res: express.Res
 };
 
 export const listDossierAssigneesHandler = async (
-  _req: express.Request,
+  req: express.Request,
   res: express.Response
 ): Promise<void> => {
   const adminClient = getSupabaseAdmin();
+  const actor = getActor(req);
   if (!adminClient) {
     res.status(503).json({ error: 'Le service Dossiers est indisponible.' });
+    return;
+  }
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!(await canAssignDossiers(actor.id, actor.role))) {
+    res.status(403).json({ error: 'Vous ne pouvez pas consulter la liste des responsables de dossiers.' });
     return;
   }
 
@@ -161,7 +176,7 @@ export const createDossierHandler = async (req: express.Request, res: express.Re
     return;
   }
   const assignedTo = typeof rawAssignee === 'string' && rawAssignee ? rawAssignee : null;
-  if (assignedTo && !(await canManageCrmTeam(actor.id, actor.role))) {
+  if (assignedTo && !(await canAssignDossiers(actor.id, actor.role))) {
     res.status(403).json({ error: 'Vous ne pouvez pas attribuer ce dossier à un commercial.' });
     return;
   }
@@ -314,8 +329,8 @@ export const assignDossierHandler = async (req: express.Request, res: express.Re
     res.status(400).json({ error: 'Le dossier ou le commercial sélectionné est invalide.' });
     return;
   }
-  const hasTeamManage = await canManageCrmTeam(actor.id, actor.role);
-  if (!hasTeamManage) {
+  const hasAssignPermission = await canAssignDossiers(actor.id, actor.role);
+  if (!hasAssignPermission) {
     res.status(403).json({ error: 'Vous ne pouvez pas attribuer les dossiers.' });
     return;
   }

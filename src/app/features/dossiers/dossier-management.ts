@@ -54,7 +54,10 @@ export class DossierManagementComponent {
   public readonly canCreate = computed(() =>
     this.accessControl.hasPermission('dossiers.create') && this.canLinkProspect()
   );
-  public readonly canAssign = computed(() => this.accessControl.hasPermission('crm.team.manage'));
+  public readonly canAssign = computed(() =>
+    this.accessControl.hasPermission('dossiers.assign') ||
+    this.accessControl.hasPermission('crm.team.manage')
+  );
   public readonly isAssigning = signal<string | null>(null);
 
   public readonly isModalOpen = signal(false);

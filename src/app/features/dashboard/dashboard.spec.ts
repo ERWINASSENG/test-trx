@@ -10,7 +10,7 @@ import { UserProfile } from '../../core/models/auth.model';
 describe('Dashboard Component', () => {
   let component: Dashboard;
   const currentUserMock = signal<UserProfile | null>(null);
-  let hasPermissionMock: (perm: string) => boolean;
+  const grantedPermissions = signal<string[]>([]);
 
   const authServiceMock = {
     currentUser: currentUserMock,
@@ -23,14 +23,26 @@ describe('Dashboard Component', () => {
   };
 
   beforeEach(() => {
-    hasPermissionMock = () => false;
+    grantedPermissions.set([]);
+    currentUserMock.set({
+      id: 'usr-default',
+      email: 'user@transimex.cm',
+      firstName: 'Agent',
+      lastName: 'Transmex',
+      role: 'employe',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
 
     TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: authServiceMock },
-        { provide: AccessControlService, useValue: { hasPermission: (perm: string) => hasPermissionMock(perm) } },
+        {
+          provide: AccessControlService,
+          useValue: { hasPermission: (perm: string) => grantedPermissions().includes(perm) },
+        },
         { provide: UserService, useValue: userServiceMock },
       ],
     });
@@ -43,89 +55,39 @@ describe('Dashboard Component', () => {
     expect(component).toBeTruthy();
   });
 
-  it('devrait orienter vers la vue admin si le rôle est admin', () => {
-    currentUserMock.set({
-      id: 'admin-id',
-      email: 'admin@transimex.cm',
-      firstName: 'Admin',
-      lastName: 'Transimex',
-      role: 'admin',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
-
+  it('devrait orienter vers la vue admin avec dashboard.admin.view', () => {
+    grantedPermissions.set(['dashboard.admin.view']);
     expect(component.dashboardView()).toBe('admin');
   });
 
-  it('devrait orienter vers la vue manager si le rôle est manager', () => {
+  it('devrait orienter vers la vue manager avec dashboard.manager.view (même pour un rôle personnalisé)', () => {
     currentUserMock.set({
-      id: 'manager-id',
-      email: 'manager@transimex.cm',
-      firstName: 'Manager',
-      lastName: 'Logistique',
-      role: 'manager',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    expect(component.dashboardView()).toBe('manager');
-  });
-
-  it('devrait orienter vers la vue manager si le rôle est tresorier', () => {
-    currentUserMock.set({
-      id: 'tresorier-id',
-      email: 'tresorier@transimex.cm',
-      firstName: 'Trésorier',
+      id: 'daf-id',
+      email: 'daf@transimex.cm',
+      firstName: 'Directeur',
       lastName: 'Finance',
-      role: 'tresorier',
+      role: 'employe',
+      customRole: 'daf',
       isActive: true,
       createdAt: new Date().toISOString(),
     });
+    grantedPermissions.set(['dashboard.manager.view']);
 
     expect(component.dashboardView()).toBe('manager');
   });
 
-  it('devrait orienter vers la vue employee pour un collaborateur employe', () => {
-    currentUserMock.set({
-      id: 'employe-id',
-      email: 'employe@transimex.cm',
-      firstName: 'Agent',
-      lastName: 'Maritime',
-      role: 'employe',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
+  it('devrait orienter vers la vue commercial avec dashboard.commercial.view', () => {
+    grantedPermissions.set(['dashboard.commercial.view']);
+    expect(component.dashboardView()).toBe('commercial');
+  });
 
+  it('devrait orienter vers la vue commercial pour un rôle personnalisé ayant module.crm.view', () => {
+    grantedPermissions.set(['module.crm.view']);
+    expect(component.dashboardView()).toBe('commercial');
+  });
+
+  it('devrait replier sur la vue employee par défaut sans permission de vue spécifique (fail-safe)', () => {
+    grantedPermissions.set(['module.dashboard.view']);
     expect(component.dashboardView()).toBe('employee');
-  });
-
-  it('devrait orienter vers la vue commercial pour un utilisateur ayant le rôle commercial', () => {
-    currentUserMock.set({
-      id: 'comm-id',
-      email: 'commercial@transimex.cm',
-      firstName: 'Agent',
-      lastName: 'Commercial',
-      role: 'commercial',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    expect(component.dashboardView()).toBe('commercial');
-  });
-
-  it('devrait orienter vers la vue commercial pour un rôle personnalisé ayant les permissions CRM', () => {
-    currentUserMock.set({
-      id: 'agent-id',
-      email: 'agent@transimex.cm',
-      firstName: 'Agent',
-      lastName: 'Ventes',
-      role: 'employe',
-      customRole: 'commercial_junior',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    hasPermissionMock = (perm: string) => perm === 'module.crm.view';
-    expect(component.dashboardView()).toBe('commercial');
   });
 });
