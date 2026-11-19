@@ -266,10 +266,10 @@ describe('MainLayout Component', () => {
     expect(component.isConfigDropdownOpen()).toBe(false);
   });
 
-  it('affiche le bouton Édition uniquement avec cashier.export sur Tableau de bord et Caisse', async () => {
+  it('affiche le bouton Édition uniquement avec module.edition.view sur Tableau de bord et Caisse', async () => {
     effectivePermissions.update((perms) => [
       ...perms,
-      { permissionKey: 'cashier.export', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
+      { permissionKey: 'module.edition.view', scope: { type: 'all', version: 1 }, effect: 'allow' as const },
     ]);
 
     await component.router.navigateByUrl('/dashboard');

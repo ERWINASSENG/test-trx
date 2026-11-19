@@ -16,7 +16,6 @@ import {
   formatPersistedPieceComptable,
   isDuplicateCashierCandidate,
   normalizeDateToDay,
-  requiresCashierDraftBeforeEdit,
 } from './server/cashier.utils';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
@@ -106,7 +105,7 @@ import {
   setUserPermissionOverrideHandler,
   updateAccessRoleHandler,
 } from './server/access-control.handlers';
-import { requirePermission, resolveJournalOwnerContext } from './server/access-control';
+import { hasPermission, requirePermission, resolveJournalOwnerContext } from './server/access-control';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -582,9 +581,15 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
       }
     }
 
-    if (requiresCashierDraftBeforeEdit(existingRow.status, authenticatedUser?.role)) {
-      res.status(409).json({ error: 'Remettez l’opération en brouillon avant de la modifier.' });
-      return;
+    if (existingRow.status === 'posted') {
+      const canEditPosted = authenticatedUser?.role === 'admin'
+        || (authenticatedUser?.id
+          ? await hasPermission(authenticatedUser.id, 'cashier.posted.update', undefined)
+          : false);
+      if (!canEditPosted) {
+        res.status(409).json({ error: 'Remettez l’opération en brouillon avant de la modifier.' });
+        return;
+      }
     }
 
     const payload = req.body || {};
@@ -895,6 +900,15 @@ const getCashierSummaryHandler = async (req: express.Request, res: express.Respo
   }
 
   try {
+    const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { id?: string; role?: string } | undefined;
+    const callerId = authenticatedUser?.id || null;
+    const canViewBalance = authenticatedUser?.role === 'admin'
+      || (callerId !== null && await hasPermission(callerId, 'cashier.balance.read', undefined));
+    if (!canViewBalance) {
+      res.status(403).json({ error: 'Permission insuffisante pour consulter le solde de caisse.' });
+      return;
+    }
+
     const rawJournalId = req.query['journalId'] || req.query['journal_id'];
     const journalId = typeof rawJournalId === 'string' && rawJournalId.trim() && rawJournalId !== 'native-caisse-principal' && rawJournalId !== 'CSH1'
       ? rawJournalId.trim()
@@ -952,6 +966,20 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
     }
     const newStatus = requestedStatus;
 
+    // Contrôle granulaire de la permission selon le statut cible demandé (S1)
+    const isAdminActor = userRole === 'admin';
+    const hasGranularStatusPerm = isAdminActor || (callerId !== null && (
+      newStatus === 'posted'
+        ? (await hasPermission(callerId, 'cashier.post', undefined) || await hasPermission(callerId, 'cashier.status_update', undefined))
+        : newStatus === 'cancelled'
+          ? (await hasPermission(callerId, 'cashier.cancel', undefined) || await hasPermission(callerId, 'cashier.status_update', undefined))
+          : await hasPermission(callerId, 'cashier.reset_draft', undefined)
+    ));
+    if (!hasGranularStatusPerm) {
+      res.status(403).json({ error: 'Permission insuffisante pour appliquer ce statut aux opérations de caisse.' });
+      return;
+    }
+
     const { data: rowsToCheck, error: fetchErr } = await adminClient
       .from('cashier_transactions')
       .select('id, created_by, employee_id, status, date, piece_comptable, category, montant')
@@ -966,16 +994,9 @@ export const updateOperationsStatusHandler = async (req: express.Request, res: e
       return;
     }
     const hasCancelledRows = rowsToCheck.some((row) => row.status === 'cancelled');
-    if (hasCancelledRows) {
-      if (newStatus === 'draft') {
-        if (userRole !== 'admin') {
-          res.status(403).json({ error: 'Seul un administrateur est autorisé à remettre en brouillon une opération annulée.' });
-          return;
-        }
-      } else if (newStatus !== 'cancelled') {
-        res.status(409).json({ error: 'Une opération annulée ne peut pas être modifiée directement sans être d’abord remise en brouillon par un administrateur.' });
-        return;
-      }
+    if (hasCancelledRows && newStatus !== 'draft' && newStatus !== 'cancelled') {
+      res.status(409).json({ error: 'Une opération annulée ne peut pas être modifiée directement sans être d’abord remise en brouillon.' });
+      return;
     }
 
     // Contrôle d'habilitation et d'appartenance :
@@ -1118,15 +1139,15 @@ const cashierOperationAliases = ['/api/cahier/operations', '/api/cashier/transac
 cashierOperationAliases.forEach((path) => {
   app.get(path, requireAuth, requirePermission('cashier.read'), getOperationsHandler);
   app.get(`${path}/summary`, requireAuth, requirePermission('cashier.read'), getCashierSummaryHandler);
-  app.get(`${path}/daily-report`, requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
+  app.get(`${path}/daily-report`, requireAuth, getDailyCashierReportHandler);
 });
 
-app.get('/api/cahier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
-app.get('/api/cashier/daily-report', requireAuth, requirePermission('cashier.export'), getDailyCashierReportHandler);
+app.get('/api/cahier/daily-report', requireAuth, getDailyCashierReportHandler);
+app.get('/api/cashier/daily-report', requireAuth, getDailyCashierReportHandler);
 
 cashierOperationAliases.forEach((path) => {
   app.post(`${path}/duplicate`, requireAuth, requirePermission('cashier.duplicate'), duplicateOperationsHandler);
-  app.patch(`${path}/status`, requireAuth, requirePermission('cashier.status_update'), updateOperationsStatusHandler);
+  app.patch(`${path}/status`, requireAuth, updateOperationsStatusHandler);
 });
 
 cashierOperationAliases.forEach((path) => {
@@ -1140,7 +1161,7 @@ cashierOperationAliases.forEach((path) => {
 
 /**
  * Suppression d'opérations de caisse (DELETE /api/cahier/operations et /:id)
- * Strictement réservée à l'administrateur (role === 'admin' et permission cashier.delete).
+ * Pilotée par la permission explicite cashier.delete (ou rôle admin).
  * Déclenche le recompactage automatique des pièces comptables sans trou en base.
  */
 export const deleteOperationsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
@@ -1155,8 +1176,10 @@ export const deleteOperationsHandler = async (req: express.Request, res: express
     const callerId = authenticatedUser?.id || null;
     const userRole = authenticatedUser?.role;
 
-    if (userRole !== 'admin') {
-      res.status(403).json({ error: 'Seul un administrateur peut supprimer définitivement des opérations de caisse.' });
+    const canDelete = userRole === 'admin'
+      || (callerId !== null && await hasPermission(callerId, 'cashier.delete', undefined));
+    if (!canDelete) {
+      res.status(403).json({ error: 'Permission insuffisante : vous n’êtes pas autorisé à supprimer définitivement des opérations de caisse.' });
       return;
     }
 

@@ -67,7 +67,7 @@ describe('CashierService - Architecture Hybride & Signals', () => {
           provide: AccessControlService,
           useValue: {
             hasPermission: (permissionKey: string) =>
-              permissionKey === 'cashier.read' && cashierReadAllowed,
+              (permissionKey === 'cashier.read' || permissionKey === 'cashier.balance.read') && cashierReadAllowed,
             effectivePermissions: () => [],
           },
         },

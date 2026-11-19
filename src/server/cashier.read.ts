@@ -64,14 +64,16 @@ const resolveNativeCashJournalId = async (
 
 export const getOperationsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
   const adminClient = getSupabaseAdmin();
-  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { role?: string } | undefined;
-  const isComptable = authenticatedUser?.role === 'comptable';
+  const authenticatedUser = (req as unknown as Record<string, unknown>)['user'] as { id?: string; role?: string } | undefined;
+  const callerId = authenticatedUser?.id || null;
   if (!adminClient) {
     res.status(503).json({ error: 'Service Supabase non configuré sur le serveur' });
     return;
   }
 
   try {
+    const canViewBalance = authenticatedUser?.role === 'admin'
+      || (callerId !== null && await hasPermission(callerId, 'cashier.balance.read', undefined));
     const rawLimit = req.query['limit'];
     const rawOffset = req.query['offset'];
     // Nombre minimum de lignes par page : 80 strict (plafond de sécurité à 1000)
@@ -102,7 +104,7 @@ export const getOperationsHandler = async (req: express.Request, res: express.Re
       if (nativeCashJournalId && row.journal_id === nativeCashJournalId) {
         enriched['journal_id'] = 'native-caisse-principal';
       }
-      if (!isComptable) return enriched;
+      if (canViewBalance) return enriched;
 
       const restrictedRow = { ...enriched };
       delete restrictedRow['solde_apres'];
@@ -136,6 +138,16 @@ export const getDailyCashierReportHandler = async (
       | { id?: string; email?: string; role?: string }
       | undefined;
     const callerId = authenticatedUser?.id || null;
+
+    const canExportDailyReport = authenticatedUser?.role === 'admin'
+      || (callerId !== null && (
+        await hasPermission(callerId, 'cashier.daily_report.export', undefined)
+        || await hasPermission(callerId, 'cashier.export', undefined)
+      ));
+    if (!canExportDailyReport) {
+      res.status(403).json({ error: 'Permission insuffisante pour générer le rapport journalier de caisse.' });
+      return;
+    }
 
     const rawDate = typeof req.query['date'] === 'string' ? req.query['date'].trim() : '';
     const normalizedDate = normalizeDateToDay(rawDate);

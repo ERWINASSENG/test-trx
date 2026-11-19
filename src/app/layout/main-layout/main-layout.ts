@@ -104,7 +104,7 @@ export class MainLayout implements OnInit {
   public readonly canShowEditionMenu = computed(() => {
     return (
       Boolean(this.currentUser()) &&
-      this.accessControl.hasPermission('cashier.export') &&
+      this.accessControl.hasPermission('module.edition.view') &&
       this.isEditionContextRoute()
     );
   });

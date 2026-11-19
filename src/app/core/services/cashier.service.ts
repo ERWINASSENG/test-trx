@@ -326,7 +326,7 @@ export class CashierService implements OnDestroy {
    */
   public async loadCashierSummary(): Promise<void> {
     if (!this.isBrowser) return;
-    if (!this.hasCashierReadAccess()) {
+    if (!this.hasCashierReadAccess() || !this.accessControl.hasPermission('cashier.balance.read')) {
       this._serverSummary.set(null);
       return;
     }
@@ -1404,11 +1404,17 @@ export class CashierService implements OnDestroy {
    * Exporte soit les lignes sélectionnées, soit l'ensemble des opérations filtrées visibles.
    */
   public exportTransactions(onlySelected = false): void {
+    if (!this.authService.currentUser() || !this.accessControl.hasPermission('cashier.export')) {
+      this.setError('Permission insuffisante : vous n’êtes pas autorisé à exporter les opérations de caisse.');
+      return;
+    }
     const allFiltered = this.filteredTransactions();
     const selectedRows = this._transactions().filter((t) => t.selected);
     const dataset = onlySelected && selectedRows.length > 0 ? selectedRows : allFiltered;
 
-    this.exportService.exportCashierTransactionsCsv(dataset);
+    this.exportService.exportCashierTransactionsCsv(dataset, {
+      isComptable: !this.accessControl.hasPermission('cashier.balance.read'),
+    });
   }
 
   /**
@@ -1419,7 +1425,10 @@ export class CashierService implements OnDestroy {
     dateIso: string,
     journalId?: string | null
   ): Promise<DailyCashierReport | null> {
-    if (!this.authService.currentUser() || !this.accessControl.hasPermission('cashier.export')) {
+    const canExportDaily =
+      this.accessControl.hasPermission('cashier.daily_report.export') ||
+      this.accessControl.hasPermission('cashier.export');
+    if (!this.authService.currentUser() || !canExportDaily) {
       this.setError('Permission insuffisante : vous n’êtes pas autorisé à exporter le rapport de caisse.');
       return null;
     }
@@ -1820,18 +1829,27 @@ export class CashierService implements OnDestroy {
    * Insérer dans une feuille de calcul (génère un classeur TSV/Excel détaillé avec formules de totaux)
    */
   public exportSpreadsheet(): void {
+    if (!this.authService.currentUser() || !this.accessControl.hasPermission('cashier.export')) {
+      this.setError('Permission insuffisante : vous n’êtes pas autorisé à exporter la feuille de calcul.');
+      return;
+    }
     const selected = this._transactions().filter((t) => t.selected);
     const dataset = selected.length > 0 ? selected : this._transactions();
     if (dataset.length === 0) return;
 
+    const canViewBalance = this.accessControl.hasPermission('cashier.balance.read');
     let totalEntrees = 0;
     let totalSorties = 0;
 
+    const headerCols = canViewBalance
+      ? ['Date', 'Pièce', 'Libellé', 'Partenaire / Dossier', 'Entrée (FCFA)', 'Sortie (FCFA)', 'Solde Progressif (FCFA)']
+      : ['Date', 'Pièce', 'Libellé', 'Partenaire / Dossier', 'Entrée (FCFA)', 'Sortie (FCFA)'];
+
     const rows: string[] = [
-      ['RÉCONCILIATION & JOURNAL DE CAISSE TRANSIMEX', '', '', '', '', '', ''].join('\t'),
-      ['Date d\'export :', new Date().toLocaleDateString('fr-FR'), '', '', '', '', ''].join('\t'),
-      ['', '', '', '', '', '', ''].join('\t'),
-      ['Date', 'Pièce', 'Libellé', 'Partenaire / Dossier', 'Entrée (FCFA)', 'Sortie (FCFA)', 'Solde Progressif (FCFA)'].join('\t'),
+      ['RÉCONCILIATION & JOURNAL DE CAISSE TRANSIMEX', ...Array(headerCols.length - 1).fill('')].join('\t'),
+      ['Date d\'export :', new Date().toLocaleDateString('fr-FR'), ...Array(headerCols.length - 2).fill('')].join('\t'),
+      Array(headerCols.length).fill('').join('\t'),
+      headerCols.join('\t'),
     ];
 
     for (const tx of dataset) {
@@ -1840,19 +1858,26 @@ export class CashierService implements OnDestroy {
       totalEntrees += entree;
       totalSorties += sortie;
 
-      rows.push([
-        tx.date || '',
-        tx.pieceComptable || '',
-        tx.libelle || '',
-        tx.employee || tx.partenaire || tx.noDossier || '',
+      const baseRow = [
+        this.exportService.sanitizeExcelText(tx.date || ''),
+        this.exportService.sanitizeExcelText(tx.pieceComptable || ''),
+        this.exportService.sanitizeExcelText(tx.libelle || ''),
+        this.exportService.sanitizeExcelText(tx.employee || tx.partenaire || tx.noDossier || ''),
         entree > 0 ? String(entree) : '',
         sortie > 0 ? String(sortie) : '',
-        tx.soldeApres !== undefined && tx.soldeApres !== null ? String(tx.soldeApres) : '',
-      ].join('\t'));
+      ];
+      if (canViewBalance) {
+        baseRow.push(tx.soldeApres !== undefined && tx.soldeApres !== null ? String(tx.soldeApres) : '');
+      }
+      rows.push(baseRow.join('\t'));
     }
 
-    rows.push(['', '', '', '', '', '', ''].join('\t'));
-    rows.push(['TOTAL', '', '', '', String(totalEntrees), String(totalSorties), String(totalEntrees - totalSorties)].join('\t'));
+    rows.push(Array(headerCols.length).fill('').join('\t'));
+    const totalRow = ['TOTAL', '', '', '', String(totalEntrees), String(totalSorties)];
+    if (canViewBalance) {
+      totalRow.push(String(totalEntrees - totalSorties));
+    }
+    rows.push(totalRow.join('\t'));
 
     const content = '\uFEFF' + rows.join('\r\n');
     const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8;' });
@@ -1871,6 +1896,13 @@ export class CashierService implements OnDestroy {
    * Télécharge les pièces jointes des opérations sélectionnées
    */
   public downloadAttachments(): void {
+    const canDownload =
+      this.accessControl.hasPermission('cashier.attachments.download') ||
+      this.accessControl.hasPermission('cashier.export');
+    if (!this.authService.currentUser() || !canDownload) {
+      this.setError('Permission insuffisante : vous n’êtes pas autorisé à télécharger les pièces jointes.');
+      return;
+    }
     const selected = this._transactions().filter((t) => t.selected);
     const dataset = selected.length > 0 ? selected : this._transactions();
     

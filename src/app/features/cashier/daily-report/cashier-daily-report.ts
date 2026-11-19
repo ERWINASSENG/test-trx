@@ -17,7 +17,6 @@ import {
   DailyCashierReportItem,
 } from '../../../core/models/cashier-transaction.model';
 import { AccessControlService } from '../../../core/services/access-control.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { CashierService } from '../../../core/services/cashier.service';
 import { ExportService } from '../../../core/services/export.service';
 import { JournalService } from '../../../core/services/journal.service';
@@ -143,7 +142,6 @@ export class CashierDailyReport implements OnInit {
   private readonly cashierService = inject(CashierService);
   private readonly exportService = inject(ExportService);
   private readonly journalService = inject(JournalService);
-  private readonly authService = inject(AuthService);
   private readonly accessControlService = inject(AccessControlService);
   private readonly notificationService = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
@@ -256,16 +254,13 @@ export class CashierDailyReport implements OnInit {
   });
 
   public readonly canExport = computed(() =>
+    this.accessControlService.hasPermission('cashier.daily_report.export') ||
     this.accessControlService.hasPermission('cashier.export')
   );
 
-  public readonly canSelectCustomJournal = computed(() => {
-    const role = this.authService.currentRole();
-    if (role === 'caissiere') {
-      return false;
-    }
-    return this.accessControlService.hasPermission('journal_entries.read');
-  });
+  public readonly canSelectCustomJournal = computed(() =>
+    this.accessControlService.hasPermission('journal_entries.read')
+  );
 
   public readonly availableJournals = computed<SelectableReportJournal[]>(() => {
     const base: SelectableReportJournal[] = [

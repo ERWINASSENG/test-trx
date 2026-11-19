@@ -170,7 +170,7 @@ export const routes: Routes = [
             (m) => m.CashierDailyReport
           ),
         canActivate: [roleGuard],
-        data: { permission: 'cashier.export' },
+        data: { permission: 'module.edition.view' },
         title: 'Transmex - Édition Rapport de Caisse',
       },
       {

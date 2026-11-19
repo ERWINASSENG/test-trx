@@ -40,7 +40,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     label: 'Comptabilité',
     description: 'Opérations de caisse, journaux et écritures comptables',
     icon: '/assets/module-icons/accountant.svg',
-    matches: (p) => ['cashier', 'journals', 'journal_entries', 'module.accounting'].includes(p.resourceKey) || p.permissionKey.startsWith('cashier.') || p.permissionKey.startsWith('journals.') || p.permissionKey.startsWith('journal_entries.') || p.permissionKey === 'module.accounting.view',
+    matches: (p) => ['cashier', 'cashier.daily_report', 'journals', 'journal_entries', 'module.accounting', 'module.edition'].includes(p.resourceKey) || p.permissionKey.startsWith('cashier.') || p.permissionKey.startsWith('journals.') || p.permissionKey.startsWith('journal_entries.') || p.permissionKey === 'module.accounting.view' || p.permissionKey === 'module.edition.view',
   },
   {
     id: 'personnel',

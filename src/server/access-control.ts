@@ -32,6 +32,7 @@ export interface LoadedAccessRules {
 export const MODULE_CAPABILITY_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   'module.dashboard.view': ['dashboard.'],
   'module.accounting.view': ['cashier.', 'journals.', 'journal_entries.'],
+  'module.edition.view': ['cashier.daily_report.', 'cashier.export'],
   'module.hr.view': ['hr.', 'users.'],
   'module.prospects.view': ['prospects.'],
   'module.quotes.view': ['quotes.'],

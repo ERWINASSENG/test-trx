@@ -114,7 +114,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public readonly availableJournals = computed(() => [
     { id: 'native-caisse-principal', name: 'Caisse Principale', sequence_prefix: 'CSH1' },
-    ...(this.authService.currentRole() === 'caissiere'
+    ...(!this.accessControlService.hasPermission('journals.read')
       ? []
       : this.journalService.journals().filter((j) => j.id !== 'native-caisse-principal' && j.sequence_prefix !== 'CSH1')),
   ]);
@@ -167,14 +167,18 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   /** Vérifie le droit d’édition du journal réel associé à la ligne. */
   public canEditTransaction(tx: CashierTransaction): boolean {
     if (tx.status === 'cancelled') return false;
-    if (tx.status === 'posted' && this.authService.currentRole() === 'caissiere') return false;
 
     const transactionJournalId = tx.journalId ?? tx.journal_id ?? 'native-caisse-principal';
     const isNativeCaisse =
       transactionJournalId === 'native-caisse-principal' ||
       transactionJournalId === 'CSH1' ||
       tx.pieceComptable?.startsWith('CSH1');
-    if (isNativeCaisse) return this.accessControlService.hasPermission('cashier.update');
+    if (isNativeCaisse) {
+      if (tx.status === 'posted' && !this.accessControlService.hasPermission('cashier.posted.update')) {
+        return false;
+      }
+      return this.accessControlService.hasPermission('cashier.update');
+    }
 
     const journal = this.journalService.journals().find((candidate) => candidate.id === transactionJournalId);
     if (!this.accessControlService.hasPermissionForResource('journal_entries.update', {
@@ -185,49 +189,66 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public readonly canSelect = computed(() => this.accessControlService.hasPermission('cashier.read'));
 
-  // Visibilité du solde de caisse en temps réel : masqué pour le rôle comptable
-  public readonly canViewBalance = computed(() => {
-    const role = this.authService.currentUser()?.role;
-    return role !== 'comptable';
-  });
-
-  public readonly canCancelCashierOperations = computed(() => {
+  private readonly isMainCashierActive = computed(() => {
     const journalId = this.cashierService.activeJournalId();
-    const isMainCashier =
+    return (
       !journalId ||
       journalId === 'native-caisse-principal' ||
       journalId === 'CSH1' ||
-      this.cashierService.activeJournalPrefix() === 'CSH1';
-    return isMainCashier && this.accessControlService.hasPermission('cashier.status_update');
+      this.cashierService.activeJournalPrefix() === 'CSH1'
+    );
   });
+
+  // Visibilité du solde de caisse en temps réel pilotée par cashier.balance.read
+  public readonly canViewBalance = computed(() =>
+    this.accessControlService.hasPermission('cashier.balance.read')
+  );
+
+  public readonly canImportCashier = computed(() =>
+    this.isMainCashierActive()
+      ? this.accessControlService.hasPermission('cashier.import')
+      : this.canEdit()
+  );
+
+  public readonly canExportCashier = computed(() =>
+    this.accessControlService.hasPermission('cashier.export')
+  );
+
+  public readonly canDuplicateCashier = computed(() =>
+    this.isMainCashierActive()
+      ? this.accessControlService.hasPermission('cashier.duplicate')
+      : this.canEdit()
+  );
+
+  public readonly canDownloadAttachments = computed(() =>
+    this.accessControlService.hasPermission('cashier.attachments.download') ||
+    this.accessControlService.hasPermission('cashier.export')
+  );
+
+  public readonly canCancelCashierOperations = computed(() =>
+    this.isMainCashierActive() &&
+    (this.accessControlService.hasPermission('cashier.cancel') ||
+      this.accessControlService.hasPermission('cashier.status_update'))
+  );
+
+  public readonly canResetToDraftCashierOperations = computed(() =>
+    this.isMainCashierActive() &&
+    this.accessControlService.hasPermission('cashier.reset_draft')
+  );
 
   public readonly canPostCashierOperations = computed(() => {
-    const journalId = this.cashierService.activeJournalId();
-    const isMainCashier =
-      !journalId ||
-      journalId === 'native-caisse-principal' ||
-      journalId === 'CSH1' ||
-      this.cashierService.activeJournalPrefix() === 'CSH1';
-
-    if (isMainCashier) {
+    if (this.isMainCashierActive()) {
       return (
-        this.accessControlService.hasPermission('cashier.status_update') ||
-        this.accessControlService.hasPermission('cashier.update')
+        this.accessControlService.hasPermission('cashier.post') ||
+        this.accessControlService.hasPermission('cashier.status_update')
       );
     }
     return this.accessControlService.hasPermission('journal_entries.update');
   });
 
-  public readonly canDeleteCashierOperations = computed(() => {
-    const journalId = this.cashierService.activeJournalId();
-    const isMainCashier =
-      !journalId ||
-      journalId === 'native-caisse-principal' ||
-      journalId === 'CSH1' ||
-      this.cashierService.activeJournalPrefix() === 'CSH1';
-    const role = this.authService.currentRole();
-    return isMainCashier && role === 'admin' && this.accessControlService.hasPermission('cashier.delete');
-  });
+  public readonly canDeleteCashierOperations = computed(() =>
+    this.isMainCashierActive() && this.accessControlService.hasPermission('cashier.delete')
+  );
 
   // Données réactives issues du service
   public readonly pagedTransactions = this.cashierService.pagedTransactions;
@@ -718,6 +739,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public onExportAction(): void {
+    if (!this.canExportCashier()) return;
     this.cashierService.exportTransactions(this.selectedCount() > 0);
     this.closeActionsMenu();
   }
@@ -741,7 +763,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async onDuplicateAction(): Promise<void> {
-    if (!this.canEdit() || this.selectedCount() === 0) return;
+    if (!this.canDuplicateCashier() || this.selectedCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.duplicateSelected();
   }
@@ -812,23 +834,25 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async onResetToDraftAction(): Promise<void> {
-    if (!this.canCancelCashierOperations() || this.selectedCount() === 0) return;
+    if (!this.canResetToDraftCashierOperations() || this.selectedCount() === 0) return;
     this.closeActionsMenu();
     await this.cashierService.resetSelectedToDraft();
   }
 
   public onExportSpreadsheetAction(): void {
+    if (!this.canExportCashier()) return;
     this.cashierService.exportSpreadsheet();
     this.closeActionsMenu();
   }
 
   public onDownloadAttachmentsAction(): void {
+    if (!this.canDownloadAttachments()) return;
     this.cashierService.downloadAttachments();
     this.closeActionsMenu();
   }
 
   public onOpenImportModal(): void {
-    if (this.canEdit()) this.cashierService.openImportModal();
+    if (this.canImportCashier()) this.cashierService.openImportModal();
   }
 
   public prevPage(): void {

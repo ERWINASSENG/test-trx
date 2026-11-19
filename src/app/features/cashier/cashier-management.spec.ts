@@ -44,9 +44,18 @@ describe('CashierManagement', () => {
         {
           provide: AccessControlService,
           useValue: {
-            hasPermission: vi.fn((permission: string) =>
-              permission.startsWith('cashier.') && (currentRole() === 'admin' || currentRole() === 'caissiere')
-            ),
+            hasPermission: vi.fn((permission: string) => {
+              if (!permission.startsWith('cashier.')) return false;
+              if (currentRole() === 'admin') return true;
+              if (currentRole() === 'caissiere') {
+                return (
+                  permission !== 'cashier.delete' &&
+                  permission !== 'cashier.posted.update' &&
+                  permission !== 'cashier.reset_draft'
+                );
+              }
+              return false;
+            }),
             hasPermissionForResource: vi.fn((_permission: string, resource: { ownerUserId?: string }) => resource.ownerUserId === 'treasurer-1'),
             effectivePermissions: signal([]),
             loadMyPermissions: vi.fn().mockResolvedValue(undefined),
