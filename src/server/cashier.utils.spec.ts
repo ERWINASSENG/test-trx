@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateDossierExpenses,
   formatPersistedPieceComptable,
+  getCashierDateRange,
+  isCashierDateAllowed,
   isDuplicateCashierCandidate,
   normalizeDateToDay,
   requiresCashierDraftBeforeEdit,
@@ -47,6 +49,22 @@ describe('cashier.utils', () => {
 
     it('conserve les formats ISO AAAA-MM-JJ', () => {
       expect(normalizeDateToDay('2026-09-15T10:00:00.000Z')).toBe('2026-09-15');
+    });
+  });
+
+  describe('isCashierDateAllowed', () => {
+    const today = new Date(Date.UTC(2026, 10, 5));
+
+    it('accepte les dates de la borne d’un an jusqu’à aujourd’hui', () => {
+      expect(getCashierDateRange(today)).toEqual({ minDate: '2025-11-05', maxDate: '2026-11-05' });
+      expect(isCashierDateAllowed('2025-11-05', today)).toBe(true);
+      expect(isCashierDateAllowed('2026-11-05', today)).toBe(true);
+    });
+
+    it('refuse les dates trop anciennes, futures ou calendrièrement invalides', () => {
+      expect(isCashierDateAllowed('2025-11-04', today)).toBe(false);
+      expect(isCashierDateAllowed('2026-11-06', today)).toBe(false);
+      expect(isCashierDateAllowed('2026-02-30', today)).toBe(false);
     });
   });
 

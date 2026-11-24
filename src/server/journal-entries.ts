@@ -1,6 +1,7 @@
 import express from 'express';
 import { getSupabaseAdmin } from './auth';
 import { writeAuditLog } from './audit-log';
+import { getCashierDateRange, isCashierDateAllowed, normalizeDateToDay } from './cashier.utils';
 
 /**
  * Interface d'une écriture comptable dans un journal dédié
@@ -171,7 +172,13 @@ export const createJournalEntryHandler = async (req: express.Request, res: expre
 
   const effectiveCategory: 'entree' | 'sortie' = category === 'entree' ? 'entree' : 'sortie';
   const signedMontant = effectiveCategory === 'sortie' ? -Math.abs(rawMontant) : Math.abs(rawMontant);
-  const entryDate = date && typeof date === 'string' ? String(date).split('T')[0] : new Date().toISOString().split('T')[0];
+  const requestedDate = normalizeDateToDay(typeof date === 'string' ? date : null);
+  if (requestedDate && !isCashierDateAllowed(requestedDate)) {
+    const { minDate, maxDate } = getCashierDateRange();
+    res.status(400).json({ error: `La date de l’opération doit être comprise entre ${minDate} et ${maxDate}.` });
+    return;
+  }
+  const entryDate = requestedDate || new Date().toISOString().split('T')[0];
   const resolvedTypeDesc = String(type_description ?? typeDescription ?? '').trim();
   const resolvedNoDossier = String(no_dossier ?? noDossier ?? '').trim();
   const resolvedEmployee = String(employee ?? partenaire ?? '').trim();
@@ -293,7 +300,13 @@ export const updateJournalEntryHandler = async (req: express.Request, res: expre
   }
 
   if (typeof body.date === 'string' && body.date.trim()) {
-    allowedUpdates['date'] = body.date.split('T')[0];
+    const requestedDate = normalizeDateToDay(body.date);
+    if (!requestedDate || !isCashierDateAllowed(requestedDate)) {
+      const { minDate, maxDate } = getCashierDateRange();
+      res.status(400).json({ error: `La date de l’opération doit être comprise entre ${minDate} et ${maxDate}.` });
+      return;
+    }
+    allowedUpdates['date'] = requestedDate;
   }
 
   if (body.service !== undefined) {

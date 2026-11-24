@@ -179,268 +179,400 @@ export class ExportService {
 
   /**
    * Rendu graphique complet d'une cotation maritime sur le document PDF
+   * Conforme au modèle officiel "FICHE DE DEMANDE DE COTATION MARITIME / SEA FREIGHT QUOTATION REQUEST FORM" (2 pages)
    */
   private renderQuotePdfPage(doc: jsPDF, quote: SalesQuote): void {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
 
-    // 1. Bandeau supérieur d'en-tête (Bleu marine Transimex #0A2540)
-    doc.setFillColor(10, 37, 64);
-    doc.rect(0, 0, pageWidth, 26, 'F');
+    // ==========================================
+    // PAGE 1 : EN-TÊTE, SECTIONS 1, 2, 3, 4 & 5
+    // ==========================================
 
-    // Logo / Titre Transimex
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('TRANSIMEX S.A.', margin, 11);
+    // 1. En-tête officiel TRANSIMEX centré
+    this.drawTransimexHeader(doc, pageWidth, 18);
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(203, 213, 225); // Slate 300
-    doc.text('COMMISSIONNAIRE AGRÉÉ EN DOUANE & TRANSIT MARITIME', margin, 17);
-    doc.text('Direction Maritime & Affrètement International', margin, 21);
+    // Titre principal centré
+    this.drawMainTitle(doc, pageWidth, 33);
 
-    // Titre de document à droite
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(255, 255, 255);
-    doc.text('COTATION COMMERCIALE', pageWidth - margin, 12, { align: 'right' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(254, 215, 170); // Accent ambré
-    doc.text(`RÉF : ${quote.quoteNumber || 'N/A'}`, pageWidth - margin, 18, { align: 'right' });
-
-    // 2. Encadré Métadonnées & Statut (sous le bandeau)
-    const metaY = 32;
-    doc.setDrawColor(226, 232, 240); // Slate 200
-    doc.setFillColor(248, 250, 252); // Slate 50
-    doc.roundedRect(margin, metaY, pageWidth - margin * 2, 14, 2, 2, 'FD');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139); // Slate 500
-    doc.text('DATE D\'ÉMISSION', margin + 4, metaY + 5);
-    doc.text('VALIDITÉ', margin + 45, metaY + 5);
-    doc.text('CHARGÉ D\'AFFAIRES', margin + 95, metaY + 5);
-    doc.text('STATUT', pageWidth - margin - 4, metaY + 5, { align: 'right' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(30, 41, 59); // Slate 800
-    doc.text(this.formatDate(quote.createdAt), margin + 4, metaY + 10);
-    doc.text(quote.validUntil ? this.formatDate(quote.validUntil) : '30 jours', margin + 45, metaY + 10);
-    doc.text(this.truncateText(quote.assignedToName || 'Direction Commerciale', 28), margin + 95, metaY + 10);
-
-    const statusLabel = this.getQuoteStatusLabel(quote.status);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(10, 37, 64);
-    doc.text(statusLabel.toUpperCase(), pageWidth - margin - 4, metaY + 10, { align: 'right' });
-
-    // 3. Deux blocs côte à côte : Coordonnées Client & Acheminement Maritime
-    const boxY = 51;
-    const boxWidth = (pageWidth - margin * 2 - 8) / 2;
-    const boxHeight = 44;
-
-    // Bloc A : Client / Prospect
-    doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(margin, boxY, boxWidth, boxHeight, 2, 2, 'FD');
-
-    // Header bloc client
-    doc.setFillColor(241, 245, 249);
-    doc.rect(margin, boxY, boxWidth, 7, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(10, 37, 64);
-    doc.text('DONNEUR D\'ORDRE / CLIENT', margin + 4, boxY + 5);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(15, 23, 42);
-    doc.text(this.truncateText(quote.prospectName || 'Client non spécifié', 36), margin + 4, boxY + 14);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
-    const contactText = quote.contactName || quote.seaFreight?.contactName || 'Service Achats / Import-Export';
-    doc.text(`Contact : ${this.truncateText(contactText, 32)}`, margin + 4, boxY + 20);
-
-    if (quote.seaFreight?.phone) {
-      doc.text(`Tél : ${quote.seaFreight.phone}`, margin + 4, boxY + 26);
-    }
-    if (quote.seaFreight?.email) {
-      doc.text(`Email : ${this.truncateText(quote.seaFreight.email, 32)}`, margin + 4, boxY + 32);
-    }
-    if (quote.title) {
-      doc.setFont('helvetica', 'italic');
-      doc.text(`Objet : ${this.truncateText(quote.title, 34)}`, margin + 4, boxY + 38);
+    // Référence cotation discrète à droite si présente
+    if (quote.quoteNumber) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Réf : ${quote.quoteNumber}`, pageWidth - margin, 33, { align: 'right' });
     }
 
-    // Bloc B : Acheminement & Marchandise Maritime
-    const boxBX = margin + boxWidth + 8;
-    doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(boxBX, boxY, boxWidth, boxHeight, 2, 2, 'FD');
+    // ------------------------------------------
+    // SECTION 1 : Informations sur le client
+    // ------------------------------------------
+    const sec1Y = 38;
+    this.drawSectionBanner(doc, '1. Informations sur le client / Client Information', margin, sec1Y, contentWidth);
 
-    doc.setFillColor(241, 245, 249);
-    doc.rect(boxBX, boxY, boxWidth, 7, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(10, 37, 64);
-    doc.text('ACHEMINEMENT & MARCHANDISE MARITIME', boxBX + 4, boxY + 5);
+    let currentY = sec1Y + 10;
+    const lineSpacing = 5.2;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
+    this.drawFieldLine(doc, margin + 2, currentY, "Nom de l'entreprise / Company Name :", quote.prospectName || '', contentWidth);
+    currentY += lineSpacing;
 
-    const pol = quote.seaFreight?.portOfLoading || 'Non spécifié';
-    const pod = quote.seaFreight?.portOfDischarge || 'Douala (Cameroun)';
-    const incoterm = quote.seaFreight?.incoterm || 'FOB';
+    const contactName = quote.seaFreight?.contactName || quote.contactName || '';
+    this.drawFieldLine(doc, margin + 2, currentY, 'Nom du contact / Contact Name :', contactName, contentWidth);
+    currentY += lineSpacing;
 
-    doc.text(`Port de chargement (POL) : ${this.truncateText(pol, 26)}`, boxBX + 4, boxY + 14);
-    doc.text(`Port de déchargement (POD) : ${this.truncateText(pod, 26)}`, boxBX + 4, boxY + 20);
-    doc.text(`Incoterm convenu : ${incoterm.toUpperCase()}`, boxBX + 4, boxY + 26);
+    this.drawFieldLine(doc, margin + 2, currentY, 'Téléphone / Phone :', quote.seaFreight?.phone || '', contentWidth);
+    currentY += lineSpacing;
 
-    const goods = quote.seaFreight?.goodsType || quote.seaFreight?.goodsDescription || 'Marchandise diverse';
-    doc.text(`Nature : ${this.truncateText(goods, 28)}`, boxBX + 4, boxY + 32);
+    this.drawFieldLine(doc, margin + 2, currentY, 'Email :', quote.seaFreight?.email || '', contentWidth);
+    currentY += lineSpacing;
 
-    const specs: string[] = [];
-    if (quote.seaFreight?.grossWeightKg) {
-      specs.push(`${quote.seaFreight.grossWeightKg.toLocaleString('fr-FR')} kg`);
-    }
-    if (quote.seaFreight?.totalVolumeM3) {
-      specs.push(`${quote.seaFreight.totalVolumeM3} m³`);
-    }
-    if (quote.seaFreight?.packagesCount) {
-      specs.push(`${quote.seaFreight.packagesCount} colis`);
-    }
-    const specsStr = specs.length > 0 ? specs.join(' | ') : 'Conteneurisation standard';
-    doc.text(`Détails : ${specsStr}`, boxBX + 4, boxY + 38);
+    this.drawFieldLine(doc, margin + 2, currentY, 'Adresse / Address :', quote.seaFreight?.address || '', contentWidth);
 
-    // 4. Grille des prestations & tarification via autoTable
-    const tableY = boxY + boxHeight + 6;
-    const tableHeaders = this.extractTableHeaders(quote.columns);
-    const tableBody = this.extractTableBody(quote.columns, quote.rows, quote.currency);
+    // ------------------------------------------
+    // SECTION 2 : Détails de l'expédition
+    // ------------------------------------------
+    const sec2Y = currentY + 7;
+    this.drawSectionBanner(doc, "2. Détails de l'expédition / Shipment Details", margin, sec2Y, contentWidth);
 
-    const currencySymbol = quote.currency || 'FCFA';
-    const totalAmountFormatted = `${(quote.totalAmount || 0).toLocaleString('fr-FR')} ${currencySymbol}`;
+    currentY = sec2Y + 10;
+    this.drawFieldLine(doc, margin + 2, currentY, 'Type de marchandise / Type of Goods :', quote.seaFreight?.goodsType || '', contentWidth);
+    currentY += lineSpacing;
 
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margin, right: margin },
-      head: [tableHeaders],
-      body: tableBody,
-      theme: 'grid',
-      styles: {
-        fontSize: 8,
-        cellPadding: 2.2,
-        textColor: [30, 41, 59],
-        lineColor: [226, 232, 240],
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [10, 37, 64],
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
-        halign: 'left',
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252],
-      },
-      foot: [
-        [
-          {
-            content: 'TOTAL ESTIMÉ DE LA COTATION',
-            colSpan: Math.max(1, tableHeaders.length - 1),
-            styles: {
-              halign: 'right',
-              fontStyle: 'bold',
-              fillColor: [241, 245, 249],
-              textColor: [10, 37, 64],
-              fontSize: 9,
-            },
-          },
-          {
-            content: totalAmountFormatted,
-            styles: {
-              halign: 'right',
-              fontStyle: 'bold',
-              fillColor: [10, 37, 64],
-              textColor: [255, 255, 255],
-              fontSize: 9,
-            },
-          },
-        ],
-      ],
-    });
+    const goodsDesc = quote.seaFreight?.goodsDescription || quote.title || '';
+    this.drawFieldLine(doc, margin + 2, currentY, 'Description :', goodsDesc, contentWidth);
+    currentY += lineSpacing;
 
-    // 5. Conditions générales & Cadre de signature
-    const finalY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 210;
-    const termsY = Math.min(finalY + 8, pageHeight - 48);
+    const grossWeight = quote.seaFreight?.grossWeightKg != null ? `${quote.seaFreight.grossWeightKg.toLocaleString('fr-FR')} kg` : '';
+    this.drawFieldLine(doc, margin + 2, currentY, 'Poids brut (kg) / Gross Weight (kg) :', grossWeight, contentWidth);
+    currentY += lineSpacing;
 
-    // Bloc mentions légales & validité
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(10, 37, 64);
-    doc.text('CONDITIONS & REMARQUES COMMERCIALES', margin, termsY);
+    const volume = quote.seaFreight?.totalVolumeM3 != null ? `${quote.seaFreight.totalVolumeM3} m³` : '';
+    this.drawFieldLine(doc, margin + 2, currentY, 'Volume (m³) / Volume (cbm) :', volume, contentWidth);
+    currentY += lineSpacing;
 
-    doc.setFont('helvetica', 'normal');
+    const packages = quote.seaFreight?.packagesCount != null ? String(quote.seaFreight.packagesCount) : '';
+    this.drawFieldLine(doc, margin + 2, currentY, 'Nombre de colis / Number of Packages :', packages, contentWidth);
+    currentY += lineSpacing;
+
+    this.drawFieldLine(doc, margin + 2, currentY, "Type d'emballage / Packaging Type :", quote.seaFreight?.packagingType || '', contentWidth);
+
+    // ------------------------------------------
+    // SECTION 3 : Itinéraire souhaité
+    // ------------------------------------------
+    const sec3Y = currentY + 7;
+    this.drawSectionBanner(doc, '3. Itinéraire souhaité / Preferred Route', margin, sec3Y, contentWidth);
+
+    currentY = sec3Y + 10;
+    this.drawFieldLine(doc, margin + 2, currentY, 'Port de chargement / Port of Loading :', quote.seaFreight?.portOfLoading || '', contentWidth);
+    currentY += lineSpacing;
+
+    this.drawFieldLine(doc, margin + 2, currentY, 'Port de déchargement / Port of Discharge :', quote.seaFreight?.portOfDischarge || '', contentWidth);
+    currentY += lineSpacing;
+
+    this.drawFieldLine(doc, margin + 2, currentY, 'Incoterm souhaité / Preferred Incoterm :', (quote.seaFreight?.incoterm || '').toUpperCase(), contentWidth);
+    currentY += lineSpacing;
+
+    this.drawFieldLine(doc, margin + 2, currentY, "Date d'embarquement estimée / Estimated Departure Date :", this.formatDate(quote.seaFreight?.estimatedDepartureDate), contentWidth);
+    currentY += lineSpacing;
+
+    this.drawFieldLine(doc, margin + 2, currentY, "Date d'arrivée souhaitée / Estimated Arrival Date :", this.formatDate(quote.seaFreight?.estimatedArrivalDate), contentWidth);
+    currentY += lineSpacing;
+
+    const inland = quote.seaFreight?.needInlandTransport === true ? 'Oui / Yes' : (quote.seaFreight?.needInlandTransport === false ? 'Non / No' : '');
+    this.drawFieldLine(doc, margin + 2, currentY, 'Transport terrestre nécessaire / Need inland transport? :', inland, contentWidth);
+
+    // ------------------------------------------
+    // SECTION 4 : Type de service souhaité
+    // ------------------------------------------
+    const sec4Y = currentY + 7;
+    this.drawSectionBanner(doc, '4. Type de service souhaité / Type of Service Required', margin, sec4Y, contentWidth);
+
+    currentY = sec4Y + 10;
+    const services = quote.seaFreight?.serviceTypes;
+    this.drawCheckbox(doc, margin + 2, currentY, !!services?.fcl, 'FCL (Conteneur complet / Full Container Load)');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!services?.lcl, 'LCL (Groupage / Less than Container Load)');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!services?.roro, 'RO/RO (Roulier / Roll-on/Roll-off)');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!services?.breakBulk, 'Break Bulk (Conventionnel / Conventional Cargo)');
+    currentY += lineSpacing;
+
+    const otherServiceLabel = services?.other ? `Autre / Other : ${services.other}` : 'Autre / Other';
+    this.drawCheckbox(doc, margin + 2, currentY, !!services?.other, otherServiceLabel);
+
+    // ------------------------------------------
+    // SECTION 5 : Bandeau Documents disponibles au bas de la page 1
+    // ------------------------------------------
+    const sec5Y = currentY + 7;
+    this.drawSectionBanner(doc, '5. Documents disponibles / Available Documents', margin, sec5Y, contentWidth);
+
+    doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(
-      '• Cette cotation est établie sur la base des tarifs de fret maritime et des taxes portuaires actuellement en vigueur.',
-      margin,
-      termsY + 4
-    );
-    doc.text(
-      '• Les prix sont susceptibles de révision en cas de fluctuation des surcharges maritimes (BAF/CAF/PSS) ou du cours des devises.',
-      margin,
-      termsY + 8
-    );
-    doc.text(
-      '• Sous réserve de disponibilité des conteneurs, d\'espace navire et de faisabilité douanière à destination.',
-      margin,
-      termsY + 12
-    );
+    doc.text('(Suite des documents et services requis au verso / Continued on next page)', margin + 3.5, sec5Y + 11);
 
-    // Cadre Bon pour Accord / Signature
-    const signBoxWidth = 65;
-    const signBoxHeight = 22;
-    const signBoxX = pageWidth - margin - signBoxWidth;
-    const signBoxY = termsY - 2;
+    // ==========================================
+    // PAGE 2 : TITRE, SUITE SEC 5, SEC 6, DETAILS CHIFFRAGE & FOOTER
+    // ==========================================
+    doc.addPage();
 
-    doc.setDrawColor(203, 213, 225);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(signBoxX, signBoxY, signBoxWidth, signBoxHeight, 1.5, 1.5, 'D');
+    // Titre de rappel en haut de la page 2
+    this.drawMainTitle(doc, pageWidth, 16);
 
+    // Suite Section 5 (Cases à cocher documents disponibles)
+    currentY = 24;
+    const docs = quote.seaFreight?.availableDocuments;
+    this.drawCheckbox(doc, margin + 2, currentY, !!docs?.commercialInvoice, 'Facture commerciale / Commercial Invoice');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!docs?.packingList, 'Liste de colisage / Packing List');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!docs?.certificateOfOrigin, "Certificat d'origine / Certificate of Origin");
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!docs?.msdsTechnicalSheet, 'Fiche de données de sécurité (MSDS) / Material Safety Data Sheet');
+    currentY += lineSpacing;
+
+    const otherDocLabel = docs?.other ? `Autre / Other : ${docs.other}` : 'Autre / Other';
+    this.drawCheckbox(doc, margin + 2, currentY, !!docs?.other, otherDocLabel);
+
+    // ------------------------------------------
+    // SECTION 6 : Services additionnels requis
+    // ------------------------------------------
+    const sec6Y = currentY + 7;
+    this.drawSectionBanner(doc, '6. Services additionnels requis / Additional Services Needed', margin, sec6Y, contentWidth);
+
+    currentY = sec6Y + 10;
+    const addons = quote.seaFreight?.additionalServices;
+    this.drawCheckbox(doc, margin + 2, currentY, !!addons?.customsClearance, 'Dédouanement / Customs Clearance');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!addons?.cargoInsurance, 'Assurance marchandise / Cargo Insurance');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!addons?.warehousing, 'Entreposage / Warehousing');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!addons?.portHandling, 'Manutention portuaire / Port Handling');
+    currentY += lineSpacing;
+
+    this.drawCheckbox(doc, margin + 2, currentY, !!addons?.tracking, 'Suivi et traçabilité / Cargo Tracking');
+    currentY += lineSpacing;
+
+    // ------------------------------------------
+    // SECTION 7 (Optionnelle) : Détails du chiffrage si des lignes existent
+    // ------------------------------------------
+    if (quote.rows && quote.rows.length > 0) {
+      const sec7Y = currentY + 5;
+      this.drawSectionBanner(doc, '7. Détails du chiffrage / Cost Breakdown & Quotation Lines', margin, sec7Y, contentWidth);
+
+      const tableHeaders = this.extractTableHeaders(quote.columns);
+      const tableBody = this.extractTableBody(quote.columns, quote.rows, quote.currency);
+      const currencySymbol = quote.currency || 'FCFA';
+      const totalAmountFormatted = `${(quote.totalAmount || 0).toLocaleString('fr-FR')} ${currencySymbol}`;
+
+      autoTable(doc, {
+        startY: sec7Y + 8,
+        margin: { left: margin, right: margin },
+        head: [tableHeaders],
+        body: tableBody,
+        theme: 'grid',
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          textColor: [30, 41, 59],
+          lineColor: [209, 213, 219],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [26, 54, 115], // Transimex navy blue
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'left',
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        foot: [
+          [
+            {
+              content: 'TOTAL ESTIMÉ DE LA COTATION',
+              colSpan: Math.max(1, tableHeaders.length - 1),
+              styles: {
+                halign: 'right',
+                fontStyle: 'bold',
+                fillColor: [241, 245, 249],
+                textColor: [26, 54, 115],
+                fontSize: 8.5,
+              },
+            },
+            {
+              content: totalAmountFormatted,
+              styles: {
+                halign: 'right',
+                fontStyle: 'bold',
+                fillColor: [26, 54, 115],
+                textColor: [255, 255, 255],
+                fontSize: 8.5,
+              },
+            },
+          ],
+        ],
+      });
+    }
+
+    // Pied de page officiel TRANSIMEX
+    const footerY = pageHeight - 24;
+    this.drawTransimexFooter(doc, pageWidth, footerY, margin);
+  }
+
+  /**
+   * En-tête officiel TRANSIMEX (Logo serif, barre rouge, slogan)
+   */
+  private drawTransimexHeader(doc: jsPDF, pageWidth: number, startY: number): void {
+    const centerX = pageWidth / 2;
+
+    // TRANSIMEX (Serif, bleu marine officiel #1A3673)
+    doc.setFont('times', 'bold');
+    doc.setFontSize(22);
+    doc.setTextColor(26, 54, 115);
+    doc.text('TRANSIMEX', centerX, startY, { align: 'center' });
+
+    // Ligne rouge séparatrice
+    const lineWidth = 74;
+    doc.setDrawColor(211, 47, 47); // Rouge #D32F2F
+    doc.setLineWidth(0.65);
+    doc.line(centerX - lineWidth / 2, startY + 2.5, centerX + lineWidth / 2, startY + 2.5);
+
+    // Global Logistics Provider (Sans-serif, rouge)
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text('BON POUR ACCORD DU CLIENT', signBoxX + signBoxWidth / 2, signBoxY + 4, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.text('Date, Signature & Cachet obligatoire', signBoxX + signBoxWidth / 2, signBoxY + 8, { align: 'center' });
+    doc.setFontSize(8.5);
+    doc.setTextColor(211, 47, 47);
+    doc.text('Global Logistics Provider', centerX, startY + 6.5, { align: 'center' });
+  }
 
-    // 6. Pied de page discret
-    doc.setDrawColor(226, 232, 240);
-    doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+  /**
+   * Titre principal officiel de la fiche
+   */
+  private drawMainTitle(doc: jsPDF, pageWidth: number, y: number): void {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(20, 20, 20);
+    doc.text(
+      'FICHE DE DEMANDE DE COTATION MARITIME / SEA FREIGHT QUOTATION REQUEST FORM',
+      pageWidth / 2,
+      y,
+      { align: 'center' }
+    );
+  }
+
+  /**
+   * Bannière grise délimitant une section
+   */
+  private drawSectionBanner(
+    doc: jsPDF,
+    title: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number = 6
+  ): void {
+    doc.setFillColor(217, 221, 226); // Gris clair officiel #D9DDE2
+    doc.rect(x, y, width, height, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(20, 20, 20);
+    doc.text(title, x + 3, y + height - 1.8);
+  }
+
+  /**
+   * Ligne de champ avec libellé en gras et valeur renseignée
+   */
+  private drawFieldLine(
+    doc: jsPDF,
+    x: number,
+    y: number,
+    label: string,
+    value: string,
+    maxWidth: number
+  ): void {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(20, 20, 20);
+    doc.text(label, x, y);
+
+    const labelWidth = doc.getTextWidth(label);
+    const valueX = x + labelWidth + 2;
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      'TRANSIMEX S.A. — Direction Générale & Agence Portuaire de Douala — info@transimex-cm.com',
-      margin,
-      pageHeight - 8
-    );
-    doc.text(
-      `Document généré le ${this.formatDate(new Date().toISOString())}`,
-      pageWidth - margin,
-      pageHeight - 8,
-      { align: 'right' }
-    );
+    doc.setFontSize(8.5);
+    doc.setTextColor(40, 50, 65);
+    const truncatedValue = this.truncateText(value || '', Math.floor((maxWidth - labelWidth) / 1.7));
+    doc.text(truncatedValue, valueX, y);
+  }
+
+  /**
+   * Rendu graphique d'une case à cocher conforme au formulaire officiel
+   */
+  private drawCheckbox(
+    doc: jsPDF,
+    x: number,
+    y: number,
+    checked: boolean,
+    label: string
+  ): void {
+    const boxSize = 3.6;
+    doc.setDrawColor(75, 85, 99);
+    doc.setLineWidth(0.25);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(x, y - boxSize + 0.8, boxSize, boxSize, 'FD');
+
+    if (checked) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(26, 54, 115);
+      doc.text('X', x + 0.8, y + 0.2);
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(20, 20, 20);
+    doc.text(label, x + boxSize + 2.5, y);
+  }
+
+  /**
+   * Pied de fiche officiel TRANSIMEX avec coordonnées
+   */
+  private drawTransimexFooter(
+    doc: jsPDF,
+    pageWidth: number,
+    y: number,
+    margin: number
+  ): void {
+    doc.setDrawColor(209, 213, 219);
+    doc.setLineWidth(0.25);
+    doc.line(margin, y, pageWidth - margin, y);
+
+    const centerX = pageWidth / 2;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(75, 85, 99);
+    doc.text('Merci de retourner cette fiche complétée à :', centerX, y + 4.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(20, 20, 20);
+    doc.text('Email : info@transimex-cm.com | Téléphone : +237 620 363 043', centerX, y + 9, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(26, 54, 115);
+    doc.text('Site web : http://www.transimex-cm.com', centerX, y + 13.5, { align: 'center' });
   }
 
   /**
@@ -540,7 +672,7 @@ export class ExportService {
    * Formate une date ISO en chaîne JJ/MM/AAAA
    */
   private formatDate(isoDate: string | null | undefined): string {
-    if (!isoDate) return 'N/A';
+    if (!isoDate) return '';
     try {
       const date = new Date(isoDate);
       if (isNaN(date.getTime())) return isoDate;

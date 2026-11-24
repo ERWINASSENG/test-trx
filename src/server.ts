@@ -18,6 +18,7 @@ import {
   normalizeDateToDay,
   requiresCashierDraftBeforeEdit,
 } from './server/cashier.utils';
+import { getCashierDateRange, isCashierDateAllowed } from './app/core/utils/cashier-date.util';
 import { getCurrentUserProfileHandler, updateCurrentUserProfileHandler } from './server/profile';
 import { createCollaboratorHandler } from './server/collaborators.create';
 import { getCollaboratorsHandler } from './server/collaborators.list';
@@ -410,7 +411,13 @@ const saveOperationHandler = async (req: express.Request, res: express.Response)
       montant = Math.abs(montant);
     }
 
-    const dateToStore = normalizeDateToDay(payload.date) || new Date().toISOString().slice(0, 10);
+    const requestedDate = normalizeDateToDay(payload.date);
+    if (requestedDate && !isCashierDateAllowed(requestedDate)) {
+      const { minDate, maxDate } = getCashierDateRange();
+      res.status(400).json({ error: `La date de l’opération doit être comprise entre ${minDate} et ${maxDate}.` });
+      return;
+    }
+    const dateToStore = requestedDate || new Date().toISOString().slice(0, 10);
 
     // Contrôle d'unicité strict côté serveur : Date + Montant + Libellé + N° de dossier/matricule + Service
     const duplicateCheck = await checkDuplicateCashierTransaction(adminClient, {
@@ -685,7 +692,13 @@ const updateOperationHandler = async (req: express.Request, res: express.Respons
     }
 
     if (payload.date !== undefined && payload.date) {
-      updateData['date'] = normalizeDateToDay(payload.date) || new Date().toISOString().slice(0, 10);
+      const requestedDate = normalizeDateToDay(payload.date);
+      if (!requestedDate || !isCashierDateAllowed(requestedDate)) {
+        const { minDate, maxDate } = getCashierDateRange();
+        res.status(400).json({ error: `La date de l’opération doit être comprise entre ${minDate} et ${maxDate}.` });
+        return;
+      }
+      updateData['date'] = requestedDate;
     }
 
     if (payload.pieceComptable !== undefined || payload.piece_comptable !== undefined) {

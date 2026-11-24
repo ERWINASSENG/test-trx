@@ -1194,16 +1194,14 @@
           <strong class="total-display">{{ formatAmount(draftTotal(), currency()) }}</strong>
         </div>
         <div class="modal-actions">
-          @if (editingId()) {
-            <button
-              type="button"
-              class="secondary-action inline-flex items-center gap-1.5"
-              (click)="exportCurrentQuotePdf()"
-              title="Télécharger cette cotation en PDF">
-              <mat-icon>picture_as_pdf</mat-icon>
-              <span>Télécharger PDF</span>
-            </button>
-          }
+          <button
+            type="button"
+            class="secondary-action inline-flex items-center gap-1.5"
+            (click)="exportCurrentQuotePdf()"
+            title="Télécharger cette fiche de cotation en PDF">
+            <mat-icon>picture_as_pdf</mat-icon>
+            <span>Télécharger PDF</span>
+          </button>
           <button type="button" class="secondary-action" [disabled]="isSaving()" (click)="closeEditor()">
             Annuler
           </button>

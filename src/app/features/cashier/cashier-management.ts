@@ -19,6 +19,7 @@ import {
   FormControl,
   FormGroup,
   ReactiveFormsModule,
+  ValidatorFn,
   Validators,
 } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -51,6 +52,7 @@ import {
   findDuplicateTransaction,
   normalizePieceComptable,
 } from '../../core/utils/cashier-duplicate.util';
+import { getCashierDateRange, isCashierDateAllowed } from '../../core/utils/cashier-date.util';
 import { OdooDatepicker } from '../../shared/components/odoo-datepicker/odoo-datepicker';
 import { ModuleControlPanel } from '../../shared/components/module-control-panel/module-control-panel';
 import { ModuleDataTable } from '../../shared/components/module-data-table/module-data-table';
@@ -65,6 +67,9 @@ Chart.register(
   Tooltip,
   Filler
 );
+
+const cashierDateRangeValidator: ValidatorFn = (control) =>
+  isCashierDateAllowed(String(control.value ?? '')) ? null : { cashierDateRange: true };
 
 export interface CaisseTimelineData {
   labels: string[];
@@ -348,12 +353,13 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   });
 
   public readonly cashierServices = CASHIER_SERVICES;
+  public readonly cashierDateRange = getCashierDateRange();
 
   // Formulaire de transaction réactif
   public readonly transactionForm = new FormGroup({
     date: new FormControl<string>(new Date().toISOString().split('T')[0], {
       nonNullable: true,
-      validators: [Validators.required],
+      validators: [Validators.required, cashierDateRangeValidator],
     }),
     libelle: new FormControl<string>('', {
       nonNullable: true,
@@ -395,7 +401,7 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly editTransactionForm = new FormGroup({
     date: new FormControl<string>('', {
       nonNullable: true,
-      validators: [Validators.required],
+      validators: [Validators.required, cashierDateRangeValidator],
     }),
     libelle: new FormControl<string>('', {
       nonNullable: true,
@@ -939,12 +945,14 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       const libelleControl = this.transactionForm.get('libelle');
       const serviceControl = this.transactionForm.get('service');
       const montantControl = this.transactionForm.get('montant');
+      const dateControl = this.transactionForm.get('date');
 
       let errorMsg = 'Veuillez renseigner tous les champs obligatoires :';
       const missing: string[] = [];
       if (libelleControl?.invalid) missing.push('Libellé (minimum 2 caractères)');
       if (serviceControl?.invalid) missing.push('Service');
       if (montantControl?.invalid) missing.push('Montant');
+      if (dateControl?.invalid) missing.push(`Date (entre ${this.cashierDateRange.minDate} et ${this.cashierDateRange.maxDate})`);
       errorMsg += ' ' + missing.join(', ') + '.';
 
       this.cashierService.setError(errorMsg);
@@ -1262,12 +1270,14 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
       const libelleControl = this.editTransactionForm.get('libelle');
       const serviceControl = this.editTransactionForm.get('service');
       const montantControl = this.editTransactionForm.get('montant');
+      const dateControl = this.editTransactionForm.get('date');
 
       let errorMsg = 'Veuillez renseigner tous les champs obligatoires pour la modification :';
       const missing: string[] = [];
       if (libelleControl?.invalid) missing.push('Libellé (minimum 2 caractères)');
       if (serviceControl?.invalid) missing.push('Service');
       if (montantControl?.invalid) missing.push('Montant');
+      if (dateControl?.invalid) missing.push(`Date (entre ${this.cashierDateRange.minDate} et ${this.cashierDateRange.maxDate})`);
       errorMsg += ' ' + missing.join(', ') + '.';
 
       this.cashierService.setError(errorMsg);

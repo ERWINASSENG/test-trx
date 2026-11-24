@@ -1,3 +1,7 @@
+import { getCashierDateRange, isCashierDateAllowed } from '../app/core/utils/cashier-date.util';
+
+export { getCashierDateRange, isCashierDateAllowed } from '../app/core/utils/cashier-date.util';
+
 /**
  * Normalise la valeur d'une pièce comptable déjà persistée en base.
  * Si la pièce comptable est présente, elle est nettoyée et normalisée en majuscules.

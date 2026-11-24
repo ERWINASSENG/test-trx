@@ -464,13 +464,74 @@ export class QuotesComponent {
 
   public async exportCurrentQuotePdf(): Promise<void> {
     const quoteId = this.editingId();
-    if (!quoteId) return;
-    const quote = this.quoteService.quotes().find((q) => q.id === quoteId);
-    if (!quote) {
-      this.error.set('Cotation introuvable.');
-      return;
-    }
-    await this.exportQuotePdf(quote);
+    const existingQuote = quoteId ? this.quoteService.quotes().find((q) => q.id === quoteId) : null;
+
+    const prospect = this.quoteService.prospects().find((p) => p.id === this.prospectId());
+    const prospectName = prospect?.companyName || prospect?.name || this.clientSearch().trim() || 'Client';
+
+    const currentQuote: SalesQuote = {
+      id: existingQuote?.id || 'nouveau',
+      quoteNumber: existingQuote?.quoteNumber || 'DEMANDE-COTATION',
+      prospectId: this.prospectId() || '',
+      opportunityId: this.opportunityId(),
+      contactId: this.contactId() || null,
+      contactName: this.seaContactName().trim() || existingQuote?.contactName || null,
+      prospectName,
+      assignedTo: this.assignedTo() || null,
+      assignedToName: this.assigneeLabel(this.assignedTo()),
+      createdBy: existingQuote?.createdBy || null,
+      title: this.title().trim() || 'Demande de cotation maritime',
+      currency: this.currency() || 'FCFA',
+      columns: this.columns(),
+      rows: this.rows(),
+      totalColumnId: this.totalColumnId(),
+      totalAmount: this.draftTotal(),
+      status: this.status() || 'draft',
+      validUntil: this.validUntil() || null,
+      createdAt: existingQuote?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      seaFreight: {
+        contactName: this.seaContactName().trim() || undefined,
+        phone: this.seaPhone().trim() || undefined,
+        email: this.seaEmail().trim() || undefined,
+        address: this.seaAddress().trim() || undefined,
+        goodsType: this.seaGoodsType().trim() || undefined,
+        goodsDescription: this.seaGoodsDescription().trim() || undefined,
+        grossWeightKg: this.seaGrossWeightKg() ?? undefined,
+        totalVolumeM3: this.seaTotalVolumeM3() ?? undefined,
+        packagesCount: this.seaPackagesCount() ?? undefined,
+        packagingType: this.seaPackagingType().trim() || undefined,
+        portOfLoading: this.seaPortOfLoading().trim() || undefined,
+        portOfDischarge: this.seaPortOfDischarge().trim() || undefined,
+        incoterm: this.seaIncoterm().trim() || undefined,
+        needInlandTransport: this.seaNeedInlandTransport() ?? undefined,
+        estimatedDepartureDate: this.seaEstimatedDepartureDate(),
+        estimatedArrivalDate: this.seaEstimatedArrivalDate(),
+        serviceTypes: {
+          fcl: this.serviceFcl(),
+          lcl: this.serviceLcl(),
+          roro: this.serviceRoro(),
+          breakBulk: this.serviceBreakBulk(),
+          other: this.serviceOther().trim() || undefined,
+        },
+        availableDocuments: {
+          commercialInvoice: this.docCommercialInvoice(),
+          packingList: this.docPackingList(),
+          certificateOfOrigin: this.docCertificateOfOrigin(),
+          msdsTechnicalSheet: this.docMsdsTechnicalSheet(),
+          other: this.docOther().trim() || undefined,
+        },
+        additionalServices: {
+          customsClearance: this.addonCustomsClearance(),
+          cargoInsurance: this.addonCargoInsurance(),
+          warehousing: this.addonWarehousing(),
+          portHandling: this.addonPortHandling(),
+          tracking: this.addonTracking(),
+        },
+      },
+    };
+
+    await this.exportQuotePdf(currentQuote);
   }
 
   public async deleteSelectedQuotes(): Promise<void> {

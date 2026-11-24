@@ -298,6 +298,8 @@
                   @if (isAddDatePickerOpen()) {
                     <app-odoo-datepicker
                       [value]="transactionForm.get('date')?.value"
+                      [minDate]="cashierDateRange.minDate"
+                      [maxDate]="cashierDateRange.maxDate"
                       (dateChange)="onAddDateSelected($event)"
                       (closePicker)="closeAddDatePicker()"
                     ></app-odoo-datepicker>
@@ -485,6 +487,8 @@
                       @if (isEditDatePickerOpen()) {
                         <app-odoo-datepicker
                           [value]="editTransactionForm.get('date')?.value"
+                          [minDate]="cashierDateRange.minDate"
+                          [maxDate]="cashierDateRange.maxDate"
                           (dateChange)="onEditDateSelected($event)"
                           (closePicker)="closeEditDatePicker()"
                         ></app-odoo-datepicker>

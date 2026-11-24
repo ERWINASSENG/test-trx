@@ -18,6 +18,7 @@ export interface CalendarDay {
   isCurrentMonth: boolean;
   isSelected: boolean;
   isToday: boolean;
+  isDisabled: boolean;
 }
 
 export interface CalendarWeek {
@@ -55,6 +56,9 @@ export class OdooDatepicker implements OnInit {
     }
   }
 
+  @Input() minDate: string | null = null;
+  @Input() maxDate: string | null = null;
+
   @Output() dateChange = new EventEmitter<string>();
   @Output() closePicker = new EventEmitter<void>();
 
@@ -79,6 +83,10 @@ export class OdooDatepicker implements OnInit {
     const month = this.currentViewMonth();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const minDate = this.minDate ? this.parseDate(this.minDate) : null;
+    const maxDate = this.maxDate ? this.parseDate(this.maxDate) : null;
+    minDate?.setHours(0, 0, 0, 0);
+    maxDate?.setHours(0, 0, 0, 0);
 
     const selectedParsed = this.parseDate(this.selectedDateStr());
     if (selectedParsed) {
@@ -111,6 +119,7 @@ export class OdooDatepicker implements OnInit {
         const isCurrentMonth = checkDate.getMonth() === month;
         const isToday = checkDate.getTime() === today.getTime();
         const isSelected = selectedParsed ? checkDate.getTime() === selectedParsed.getTime() : false;
+        const isDisabled = !!((minDate && checkDate < minDate) || (maxDate && checkDate > maxDate));
 
         days.push({
           date: new Date(checkDate),
@@ -118,6 +127,7 @@ export class OdooDatepicker implements OnInit {
           isCurrentMonth,
           isSelected,
           isToday,
+          isDisabled,
         });
 
         currentCursor.setDate(currentCursor.getDate() + 1);
@@ -127,6 +137,26 @@ export class OdooDatepicker implements OnInit {
     }
 
     return weeks;
+  });
+
+  public readonly canPrevMonth = computed<boolean>(() => {
+    if (!this.minDate) return true;
+    const min = this.parseDate(this.minDate);
+    if (!min) return true;
+    min.setHours(0, 0, 0, 0);
+    const lastDayOfPrevMonth = new Date(this.currentViewYear(), this.currentViewMonth(), 0);
+    lastDayOfPrevMonth.setHours(23, 59, 59, 999);
+    return lastDayOfPrevMonth.getTime() >= min.getTime();
+  });
+
+  public readonly canNextMonth = computed<boolean>(() => {
+    if (!this.maxDate) return true;
+    const max = this.parseDate(this.maxDate);
+    if (!max) return true;
+    max.setHours(23, 59, 59, 999);
+    const firstDayOfNextMonth = new Date(this.currentViewYear(), this.currentViewMonth() + 1, 1);
+    firstDayOfNextMonth.setHours(0, 0, 0, 0);
+    return firstDayOfNextMonth.getTime() <= max.getTime();
   });
 
   public ngOnInit(): void {
@@ -139,6 +169,7 @@ export class OdooDatepicker implements OnInit {
 
   public prevMonth(event: MouseEvent): void {
     event.stopPropagation();
+    if (!this.canPrevMonth()) return;
     let m = this.currentViewMonth() - 1;
     let y = this.currentViewYear();
     if (m < 0) {
@@ -151,6 +182,7 @@ export class OdooDatepicker implements OnInit {
 
   public nextMonth(event: MouseEvent): void {
     event.stopPropagation();
+    if (!this.canNextMonth()) return;
     let m = this.currentViewMonth() + 1;
     let y = this.currentViewYear();
     if (m > 11) {
@@ -163,6 +195,8 @@ export class OdooDatepicker implements OnInit {
 
   public selectDay(day: CalendarDay, event: MouseEvent): void {
     event.stopPropagation();
+    if (day.isDisabled) return;
+
     const d = day.date;
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');

@@ -4,12 +4,28 @@
 
   <!-- En-tête : Flèches de navigation et mois/année (ex: sept. 2026) -->
   <div class="odoo-dp-header">
-    <button type="button" class="odoo-dp-nav-btn" (click)="prevMonth($event)" aria-label="Mois précédent">
+    <button
+      type="button"
+      class="odoo-dp-nav-btn"
+      [disabled]="!canPrevMonth()"
+      [class.opacity-30]="!canPrevMonth()"
+      [class.cursor-not-allowed]="!canPrevMonth()"
+      (click)="prevMonth($event)"
+      aria-label="Mois précédent"
+    >
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path>
       </svg>
     </button>
-    <button type="button" class="odoo-dp-nav-btn" (click)="nextMonth($event)" aria-label="Mois suivant">
+    <button
+      type="button"
+      class="odoo-dp-nav-btn"
+      [disabled]="!canNextMonth()"
+      [class.opacity-30]="!canNextMonth()"
+      [class.cursor-not-allowed]="!canNextMonth()"
+      (click)="nextMonth($event)"
+      aria-label="Mois suivant"
+    >
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path>
       </svg>
@@ -41,6 +57,9 @@
             [class.is-other-month]="!day.isCurrentMonth"
             [class.is-selected]="day.isSelected"
             [class.is-today]="day.isToday && !day.isSelected"
+            [class.opacity-40]="day.isDisabled"
+            [class.cursor-not-allowed]="day.isDisabled"
+            [disabled]="day.isDisabled"
             (click)="selectDay(day, $event)"
           >
             {{ day.dayNumber }}

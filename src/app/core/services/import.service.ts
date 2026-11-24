@@ -7,6 +7,7 @@ import {
   TransactionTypeCategory,
 } from '../models/cashier-transaction.model';
 import { generateTransactionFingerprint } from '../utils/cashier-duplicate.util';
+import { getCashierDateRange, isCashierDateAllowed } from '../utils/cashier-date.util';
 
 export interface ImportError {
   row: number;

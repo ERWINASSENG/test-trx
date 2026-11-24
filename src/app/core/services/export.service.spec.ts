@@ -208,7 +208,8 @@ describe('ExportService', () => {
       const result = service.exportQuotesPdf([mockQuote, quote2]);
 
       expect(result).toBe(true);
-      expect(addPageSpy).toHaveBeenCalledTimes(1);
+      // Chaque cotation officielle comporte 2 pages (Fiche recto-verso)
+      expect(addPageSpy).toHaveBeenCalledTimes(3);
       expect(saveSpy).toHaveBeenCalledOnce();
       expect(saveSpy.mock.calls[0][0]).toMatch(/^cotations_export_.*\.pdf$/);
     });
