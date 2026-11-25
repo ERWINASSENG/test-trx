@@ -243,7 +243,7 @@ export class ExportService {
     this.drawFieldLine(doc, margin + 2, currentY, 'Description :', goodsDesc, contentWidth);
     currentY += lineSpacing;
 
-    const grossWeight = quote.seaFreight?.grossWeightKg != null ? `${quote.seaFreight.grossWeightKg.toLocaleString('fr-FR')} kg` : '';
+    const grossWeight = quote.seaFreight?.grossWeightKg != null ? `${this.formatQuoteAmount(quote.seaFreight.grossWeightKg)} kg` : '';
     this.drawFieldLine(doc, margin + 2, currentY, 'Poids brut (kg) / Gross Weight (kg) :', grossWeight, contentWidth);
     currentY += lineSpacing;
 
@@ -621,7 +621,7 @@ export class ExportService {
         }
 
         if (col.type === 'amount') {
-          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue)) || 0;
+          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ]/g, '')) || 0;
           return {
             content: `${this.formatQuoteAmount(num)} ${currency || 'FCFA'}`,
             styles: { halign: 'right' },
@@ -629,9 +629,9 @@ export class ExportService {
         }
 
         if (col.type === 'number') {
-          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue)) || 0;
+          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ]/g, '')) || 0;
           return {
-            content: num.toLocaleString('fr-FR'),
+            content: this.formatQuoteAmount(num),
             styles: { halign: 'right' },
           };
         }
@@ -649,7 +649,10 @@ export class ExportService {
   }
 
   private formatQuoteAmount(amount: number): string {
-    return amount.toLocaleString('fr-FR', { useGrouping: false });
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return '0';
+    }
+    return amount.toLocaleString('fr-FR', { useGrouping: false }).replace(/[/]/g, '');
   }
 
   /**
