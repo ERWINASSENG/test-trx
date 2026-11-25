@@ -2237,17 +2237,6 @@ export class CashierService implements OnDestroy {
     );
   }
 
-  public selectAllDrafts(): void {
-    const draftIds = new Set(
-      this.filteredTransactions()
-        .filter((transaction) => transaction.status === 'draft')
-        .map((transaction) => transaction.id)
-    );
-    this._transactions.update((items) =>
-      items.map((item) => draftIds.has(item.id) ? { ...item, selected: true } : item)
-    );
-  }
-
   /**
    * Sélectionne tous les brouillons ('draft') du journal actif
    * et désélectionne les opérations d'autres statuts.

@@ -97,6 +97,15 @@ describe('ExportService', () => {
   });
 
   describe('PDF Export for Quotes (Cotations Maritimes)', () => {
+    it('should format quote amounts without separators between digits', () => {
+      const formatQuoteAmount = (
+        service as unknown as { formatQuoteAmount: (amount: number) => string }
+      ).formatQuoteAmount.bind(service);
+
+      expect(formatQuoteAmount(1500000)).toBe('1500000');
+      expect(formatQuoteAmount(1250.5)).toBe('1250,5');
+    });
+
     const createPdfDocumentSpy = () => {
       const doc = new jsPDF();
       const saveSpy = vi.fn();

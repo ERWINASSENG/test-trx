@@ -375,7 +375,7 @@ export class ExportService {
       const tableHeaders = this.extractTableHeaders(quote.columns);
       const tableBody = this.extractTableBody(quote.columns, quote.rows, quote.currency);
       const currencySymbol = quote.currency || 'FCFA';
-      const totalAmountFormatted = `${(quote.totalAmount || 0).toLocaleString('fr-FR')} ${currencySymbol}`;
+      const totalAmountFormatted = `${this.formatQuoteAmount(quote.totalAmount || 0)} ${currencySymbol}`;
 
       autoTable(doc, {
         startY: sec7Y + 8,
@@ -623,7 +623,7 @@ export class ExportService {
         if (col.type === 'amount') {
           const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue)) || 0;
           return {
-            content: `${num.toLocaleString('fr-FR')} ${currency || 'FCFA'}`,
+            content: `${this.formatQuoteAmount(num)} ${currency || 'FCFA'}`,
             styles: { halign: 'right' },
           };
         }
@@ -646,6 +646,10 @@ export class ExportService {
         return String(rawValue);
       });
     });
+  }
+
+  private formatQuoteAmount(amount: number): string {
+    return amount.toLocaleString('fr-FR', { useGrouping: false });
   }
 
   /**
