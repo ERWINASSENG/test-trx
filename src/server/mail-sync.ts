@@ -653,7 +653,7 @@ export async function syncMailInboxAccount(
               await createAppNotification(adminClient, {
                 recipientId: supId,
                 actorId: String(account.user_id),
-                notificationType: 'quote_email_received',
+                notificationType: 'assignment',
                 title: assignedTo
                   ? `Nouvelle demande reçue par ${ownerLabel}`
                   : `Nouvelle demande de cotation à attribuer`,
