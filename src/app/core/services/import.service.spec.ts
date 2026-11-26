@@ -59,6 +59,21 @@ describe('ImportService', () => {
       expect(result.data?.date).toBe('15/09/2026');
     });
 
+    it.each(['COMPTABILITE', 'RH', 'INFORMATIQUE', 'DEX'])(
+      'should accept %s as a cashier service when importing',
+      (serviceName) => {
+        const result = service.validateAndTransformRow({
+          Date: '15/09/2026',
+          Libellé: 'Frais de service',
+          Sortie: '1000',
+          Service: serviceName,
+        }, 4);
+
+        expect(result.error).toBeUndefined();
+        expect(result.data?.service).toBe(serviceName);
+      }
+    );
+
     it('should validate an imported row with Excel serial date number (e.g. 45549)', () => {
       const row = {
         'Date': 45549, // 14 septembre 2024

@@ -5,8 +5,8 @@
 
 export type TransactionTypeCategory = 'entree' | 'sortie';
 export type TransactionStatus = 'draft' | 'posted' | 'cancelled';
-export type Service = 'TRANSIT' | 'TRANSPORT' | 'MANUT' | 'COMMERCIAL' | 'GROUPAGE' | 'DG' | 'SECURITER';
-export const CASHIER_SERVICES: Service[] = ['TRANSIT', 'TRANSPORT', 'MANUT', 'COMMERCIAL', 'GROUPAGE', 'DG', 'SECURITER'];
+export type Service = 'COMPTABILITE' | 'DEX' | 'DG' | 'GROUPAGE' | 'INFORMATIQUE' | 'MANUT' | 'RH' | 'SECURITER' | 'TRANSIT' | 'TRANSPORT';
+export const CASHIER_SERVICES: Service[] = ['COMPTABILITE', 'DEX', 'DG', 'GROUPAGE', 'INFORMATIQUE', 'MANUT', 'RH', 'SECURITER', 'TRANSIT', 'TRANSPORT'];
 export type CashierServiceType = Service;
 export type CashierOperationType = Service; // Rétrocompatibilité
 
