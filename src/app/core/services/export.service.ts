@@ -621,7 +621,7 @@ export class ExportService {
         }
 
         if (col.type === 'amount') {
-          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ]/g, '')) || 0;
+          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ,]/g, '')) || 0;
           return {
             content: `${this.formatQuoteAmount(num)} ${currency || 'FCFA'}`,
             styles: { halign: 'right' },
@@ -629,7 +629,7 @@ export class ExportService {
         }
 
         if (col.type === 'number') {
-          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ]/g, '')) || 0;
+          const num = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue).replace(/[/ ,]/g, '')) || 0;
           return {
             content: this.formatQuoteAmount(num),
             styles: { halign: 'right' },
@@ -652,7 +652,7 @@ export class ExportService {
     if (typeof amount !== 'number' || isNaN(amount)) {
       return '0';
     }
-    return amount.toLocaleString('fr-FR', { useGrouping: false }).replace(/[/]/g, '');
+    return amount.toLocaleString('en-US');
   }
 
   /**
