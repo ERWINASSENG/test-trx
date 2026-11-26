@@ -97,14 +97,16 @@ describe('ExportService', () => {
   });
 
   describe('PDF Export for Quotes (Cotations Maritimes)', () => {
-    it('should format quote amounts with commas separating digits', () => {
+    it('should format quote amounts with spaces starting from 5 digits', () => {
       const formatQuoteAmount = (
         service as unknown as { formatQuoteAmount: (amount: number) => string }
       ).formatQuoteAmount.bind(service);
 
-      expect(formatQuoteAmount(1500000)).toBe('1,500,000');
-      expect(formatQuoteAmount(1500)).toBe('1,500');
-      expect(formatQuoteAmount(1250.5)).toBe('1,250.5');
+      expect(formatQuoteAmount(1500)).toBe('1500');
+      expect(formatQuoteAmount(9999)).toBe('9999');
+      expect(formatQuoteAmount(10000)).toBe('10 000');
+      expect(formatQuoteAmount(1500000)).toBe('1 500 000');
+      expect(formatQuoteAmount(1250.5)).toBe('1250,5');
     });
 
     const createPdfDocumentSpy = () => {

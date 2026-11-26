@@ -652,7 +652,21 @@ export class ExportService {
     if (typeof amount !== 'number' || isNaN(amount)) {
       return '0';
     }
-    return amount.toLocaleString('en-US');
+    const isNegative = amount < 0;
+    const abs = Math.abs(amount);
+
+    // Moins de 5 chiffres : pas d'espace de séparation (ex: 1500)
+    if (abs < 10000) {
+      const str = abs.toString().replace('.', ',');
+      return isNegative ? `-${str}` : str;
+    }
+
+    // À partir de 5 chiffres : séparation des milliers par un espace standard (ex: 10 000, 1 500 000)
+    const parts = abs.toString().split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const decimalPart = parts[1] ? `,${parts[1]}` : '';
+    const result = `${integerPart}${decimalPart}`;
+    return isNegative ? `-${result}` : result;
   }
 
   /**
