@@ -5,6 +5,7 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import {join} from 'node:path';
 import { SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -46,6 +47,7 @@ import {
   updateProspectHandler,
 } from './server/prospects';
 import {
+  blockQuoteHandler,
   createQuoteHandler,
   createQuoteProspectHandler,
   createQuoteTemplateHandler,
@@ -53,13 +55,16 @@ import {
   deleteQuoteTemplateHandler,
   getQuoteTimingAnalyticsHandler,
   listQuoteAssigneesHandler,
+  listQuoteEventsHandler,
   listQuoteProspectsHandler,
   listQuoteContactsHandler,
   listQuoteTemplatesHandler,
   listQuotesHandler,
+  markQuoteOpenedHandler,
   resolveQuoteCollectionContext,
   resolveQuoteOwnerContext,
   resolveQuoteTemplateOwnerContext,
+  unblockQuoteHandler,
   updateQuoteHandler,
   updateQuoteTemplateHandler,
 } from './server/quotes';
@@ -106,6 +111,16 @@ import {
   updateAccessRoleHandler,
 } from './server/access-control.handlers';
 import { hasPermission, requirePermission, resolveJournalOwnerContext } from './server/access-control';
+import {
+  connectMyMailAccountHandler,
+  disconnectMyMailAccountHandler,
+  getAdminMailSettingsHandler,
+  getMyMailAccountHandler,
+  listTeamMailboxesStatusHandler,
+  syncMyMailAccountHandler,
+  updateAdminMailSettingsHandler,
+} from './server/mail-accounts.handlers';
+import { startMailSyncWorker } from './server/mail-sync';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
 dotenv.config();
@@ -1301,6 +1316,10 @@ app.patch('/api/quotes/templates/:id', requireAuth, requirePermission('quotes.te
 app.delete('/api/quotes/templates/:id', requireAuth, requirePermission('quotes.templates.delete', resolveQuoteTemplateOwnerContext), deleteQuoteTemplateHandler);
 app.get('/api/quotes', requireAuth, requirePermission('quotes.read', resolveQuoteCollectionContext), listQuotesHandler);
 app.post('/api/quotes', requireAuth, requirePermission('quotes.create', resolveQuoteCollectionContext), createQuoteHandler);
+app.get('/api/quotes/:id/events', requireAuth, listQuoteEventsHandler);
+app.post('/api/quotes/:id/open', requireAuth, requirePermission('quotes.read', resolveQuoteOwnerContext), markQuoteOpenedHandler);
+app.post('/api/quotes/:id/block', requireAuth, requirePermission('quotes.update', resolveQuoteOwnerContext), blockQuoteHandler);
+app.post('/api/quotes/:id/unblock', requireAuth, requirePermission('quotes.update', resolveQuoteOwnerContext), unblockQuoteHandler);
 app.patch('/api/quotes/:id', requireAuth, requirePermission('quotes.update', resolveQuoteOwnerContext), updateQuoteHandler);
 app.delete('/api/quotes/:id', requireAuth, requirePermission('quotes.delete', resolveQuoteOwnerContext), deleteQuoteHandler);
 
@@ -1352,6 +1371,28 @@ app.delete('/api/access-control/users/:userId/roles/:roleId', requireAuth, requi
 app.put('/api/access-control/users/:userId/overrides', requireAuth, requirePermission('access.users.override'), setUserPermissionOverrideHandler);
 app.delete('/api/access-control/users/:userId/overrides/:overrideId', requireAuth, requirePermission('access.users.override'), revokeUserPermissionOverrideHandler);
 app.get('/api/access-control/audit', requireAuth, requirePermission('access.audit.read'), listAccessAuditHandler);
+
+// Connecteur Outlook IMAP/SMTP : rate-limiting conservateur (20 req / 15 min / acteur — S11).
+const mailConnectorRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: express.Request) => {
+    const u = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
+    return u?.id ? `mail-user:${u.id}` : `mail-ip:${req.ip || 'unknown'}`;
+  },
+  message: { error: 'Trop de tentatives de connexion ou de synchronisation mail. Réessayez dans quelques minutes.' },
+});
+
+app.get('/api/profile/mail-account', requireAuth, requirePermission('mail.self.connect'), getMyMailAccountHandler);
+app.put('/api/profile/mail-account', requireAuth, mailConnectorRateLimiter, requirePermission('mail.self.connect'), connectMyMailAccountHandler);
+app.post('/api/profile/mail-account/sync', requireAuth, mailConnectorRateLimiter, requirePermission('mail.self.connect'), syncMyMailAccountHandler);
+app.delete('/api/profile/mail-account', requireAuth, mailConnectorRateLimiter, requirePermission('mail.self.connect'), disconnectMyMailAccountHandler);
+app.get('/api/quotes/mailboxes-status', requireAuth, requirePermission('quotes.timing.read'), listTeamMailboxesStatusHandler);
+app.get('/api/configuration/mail-settings', requireAuth, requirePermission('configuration.read'), getAdminMailSettingsHandler);
+app.put('/api/configuration/mail-settings', requireAuth, mailConnectorRateLimiter, requirePermission('configuration.manage'), updateAdminMailSettingsHandler);
 
 // Garde-fou pour toute route /api ou /api/* non reconnue :
 // garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).
@@ -1422,6 +1463,10 @@ app.use((req, res, next) => {
  * Start the server if this module is the main entry point, or it is ran via PM2.
  * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
  */
+if (!process.env['VITEST']) {
+  startMailSyncWorker();
+}
+
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
   app.listen(port, (error) => {

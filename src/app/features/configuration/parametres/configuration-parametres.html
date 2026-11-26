@@ -1,7 +1,250 @@
-<main class="configuration-settings" aria-labelledby="configuration-settings-title">
-  <header class="configuration-settings-header">
-    <p class="configuration-settings-eyebrow">Configuration de l’application</p>
-    <h1 id="configuration-settings-title">Paramètres</h1>
-    <p>Espace de configuration générale de Transmex.</p>
+<main class="configuration-settings max-w-5xl mx-auto p-4 sm:p-6 space-y-6" aria-labelledby="configuration-settings-title">
+  <header class="configuration-settings-header bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <p class="configuration-settings-eyebrow text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+        Configuration de l’application
+      </p>
+      <h1 id="configuration-settings-title" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-1">
+        Paramètres
+      </h1>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        Espace de configuration générale et du connecteur Outlook / IMAP des demandes de cotation.
+      </p>
+    </div>
+
+    @if (canReadConfig()) {
+      <div>
+        @if (encryptionReady()) {
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+            Chiffrement AES-256-GCM actif
+          </span>
+        } @else {
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+            Clé MAIL_ENCRYPTION_KEY requise (.env)
+          </span>
+        }
+      </div>
+    }
   </header>
+
+  @if (canReadConfig()) {
+    @if (feedback()) {
+      <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-medium text-emerald-800" id="mail-config-feedback">
+        {{ feedback() }}
+      </div>
+    }
+
+    @if (errorMessage()) {
+      <div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-medium text-rose-800" id="mail-config-error">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    <!-- 1. Formulaire global IMAP / SMTP & Règles de filtrage -->
+    <section class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5" aria-labelledby="mail-global-server-heading">
+      <div class="border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h2 id="mail-global-server-heading" class="text-sm font-bold text-slate-900 dark:text-white">
+          Serveur Mail Professionnel (Outlook / IMAP) — Demandes de cotation
+        </h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          Les commerciaux et managers autorisés (permission <code class="font-mono">mail.self.connect</code>) connectent uniquement leur email et mot de passe dans <strong>Mon Profil</strong> en utilisant ce serveur.
+        </p>
+      </div>
+
+      <form [formGroup]="settingsForm" (ngSubmit)="onSaveSettings()" class="space-y-5" id="admin-mail-settings-form">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label for="cfg-imap-host" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Hôte du serveur IMAP (entrant, lecture seule)
+            </label>
+            <input
+              id="cfg-imap-host"
+              type="text"
+              formControlName="imapHost"
+              [readonly]="!canManageConfig()"
+              placeholder="Ex : ssl0.ovh.net ou mail.votre-domaine.com"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label for="cfg-imap-port" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Port IMAP
+            </label>
+            <input
+              id="cfg-imap-port"
+              type="number"
+              formControlName="imapPort"
+              [readonly]="!canManageConfig()"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label for="cfg-smtp-host" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Hôte du serveur SMTP (optionnel)
+            </label>
+            <input
+              id="cfg-smtp-host"
+              type="text"
+              formControlName="smtpHost"
+              [readonly]="!canManageConfig()"
+              placeholder="Ex : ssl0.ovh.net ou smtp.votre-domaine.com"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label for="cfg-smtp-port" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Port SMTP
+            </label>
+            <input
+              id="cfg-smtp-port"
+              type="number"
+              formControlName="smtpPort"
+              [readonly]="!canManageConfig()"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="cfg-watched-folder" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Dossier IMAP surveillé
+            </label>
+            <input
+              id="cfg-watched-folder"
+              type="text"
+              formControlName="watchedFolder"
+              [readonly]="!canManageConfig()"
+              placeholder="INBOX"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">
+              Utilisez <code class="font-mono">INBOX</code> (filtré par mots-clés) ou un dossier dédié ex. <code class="font-mono">Cotations</code>.
+            </p>
+          </div>
+
+          <div class="flex flex-col justify-center gap-2 pt-2">
+            <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+              <input type="checkbox" formControlName="imapTls" [disabled]="!canManageConfig()" class="rounded border-slate-300" />
+              <span>Connexion IMAP chiffrée SSL/TLS (recommandé)</span>
+            </label>
+            <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+              <input type="checkbox" formControlName="isEnabled" [disabled]="!canManageConfig()" class="rounded border-slate-300" />
+              <span>Activer la synchronisation automatique en arrière-plan (toutes les 60 s)</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label for="cfg-keywords" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            Mots-clés de détection dans l’objet (séparés par des virgules)
+          </label>
+          <textarea
+            id="cfg-keywords"
+            rows="2"
+            formControlName="subjectKeywordsText"
+            [readonly]="!canManageConfig()"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          <p class="text-[11px] text-slate-400 mt-1">
+            Tous les autres mails (personnels, RH, factures…) ne contenant aucun de ces mots-clés sont ignorés et ne sont jamais stockés.
+          </p>
+        </div>
+
+        <div>
+          <label for="cfg-excluded" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            Expéditeurs ou domaines exclus (séparés par des virgules)
+          </label>
+          <input
+            id="cfg-excluded"
+            type="text"
+            formControlName="excludedSendersText"
+            [readonly]="!canManageConfig()"
+            placeholder="noreply@, newsletter@, @votre-domaine-interne.com"
+            class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        @if (canManageConfig()) {
+          <div class="flex justify-end border-t border-slate-100 dark:border-slate-800 pt-4">
+            <button
+              type="submit"
+              id="cfg-save-mail-btn"
+              [disabled]="isSaving() || settingsForm.invalid"
+              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition disabled:opacity-50 cursor-pointer">
+              {{ isSaving() ? 'Enregistrement…' : 'Enregistrer la configuration serveur' }}
+            </button>
+          </div>
+        }
+      </form>
+    </section>
+
+    <!-- 2. Supervision des boîtes connectées par l'équipe (sans aucun mot de passe) -->
+    <section class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4" aria-labelledby="connected-mailboxes-heading">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div>
+          <h2 id="connected-mailboxes-heading" class="text-sm font-bold text-slate-900 dark:text-white">
+            Boîtes mail connectées ({{ teamMailboxes().length }})
+          </h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            État technique de synchronisation des boîtes connectées par le manager et les commerciaux.
+          </p>
+        </div>
+        <button
+          type="button"
+          (click)="reloadSettings()"
+          [disabled]="isLoading()"
+          class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
+          Actualiser
+        </button>
+      </div>
+
+      @if (teamMailboxes().length > 0) {
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-medium">
+                <th class="py-2.5 px-3">Collaborateur</th>
+                <th class="py-2.5 px-3">Boîte mail</th>
+                <th class="py-2.5 px-3">Rôle de boîte</th>
+                <th class="py-2.5 px-3">Dernière synchro</th>
+                <th class="py-2.5 px-3">Statut</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              @for (box of teamMailboxes(); track box.id) {
+                <tr>
+                  <td class="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{{ box.userName || 'Collaborateur' }}</td>
+                  <td class="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300">{{ box.emailAddress }}</td>
+                  <td class="py-2.5 px-3">
+                    <span class="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[11px] capitalize">
+                      {{ box.accountRole }}
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3 font-mono text-slate-500">
+                    {{ box.lastSyncedAt ? (box.lastSyncedAt | date:'dd/MM/yyyy HH:mm') : 'En attente' }}
+                  </td>
+                  <td class="py-2.5 px-3">
+                    @if (box.lastError) {
+                      <span class="text-rose-600 font-medium" [title]="box.lastError">Erreur : {{ box.lastError }}</span>
+                    } @else if (box.isActive) {
+                      <span class="text-emerald-600 font-semibold">Synchronisée</span>
+                    } @else {
+                      <span class="text-slate-400">Inactive</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="text-xs text-slate-500 py-4 text-center">
+          Aucune boîte mail n’est encore connectée. Accordez la permission <code class="font-mono">mail.self.connect</code> aux utilisateurs concernés dans <strong>Gestion des accès → Cotations</strong>.
+        </p>
+      }
+    </section>
+  }
 </main>

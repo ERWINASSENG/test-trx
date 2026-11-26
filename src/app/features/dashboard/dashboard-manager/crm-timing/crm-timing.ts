@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -10,6 +11,8 @@ import {
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
+  QuoteEventItem,
+  QuoteEventType,
   QuoteTimingFilter,
   QuoteTimingItem,
   QuoteTimingKpis,
@@ -40,7 +43,7 @@ export interface CalendarDayCell {
     '(document:keydown.escape)': 'onEscape()',
   },
 })
-export class CrmTimingComponent implements OnInit {
+export class CrmTimingComponent implements OnInit, OnDestroy {
   private readonly quoteService = inject(QuoteService);
   private readonly accessControl = inject(AccessControlService);
   private readonly elementRef = inject(ElementRef);
@@ -66,6 +69,9 @@ export class CrmTimingComponent implements OnInit {
 
   // Modale chronologique de détails
   public readonly activeTimelineQuote = signal<QuoteTimingItem | null>(null);
+  public readonly timelineEvents = signal<QuoteEventItem[]>([]);
+  public readonly isTimelineEventsLoading = signal<boolean>(false);
+  public readonly isRealtimeActive = signal<boolean>(false);
 
   // Date de référence pour le calendrier (mois courant par défaut)
   public readonly calendarMonth = signal<Date>(new Date());
@@ -81,6 +87,8 @@ export class CrmTimingComponent implements OnInit {
       slaCompliancePercent: 0,
       inProgressCount: 0,
       overdueCount: 0,
+      unopenedCount: 0,
+      blockedCount: 0,
       totalAmount: 0,
       totalAmountFormatted: '0 XAF',
       conversionRateFormatted: '0%',
@@ -199,6 +207,10 @@ export class CrmTimingComponent implements OnInit {
         matchesSla = q.isOverdue || q.isSlaBreach;
       } else if (sla === 'compliant') {
         matchesSla = !q.isSlaBreach;
+      } else if (sla === 'unopened') {
+        matchesSla = Boolean(q.isUnopened);
+      } else if (sla === 'blocked') {
+        matchesSla = Boolean(q.isBlocked);
       }
 
       return matchesSearch && matchesRep && matchesSla;
@@ -207,6 +219,23 @@ export class CrmTimingComponent implements OnInit {
 
   public ngOnInit(): void {
     void this.loadData();
+    if (typeof this.quoteService.subscribeToTimingRealtime === 'function') {
+      this.quoteService.subscribeToTimingRealtime(() => {
+        void this.loadData();
+        const active = this.activeTimelineQuote();
+        if (active) {
+          void this.loadQuoteTimelineEvents(active.id);
+        }
+      });
+      this.isRealtimeActive.set(true);
+    }
+  }
+
+  public ngOnDestroy(): void {
+    if (typeof this.quoteService.unsubscribeFromTimingRealtime === 'function') {
+      this.quoteService.unsubscribeFromTimingRealtime();
+    }
+    this.isRealtimeActive.set(false);
   }
 
   public async loadData(): Promise<void> {
@@ -274,7 +303,7 @@ export class CrmTimingComponent implements OnInit {
     this.currentSubTab.set(tab);
   }
 
-  public filterBySla(status: 'all' | 'overdue' | 'compliant'): void {
+  public filterBySla(status: 'all' | 'overdue' | 'compliant' | 'unopened' | 'blocked'): void {
     this.selectedSlaFilter.set(status);
     this.currentSubTab.set('quotes');
   }
@@ -293,10 +322,57 @@ export class CrmTimingComponent implements OnInit {
 
   public openTimelineModal(quote: QuoteTimingItem): void {
     this.activeTimelineQuote.set(quote);
+    void this.loadQuoteTimelineEvents(quote.id);
   }
 
   public closeTimelineModal(): void {
     this.activeTimelineQuote.set(null);
+    this.timelineEvents.set([]);
+  }
+
+  private async loadQuoteTimelineEvents(quoteId: string): Promise<void> {
+    if (typeof this.quoteService.loadQuoteEvents !== 'function') return;
+    this.isTimelineEventsLoading.set(true);
+    try {
+      const result = await this.quoteService.loadQuoteEvents(quoteId);
+      if (this.activeTimelineQuote()?.id !== quoteId) return;
+      this.timelineEvents.set(result.success && result.data ? result.data : []);
+    } finally {
+      this.isTimelineEventsLoading.set(false);
+    }
+  }
+
+  public eventLabel(eventType: QuoteEventType): string {
+    const labels: Record<QuoteEventType, string> = {
+      created: 'Cotation créée',
+      email_received: 'Demande reçue par mail (Outlook)',
+      assigned: 'Attribuée à un commercial',
+      email_seen_in_outlook: 'Mail ouvert dans Outlook',
+      opened_by_rep: 'Ouverte par le commercial (plateforme)',
+      status_changed: 'Statut mis à jour',
+      blocked: 'Blocage signalé',
+      unblocked: 'Blocage levé',
+      sent_to_client: 'Envoyée au client',
+      client_replied: 'Réponse client enregistrée',
+    };
+    return labels[eventType] || eventType;
+  }
+
+  public eventMetadataSummary(event: QuoteEventItem): string {
+    const meta = event.metadata || {};
+    if (event.eventType === 'blocked') {
+      const cat = typeof meta['categoryLabel'] === 'string' ? meta['categoryLabel'] : '';
+      const reason = typeof meta['reason'] === 'string' ? meta['reason'] : '';
+      return [cat, reason].filter(Boolean).join(' — ');
+    }
+    if (event.eventType === 'unblocked' && typeof meta['note'] === 'string') {
+      return meta['note'];
+    }
+    if (event.eventType === 'status_changed' || event.eventType === 'client_replied') {
+      const to = typeof meta['to'] === 'string' ? meta['to'] : '';
+      return to ? `Nouveau statut : ${to}` : '';
+    }
+    return '';
   }
 
   // --- Gestion des clics extérieurs ---

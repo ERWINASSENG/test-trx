@@ -299,15 +299,39 @@
   <!-- ======================================================================= -->
   @if (currentSubTab() === 'quotes') {
     <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
+      <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-medium text-slate-700 dark:text-slate-300">
             Cotations et délais de traitement
           </span>
+          @if (isRealtimeActive()) {
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Temps réel
+            </span>
+          }
+          <button
+            type="button"
+            id="crm-filter-unopened"
+            (click)="filterBySla(selectedSlaFilter() === 'unopened' ? 'all' : 'unopened')"
+            [ngClass]="selectedSlaFilter() === 'unopened'
+              ? 'inline-flex items-center gap-1 rounded-full bg-amber-600 px-2.5 py-0.5 text-[11px] font-semibold text-white'
+              : 'inline-flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100'">
+            Non ouvertes ({{ kpis().unopenedCount ?? 0 }})
+          </button>
+          <button
+            type="button"
+            id="crm-filter-blocked"
+            (click)="filterBySla(selectedSlaFilter() === 'blocked' ? 'all' : 'blocked')"
+            [ngClass]="selectedSlaFilter() === 'blocked'
+              ? 'inline-flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-[11px] font-semibold text-white'
+              : 'inline-flex items-center gap-1 rounded-full border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 text-[11px] font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100'">
+            Bloquées ({{ kpis().blockedCount ?? 0 }})
+          </button>
           @if (selectedSlaFilter() === 'overdue') {
             <span class="text-xs text-rose-600 dark:text-rose-400 font-medium">
               (Filtre : Retards SLA &gt; 48h)
-              <button (click)="selectedSlaFilter.set('all')" class="ml-1 hover:underline text-xs">✕ Réinitialiser</button>
+              <button type="button" (click)="selectedSlaFilter.set('all')" class="ml-1 hover:underline text-xs">✕ Réinitialiser</button>
             </span>
           }
         </div>
@@ -348,9 +372,30 @@
                   {{ quote.amountFormatted }}
                 </td>
                 <td class="p-4 text-center">
-                  <span class="inline-flex items-center rounded-md border border-slate-200 dark:border-slate-800 px-2 py-0.5 text-xs text-slate-700 dark:text-slate-300">
-                    {{ quote.status }}
-                  </span>
+                  <div class="flex flex-col items-center gap-1">
+                    <span class="inline-flex items-center rounded-md border border-slate-200 dark:border-slate-800 px-2 py-0.5 text-xs text-slate-700 dark:text-slate-300">
+                      {{ quote.status }}
+                    </span>
+                    @if (quote.isBlocked) {
+                      <span
+                        class="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-950/60 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300"
+                        [title]="(quote.blockedCategoryLabel || 'Bloquée') + (quote.blockedReason ? ' — ' + quote.blockedReason : '')">
+                        Bloquée
+                      </span>
+                    } @else if (quote.isUnopenedAlert) {
+                      <span class="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-950/60 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300">
+                        Non ouverte (&gt;30m)
+                      </span>
+                    } @else if (quote.isUnopened) {
+                      <span class="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-950/50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
+                        Non ouverte
+                      </span>
+                    } @else if (quote.firstOpenedAt || quote.outlookReadAt) {
+                      <span class="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                        Ouverte
+                      </span>
+                    }
+                  </div>
                 </td>
                 <td class="p-4">
                   <span
@@ -593,6 +638,62 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Alerte de blocage actif -->
+      @if (modalQuote.isBlocked) {
+        <div class="rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs space-y-1">
+          <div class="font-semibold text-rose-800 dark:text-rose-300">
+            Blocage actif — {{ modalQuote.blockedCategoryLabel || 'Blocage signalé' }}
+          </div>
+          @if (modalQuote.blockedReason) {
+            <div class="text-rose-700 dark:text-rose-200">{{ modalQuote.blockedReason }}</div>
+          }
+          <div class="text-[10px] font-mono text-rose-500">Signalé le {{ modalQuote.blockedAtFormatted }}</div>
+        </div>
+      }
+
+      <!-- Suivi d'ouverture (Outlook & Plateforme) -->
+      <div class="grid grid-cols-2 gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-3 text-xs">
+        <div>
+          <div class="text-slate-400 text-[11px]">Lecture mail (Outlook)</div>
+          <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5">
+            {{ modalQuote.outlookReadAtFormatted || 'Non lu' }}
+          </div>
+        </div>
+        <div>
+          <div class="text-slate-400 text-[11px]">1re ouverture plateforme</div>
+          <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5">
+            {{ modalQuote.firstOpenedAtFormatted || 'Non ouverte' }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Journal détaillé des événements (temps réel) -->
+      <div class="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3 text-xs">
+        <div class="font-semibold text-slate-700 dark:text-slate-200">
+          Parcours détaillé en temps réel
+        </div>
+        @if (isTimelineEventsLoading()) {
+          <div class="text-[11px] text-slate-400">Chargement de l'historique…</div>
+        } @else if (timelineEvents().length > 0) {
+          <div class="max-h-48 overflow-y-auto space-y-2 pr-1">
+            @for (ev of timelineEvents(); track ev.id) {
+              <div class="flex items-start justify-between gap-2 rounded-lg border border-slate-100 dark:border-slate-800 px-3 py-2">
+                <div class="space-y-0.5">
+                  <div class="font-medium text-slate-900 dark:text-white">{{ eventLabel(ev.eventType) }}</div>
+                  @if (eventMetadataSummary(ev)) {
+                    <div class="text-[11px] text-slate-600 dark:text-slate-300">{{ eventMetadataSummary(ev) }}</div>
+                  }
+                  <div class="text-[10px] text-slate-400">Par {{ ev.actorName || 'Système' }}</div>
+                </div>
+                <div class="shrink-0 font-mono text-[10px] text-slate-500">{{ ev.createdAtFormatted }}</div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="text-[11px] text-slate-400">Aucun événement détaillé supplémentaire enregistré.</div>
+        }
       </div>
 
       <!-- Pied de modale -->

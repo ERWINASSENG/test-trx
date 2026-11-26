@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
-import { SlicePipe } from '@angular/common';
+import { DatePipe, SlicePipe } from '@angular/common';
 import { ROLE_DEFINITIONS, UserProfile } from '../../core/models/auth.model';
+import { AccessControlService } from '../../core/services/access-control.service';
 import { AuthService } from '../../core/services/auth.service';
+import { MailAccountService } from '../../core/services/mail-account.service';
 import { UserService } from '../../core/services/user.service';
 
 /**
@@ -33,20 +35,47 @@ export function strongPasswordValidator(): ValidatorFn {
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, SlicePipe],
+  imports: [ReactiveFormsModule, SlicePipe, DatePipe],
   templateUrl: './profile.html',
   styleUrl: './profile.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class Profile {
+export class Profile implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly userService = inject(UserService);
+  private readonly accessControl = inject(AccessControlService, { optional: true });
+  private readonly mailAccountService = inject(MailAccountService, { optional: true });
 
   public readonly currentUser = this.authService.currentUser;
   public readonly isSavedSuccess = signal<boolean>(false);
   public readonly isPasswordSuccess = signal<boolean>(false);
   public readonly profileError = signal<string | null>(null);
   public readonly passwordError = signal<string | null>(null);
+
+  // Connecteur Boîte Mail Outlook (Cotations) en libre-service
+  public readonly canConnectMail = computed(() =>
+    Boolean(this.accessControl?.hasPermission('mail.self.connect'))
+  );
+  public readonly myMailAccount = computed(() => this.mailAccountService?.myAccount() ?? null);
+  public readonly mailConfiguredOnServer = computed(() =>
+    Boolean(this.mailAccountService?.configuredOnServer())
+  );
+  public readonly isConnectingMail = signal<boolean>(false);
+  public readonly isSyncingMail = signal<boolean>(false);
+  public readonly isDisconnectingMail = signal<boolean>(false);
+  public readonly mailFeedback = signal<string | null>(null);
+  public readonly mailError = signal<string | null>(null);
+
+  public readonly mailForm = new FormGroup({
+    email: new FormControl<string>(this.currentUser()?.email || '', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.email],
+    }),
+    password: new FormControl<string>('', {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+  });
 
   // Formulaire d'informations personnelles
   public readonly profileForm = new FormGroup({
@@ -165,5 +194,82 @@ export class Profile {
     this.isPasswordSuccess.set(true);
     this.passwordForm.reset();
     setTimeout(() => this.isPasswordSuccess.set(false), 15000);
+  }
+
+  public ngOnInit(): void {
+    if (this.canConnectMail() && this.mailAccountService) {
+      void this.loadMyMailStatus();
+    }
+  }
+
+  public async loadMyMailStatus(): Promise<void> {
+    if (!this.mailAccountService) return;
+    const res = await this.mailAccountService.loadMyMailAccount();
+    if (res.success && res.data?.account?.emailAddress) {
+      this.mailForm.controls.email.setValue(res.data.account.emailAddress);
+    }
+  }
+
+  public async onConnectMail(): Promise<void> {
+    if (!this.canConnectMail() || !this.mailAccountService) return;
+    if (this.mailForm.invalid) {
+      this.mailForm.markAllAsTouched();
+      return;
+    }
+
+    const { email, password } = this.mailForm.getRawValue();
+    this.isConnectingMail.set(true);
+    this.mailError.set(null);
+    this.mailFeedback.set(null);
+
+    try {
+      const res = await this.mailAccountService.connectMyMailAccount(email.trim(), password);
+      // S2 : purge immédiate du mot de passe en mémoire formulaire
+      this.mailForm.controls.password.reset('');
+      if (!res.success) {
+        this.mailError.set(res.error || 'Impossible de connecter votre boîte mail.');
+        return;
+      }
+      this.mailFeedback.set('Boîte mail connectée avec succès. La synchronisation automatique est active.');
+    } finally {
+      this.isConnectingMail.set(false);
+    }
+  }
+
+  public async onSyncMail(): Promise<void> {
+    if (!this.canConnectMail() || !this.mailAccountService || this.isSyncingMail()) return;
+    this.isSyncingMail.set(true);
+    this.mailError.set(null);
+    this.mailFeedback.set(null);
+    try {
+      const res = await this.mailAccountService.syncMyMailAccount();
+      if (!res.success || !res.data) {
+        this.mailError.set(res.error || 'Échec de la synchronisation de votre boîte mail.');
+        return;
+      }
+      this.mailFeedback.set(
+        `Synchronisation terminée : ${res.data.ingestedCount} nouvelle(s) demande(s) de cotation importée(s).`
+      );
+    } finally {
+      this.isSyncingMail.set(false);
+    }
+  }
+
+  public async onDisconnectMail(): Promise<void> {
+    if (!this.canConnectMail() || !this.mailAccountService || this.isDisconnectingMail()) return;
+    this.isDisconnectingMail.set(true);
+    this.mailError.set(null);
+    this.mailFeedback.set(null);
+    try {
+      const res = await this.mailAccountService.disconnectMyMailAccount();
+      if (!res.success) {
+        this.mailError.set(res.error || 'Impossible de déconnecter votre boîte mail.');
+        return;
+      }
+      this.mailForm.controls.password.reset('');
+      this.mailFeedback.set('Votre boîte mail a été déconnectée.');
+    } finally {
+      this.isDisconnectingMail.set(false);
+    }
   }
 }

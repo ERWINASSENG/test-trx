@@ -61,7 +61,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     label: 'Cotations',
     description: 'Création et suivi des offres et devis commerciaux',
     icon: '/assets/module-icons/quotes.svg',
-    matches: (p) => ['quotes', 'module.quotes'].includes(p.resourceKey) || p.permissionKey.startsWith('quotes.') || p.permissionKey === 'module.quotes.view',
+    matches: (p) => ['quotes', 'module.quotes', 'mail.self'].includes(p.resourceKey) || p.permissionKey.startsWith('quotes.') || p.permissionKey.startsWith('mail.') || p.permissionKey === 'module.quotes.view',
   },
   {
     id: 'crm',

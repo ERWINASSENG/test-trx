@@ -1,9 +1,13 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   QuoteAssignee,
+  QuoteBlockCategory,
   QuoteColumn,
   QuoteContact,
+  QuoteEventItem,
   QuoteRow,
+  QuoteSourceChannel,
   QuoteStatus,
   QuoteTemplate,
   QuoteTimingAnalyticsResponse,
@@ -13,6 +17,7 @@ import {
 } from '../models/quote.model';
 import { Prospect } from '../models/prospect.model';
 import { AuthService } from './auth.service';
+import { SupabaseService } from './supabase.service';
 import { getApiErrorMessage } from '../utils/api-error.util';
 
 export interface QuoteInput {
@@ -40,7 +45,10 @@ export interface QuoteApiResult<T> {
 export class QuoteService {
   private static readonly GET_CACHE_TTL_MS = 30_000;
   private readonly authService = inject(AuthService);
+  private readonly supabaseService = inject(SupabaseService, { optional: true });
   private dataUserId: string | null | undefined;
+  private timingRealtimeChannel: RealtimeChannel | null = null;
+  private realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly getCache = new Map<string, { cachedAt: number; data: unknown }>();
   private readonly _quotes = signal<SalesQuote[]>([]);
   private readonly _prospects = signal<Prospect[]>([]);
@@ -285,6 +293,99 @@ export class QuoteService {
     return this.mutate(`/api/quotes/templates/${encodeURIComponent(id)}`, 'DELETE');
   }
 
+  public async markQuoteOpened(
+    id: string
+  ): Promise<QuoteApiResult<{ opened: boolean; firstOpenedAt: string | null }>> {
+    const result = await this.mutate<{ opened: boolean; firstOpenedAt: string | null }>(
+      `/api/quotes/${encodeURIComponent(id)}/open`,
+      'POST',
+      {}
+    );
+    if (result.success && result.data?.firstOpenedAt) {
+      const openedAt = result.data.firstOpenedAt;
+      this._quotes.update((list) =>
+        list.map((q) => (q.id === id && !q.firstOpenedAt ? { ...q, firstOpenedAt: openedAt } : q))
+      );
+    }
+    return result;
+  }
+
+  public async blockQuote(
+    id: string,
+    category: QuoteBlockCategory,
+    reason: string
+  ): Promise<QuoteApiResult<SalesQuote>> {
+    const result = await this.mutate<{ quote: Record<string, unknown> }>(
+      `/api/quotes/${encodeURIComponent(id)}/block`,
+      'POST',
+      { category, reason }
+    );
+    if (result.success && result.data?.quote) {
+      const mapped = this.mapQuote(result.data.quote);
+      this._quotes.update((list) => list.map((q) => (q.id === id ? { ...q, ...mapped } : q)));
+      return { success: true, data: mapped };
+    }
+    return { success: false, error: result.error };
+  }
+
+  public async unblockQuote(id: string, note?: string): Promise<QuoteApiResult<SalesQuote>> {
+    const result = await this.mutate<{ quote: Record<string, unknown> }>(
+      `/api/quotes/${encodeURIComponent(id)}/unblock`,
+      'POST',
+      note ? { note } : {}
+    );
+    if (result.success && result.data?.quote) {
+      const mapped = this.mapQuote(result.data.quote);
+      this._quotes.update((list) => list.map((q) => (q.id === id ? { ...q, ...mapped } : q)));
+      return { success: true, data: mapped };
+    }
+    return { success: false, error: result.error };
+  }
+
+  public async loadQuoteEvents(id: string): Promise<QuoteApiResult<QuoteEventItem[]>> {
+    const result = await this.request<{ events: QuoteEventItem[] }>(
+      `/api/quotes/${encodeURIComponent(id)}/events`,
+      'GET'
+    );
+    if (result.success && Array.isArray(result.data?.events)) {
+      return { success: true, data: result.data.events };
+    }
+    return { success: false, error: result.error };
+  }
+
+  public subscribeToTimingRealtime(onUpdate: () => void): void {
+    this.unsubscribeFromTimingRealtime();
+    const client = this.supabaseService?.supabase;
+    const userId = this.authService.currentUser()?.id;
+    if (!client || !userId) return;
+
+    const triggerDebounced = () => {
+      if (this.realtimeRefreshTimer) clearTimeout(this.realtimeRefreshTimer);
+      this.realtimeRefreshTimer = setTimeout(() => {
+        this.getCache.clear();
+        onUpdate();
+      }, 400);
+    };
+
+    this.timingRealtimeChannel = client
+      .channel(`quotes-timing-live-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_quotes' }, triggerDebounced)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales_quote_events' }, triggerDebounced)
+      .subscribe();
+  }
+
+  public unsubscribeFromTimingRealtime(): void {
+    if (this.realtimeRefreshTimer) {
+      clearTimeout(this.realtimeRefreshTimer);
+      this.realtimeRefreshTimer = null;
+    }
+    const client = this.supabaseService?.supabase;
+    if (this.timingRealtimeChannel && client) {
+      void client.removeChannel(this.timingRealtimeChannel);
+    }
+    this.timingRealtimeChannel = null;
+  }
+
   private async mutate<T>(path: string, method: string, body?: unknown): Promise<QuoteApiResult<T>> {
     return this.request<T>(path, method, body);
   }
@@ -293,12 +394,15 @@ export class QuoteService {
     const userId = this.authService.currentUser()?.id ?? null;
     if (this.dataUserId === userId) return;
 
+    this.unsubscribeFromTimingRealtime();
     this.dataUserId = userId;
     this._quotes.set([]);
     this._prospects.set([]);
     this._contacts.set([]);
     this._assignees.set([]);
     this._templates.set([]);
+    this._timingAnalytics.set(null);
+    this._timingError.set(null);
     this._error.set(null);
     this.getCache.clear();
   }
@@ -417,6 +521,24 @@ export class QuoteService {
         : typeof row['sent_at'] === 'string' ? row['sent_at'] : null,
       respondedAt: typeof row['respondedAt'] === 'string' ? row['respondedAt']
         : typeof row['responded_at'] === 'string' ? row['responded_at'] : null,
+      assignedAt: typeof row['assignedAt'] === 'string' ? row['assignedAt']
+        : typeof row['assigned_at'] === 'string' ? row['assigned_at'] : null,
+      sourceChannel: (row['sourceChannel'] === 'outlook_imap' || row['source_channel'] === 'outlook_imap'
+        ? 'outlook_imap'
+        : 'manual') as QuoteSourceChannel,
+      outlookReadAt: typeof row['outlookReadAt'] === 'string' ? row['outlookReadAt']
+        : typeof row['outlook_read_at'] === 'string' ? row['outlook_read_at'] : null,
+      firstOpenedAt: typeof row['firstOpenedAt'] === 'string' ? row['firstOpenedAt']
+        : typeof row['first_opened_at'] === 'string' ? row['first_opened_at'] : null,
+      blockedAt: typeof row['blockedAt'] === 'string' ? row['blockedAt']
+        : typeof row['blocked_at'] === 'string' ? row['blocked_at'] : null,
+      blockedCategory: typeof row['blockedCategory'] === 'string'
+        ? row['blockedCategory'] as QuoteBlockCategory
+        : typeof row['blocked_category'] === 'string'
+          ? row['blocked_category'] as QuoteBlockCategory
+          : null,
+      blockedReason: typeof row['blockedReason'] === 'string' ? row['blockedReason']
+        : typeof row['blocked_reason'] === 'string' ? row['blocked_reason'] : null,
       createdAt: String(row['createdAt'] ?? row['created_at'] ?? ''),
       updatedAt: String(row['updatedAt'] ?? row['updated_at'] ?? ''),
     };

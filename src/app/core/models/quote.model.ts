@@ -4,6 +4,51 @@ export type QuoteColumnType = typeof QUOTE_COLUMN_TYPES[number];
 export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired'] as const;
 export type QuoteStatus = typeof QUOTE_STATUSES[number];
 
+export const QUOTE_SOURCE_CHANNELS = ['manual', 'outlook_imap'] as const;
+export type QuoteSourceChannel = typeof QUOTE_SOURCE_CHANNELS[number];
+
+export const QUOTE_BLOCK_CATEGORIES = [
+  'waiting_carrier',
+  'missing_client_info',
+  'pricing_approval',
+  'technical_issue',
+  'other',
+] as const;
+export type QuoteBlockCategory = typeof QUOTE_BLOCK_CATEGORIES[number];
+
+export const QUOTE_BLOCK_CATEGORY_LABELS: Readonly<Record<QuoteBlockCategory, string>> = {
+  waiting_carrier: 'Attente tarif compagnie / partenaire',
+  missing_client_info: 'Informations client manquantes',
+  pricing_approval: 'Validation prix / direction requise',
+  technical_issue: 'Difficulté technique / dossier',
+  other: 'Autre blocage',
+};
+
+export const QUOTE_EVENT_TYPES = [
+  'created',
+  'email_received',
+  'assigned',
+  'email_seen_in_outlook',
+  'opened_by_rep',
+  'status_changed',
+  'blocked',
+  'unblocked',
+  'sent_to_client',
+  'client_replied',
+] as const;
+export type QuoteEventType = typeof QUOTE_EVENT_TYPES[number];
+
+export interface QuoteEventItem {
+  id: string;
+  quoteId: string;
+  eventType: QuoteEventType;
+  actorUserId: string | null;
+  actorName: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  createdAtFormatted: string;
+}
+
 export interface QuoteColumn {
   id: string;
   label: string;
@@ -90,6 +135,12 @@ export interface SalesQuote {
   sentAt?: string | null;
   respondedAt?: string | null;
   assignedAt?: string | null;
+  sourceChannel?: QuoteSourceChannel;
+  outlookReadAt?: string | null;
+  firstOpenedAt?: string | null;
+  blockedAt?: string | null;
+  blockedCategory?: QuoteBlockCategory | null;
+  blockedReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +192,19 @@ export interface QuoteTimingItem {
   assignedAtFormatted?: string;
   sentAtFormatted: string;
   respondedAtFormatted: string;
+  sourceChannel?: QuoteSourceChannel;
+  outlookReadAt?: string | null;
+  outlookReadAtFormatted?: string;
+  firstOpenedAt?: string | null;
+  firstOpenedAtFormatted?: string;
+  isUnopened?: boolean;
+  isUnopenedAlert?: boolean;
+  isBlocked?: boolean;
+  blockedAtFormatted?: string;
+  blockedCategory?: QuoteBlockCategory | null;
+  blockedCategoryLabel?: string | null;
+  blockedReason?: string | null;
+  eventsCount?: number;
 }
 
 export interface SalesRepPerformance {
@@ -161,6 +225,8 @@ export interface QuoteTimingKpis {
   slaCompliancePercent: number;
   inProgressCount: number;
   overdueCount: number;
+  unopenedCount?: number;
+  blockedCount?: number;
   totalAmount: number;
   totalAmountFormatted: string;
   conversionRateFormatted: string;

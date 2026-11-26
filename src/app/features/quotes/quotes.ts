@@ -14,8 +14,11 @@ import { AuthService } from '../../core/services/auth.service';
 import { ExportService } from '../../core/services/export.service';
 import { QuoteInput, QuoteService } from '../../core/services/quote.service';
 import {
+  QUOTE_BLOCK_CATEGORIES,
+  QUOTE_BLOCK_CATEGORY_LABELS,
   QUOTE_COLUMN_TYPES,
   QUOTE_STATUSES,
+  QuoteBlockCategory,
   QuoteCellValue,
   QuoteColumn,
   QuoteColumnType,
@@ -90,7 +93,15 @@ export class QuotesComponent {
 
   public readonly statuses = QUOTE_STATUSES;
   public readonly columnTypes = QUOTE_COLUMN_TYPES;
+  public readonly blockCategories = QUOTE_BLOCK_CATEGORIES;
+  public readonly blockCategoryLabels = QUOTE_BLOCK_CATEGORY_LABELS;
   public readonly pageSize = 12;
+
+  public readonly isBlockModalOpen = signal(false);
+  public readonly blockTargetQuote = signal<SalesQuote | null>(null);
+  public readonly blockCategory = signal<QuoteBlockCategory>('waiting_carrier');
+  public readonly blockReason = signal('');
+  public readonly isBlockingSaving = signal(false);
 
   public readonly view = signal<'list' | 'kanban'>('list');
   public readonly quoteSearch = signal('');
@@ -712,6 +723,77 @@ export class QuotesComponent {
     this.showNewProspect.set(false);
     this.error.set(null);
     this.isEditorOpen.set(true);
+
+    // Enregistre automatiquement la 1re ouverture par le commercial assigné
+    if (quote.assignedTo && quote.assignedTo === this.currentUserId() && !quote.firstOpenedAt) {
+      void this.quoteService.markQuoteOpened(quote.id);
+    }
+  }
+
+  public readonly editingQuote = computed<SalesQuote | null>(() => {
+    const id = this.editingId();
+    if (!id) return null;
+    return this.quoteService.quotes().find((q) => q.id === id) ?? null;
+  });
+
+  public blockCategoryLabel(category: QuoteBlockCategory | null | undefined): string {
+    return category ? this.blockCategoryLabels[category] : 'Blocage';
+  }
+
+  public openBlockModal(quote: SalesQuote): void {
+    if (!this.canUpdate()) return;
+    this.blockTargetQuote.set(quote);
+    this.blockCategory.set(quote.blockedCategory ?? 'waiting_carrier');
+    this.blockReason.set(quote.blockedReason ?? '');
+    this.error.set(null);
+    this.isBlockModalOpen.set(true);
+  }
+
+  public closeBlockModal(): void {
+    if (this.isBlockingSaving()) return;
+    this.isBlockModalOpen.set(false);
+    this.blockTargetQuote.set(null);
+  }
+
+  public async submitBlockQuote(): Promise<void> {
+    const target = this.blockTargetQuote();
+    const reason = this.blockReason().trim();
+    if (!target || !this.canUpdate()) return;
+    if (reason.length < 3 || reason.length > 500) {
+      this.error.set('Le motif du blocage doit contenir entre 3 et 500 caractères.');
+      return;
+    }
+
+    this.isBlockingSaving.set(true);
+    this.error.set(null);
+    try {
+      const result = await this.quoteService.blockQuote(target.id, this.blockCategory(), reason);
+      if (!result.success) {
+        this.error.set(result.error || 'Impossible de signaler le blocage.');
+        return;
+      }
+      this.isBlockModalOpen.set(false);
+      this.blockTargetQuote.set(null);
+      this.feedback.set(`Blocage signalé sur ${target.quoteNumber}. Le manager a été alerté.`);
+    } finally {
+      this.isBlockingSaving.set(false);
+    }
+  }
+
+  public async unblockQuoteAction(quote: SalesQuote): Promise<void> {
+    if (!this.canUpdate() || this.isBlockingSaving()) return;
+    this.isBlockingSaving.set(true);
+    this.error.set(null);
+    try {
+      const result = await this.quoteService.unblockQuote(quote.id);
+      if (!result.success) {
+        this.error.set(result.error || 'Impossible de lever le blocage.');
+        return;
+      }
+      this.feedback.set(`Blocage levé sur ${quote.quoteNumber}.`);
+    } finally {
+      this.isBlockingSaving.set(false);
+    }
   }
 
   public closeEditor(): void {

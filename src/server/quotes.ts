@@ -1,9 +1,13 @@
 import express from 'express';
 import {
+  QUOTE_BLOCK_CATEGORIES,
+  QUOTE_BLOCK_CATEGORY_LABELS,
   QUOTE_COLUMN_TYPES,
   QUOTE_STATUSES,
+  QuoteBlockCategory,
   QuoteColumn,
   QuoteColumnType,
+  QuoteEventType,
   QuoteRow,
   QuoteStatus,
   SeaFreightDetails,
@@ -528,9 +532,43 @@ const toQuoteResponse = (row: Record<string, unknown>, prospectName = 'Client su
   sentAt: row['sent_at'] ?? null,
   respondedAt: row['responded_at'] ?? null,
   assignedAt: row['assigned_at'] ?? null,
+  sourceChannel: row['source_channel'] === 'outlook_imap' ? 'outlook_imap' : 'manual',
+  outlookReadAt: row['outlook_read_at'] ?? null,
+  firstOpenedAt: row['first_opened_at'] ?? null,
+  blockedAt: row['blocked_at'] ?? null,
+  blockedCategory: row['blocked_category'] ?? null,
+  blockedReason: row['blocked_reason'] ?? null,
   createdAt: row['created_at'],
   updatedAt: row['updated_at'],
 });
+
+const formatQuoteDateTimeFr = (dateInput: string | number | Date | null | undefined): string => {
+  if (!dateInput) return '—';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '—';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+export const recordQuoteEvent = async (
+  adminClient: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  params: {
+    quoteId: string;
+    eventType: QuoteEventType;
+    actorUserId?: string | null;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<void> => {
+  const { error } = await adminClient.from('sales_quote_events').insert({
+    quote_id: params.quoteId,
+    event_type: params.eventType,
+    actor_user_id: params.actorUserId ?? null,
+    metadata: params.metadata ?? {},
+  });
+  if (error) {
+    console.error('[QUOTES] Échec enregistrement événement:', error.message);
+  }
+};
 
 export const expireDueQuotes = async (
   adminClient: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
@@ -918,7 +956,19 @@ export const createQuoteHandler = async (req: express.Request, res: express.Resp
     return;
   }
   await auditQuote(req, actor, { action: 'CREATE_QUOTE', entityId: String(data.id), details: { quote_number: data.quote_number } });
+  await recordQuoteEvent(adminClient, {
+    quoteId: String(data.id),
+    eventType: 'created',
+    actorUserId: actor.id,
+    metadata: { quoteNumber: String(data.quote_number), status: String(data.status || 'draft') },
+  });
   if (typeof data.assigned_to === 'string') {
+    await recordQuoteEvent(adminClient, {
+      quoteId: String(data.id),
+      eventType: 'assigned',
+      actorUserId: actor.id,
+      metadata: { assignedTo: data.assigned_to },
+    });
     await createAppNotification(adminClient, {
       recipientId: data.assigned_to,
       actorId: actor.id,
@@ -1076,6 +1126,12 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
   }
   await auditQuote(req, actor, { action: 'UPDATE_QUOTE', entityId: id, details: { status: data.status } });
   if (typeof data.assigned_to === 'string' && data.assigned_to !== current.assigned_to) {
+    await recordQuoteEvent(adminClient, {
+      quoteId: id,
+      eventType: 'assigned',
+      actorUserId: actor.id,
+      metadata: { previousAssignee: current.assigned_to ?? null, assignedTo: data.assigned_to },
+    });
     await createAppNotification(adminClient, {
       recipientId: data.assigned_to,
       actorId: actor.id,
@@ -1086,6 +1142,21 @@ export const updateQuoteHandler = async (req: express.Request, res: express.Resp
       sourceType: 'quote',
       sourceId: id,
       dedupeKey: `quote:${id}:assigned:${data.assigned_to}:${data.updated_at}`,
+    });
+  }
+  if (data.status !== current.status) {
+    const nextStatus = String(data.status || '');
+    const eventType: QuoteEventType =
+      nextStatus === 'sent'
+        ? 'sent_to_client'
+        : nextStatus === 'accepted' || nextStatus === 'rejected'
+          ? 'client_replied'
+          : 'status_changed';
+    await recordQuoteEvent(adminClient, {
+      quoteId: id,
+      eventType,
+      actorUserId: actor.id,
+      metadata: { from: current.status, to: nextStatus },
     });
   }
   res.json({ quote: toQuoteResponse(data) });
@@ -1339,8 +1410,24 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
   let slaCompliantCount = 0;
   let inProgressCount = 0;
   let overdueCount = 0;
+  let unopenedCount = 0;
+  let blockedCount = 0;
   let totalAmount = 0;
   let acceptedCount = 0;
+
+  const UNOPENED_ALERT_THRESHOLD_MINUTES = 30;
+  const quoteIds = (quoteRows || []).map((q) => String(q.id)).filter(Boolean);
+  const eventsCountMap = new Map<string, number>();
+  if (quoteIds.length > 0) {
+    const { data: eventRows } = await adminClient
+      .from('sales_quote_events')
+      .select('quote_id')
+      .in('quote_id', quoteIds);
+    for (const ev of eventRows || []) {
+      const qid = String(ev.quote_id);
+      eventsCountMap.set(qid, (eventsCountMap.get(qid) || 0) + 1);
+    }
+  }
 
   const repStats = new Map<string, {
     repId: string;
@@ -1383,6 +1470,18 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
 
     const isSlaBreach = commercialMinutes > 1440; // > 24h
     const isOverdue = (status === 'draft' && commercialMinutes > 2880) || (status === 'draft' && isSlaBreach);
+    const firstOpenedAt = typeof row.first_opened_at === 'string' ? row.first_opened_at : null;
+    const outlookReadAt = typeof row.outlook_read_at === 'string' ? row.outlook_read_at : null;
+    const blockedAt = typeof row.blocked_at === 'string' ? row.blocked_at : null;
+    const blockedCategory = typeof row.blocked_category === 'string'
+      ? (row.blocked_category as QuoteBlockCategory)
+      : null;
+    const blockedReason = typeof row.blocked_reason === 'string' ? row.blocked_reason : null;
+    const isBlocked = Boolean(blockedAt);
+    const isUnopened = status === 'draft' && repId !== 'unassigned' && !firstOpenedAt && !outlookReadAt;
+    const referenceAssignedMs = assignedAt ?? createdAt;
+    const minutesSinceAssigned = Math.max(0, Math.round((Date.now() - referenceAssignedMs) / 60000));
+    const isUnopenedAlert = isUnopened && minutesSinceAssigned >= UNOPENED_ALERT_THRESHOLD_MINUTES;
 
     totalCommercialDelayMin += commercialMinutes;
     delayCount++;
@@ -1391,6 +1490,8 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
     if (!isSlaBreach) slaCompliantCount++;
     if (status === 'draft') inProgressCount++;
     if (isOverdue) overdueCount++;
+    if (isUnopened) unopenedCount++;
+    if (isBlocked) blockedCount++;
     if (status === 'accepted') acceptedCount++;
 
     if (repId !== 'unassigned') {
@@ -1432,6 +1533,19 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
       assignedAtFormatted: assignedAt ? formatDateTimeFr(assignedAt) : (row.assigned_to ? formatDateTimeFr(row.created_at) : 'Non assigné'),
       sentAtFormatted: sentAt ? formatDateTimeFr(sentAt) : (status === 'sent' ? 'Envoyé' : 'En cours'),
       respondedAtFormatted: respondedAt ? formatDateTimeFr(respondedAt) : '—',
+      sourceChannel: row.source_channel === 'outlook_imap' ? 'outlook_imap' : 'manual',
+      outlookReadAt,
+      outlookReadAtFormatted: outlookReadAt ? formatDateTimeFr(outlookReadAt) : 'Non lu',
+      firstOpenedAt,
+      firstOpenedAtFormatted: firstOpenedAt ? formatDateTimeFr(firstOpenedAt) : 'Non ouverte',
+      isUnopened,
+      isUnopenedAlert,
+      isBlocked,
+      blockedAtFormatted: blockedAt ? formatDateTimeFr(blockedAt) : '—',
+      blockedCategory,
+      blockedCategoryLabel: blockedCategory ? QUOTE_BLOCK_CATEGORY_LABELS[blockedCategory] : null,
+      blockedReason,
+      eventsCount: eventsCountMap.get(String(row.id)) || 0,
     };
   });
 
@@ -1459,6 +1573,8 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
       slaCompliancePercent: slaComplianceRate,
       inProgressCount,
       overdueCount,
+      unopenedCount,
+      blockedCount,
       totalAmount,
       totalAmountFormatted: new Intl.NumberFormat('fr-FR').format(totalAmount) + ' XAF',
       conversionRateFormatted: `${conversionRate}%`,
@@ -1467,5 +1583,306 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
     quotes: formattedQuotes,
     reps: repsArray,
     totalCount: totalQuotes,
+  });
+};
+
+export const markQuoteOpenedHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  const id = typeof req.params['id'] === 'string' ? req.params['id'] : '';
+  if (!adminClient) return;
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!UUID_PATTERN.test(id)) {
+    res.status(400).json({ error: 'Identifiant de cotation invalide.' });
+    return;
+  }
+
+  const { data: quote, error: fetchError } = await adminClient
+    .from('sales_quotes')
+    .select('id, assigned_to, created_by, first_opened_at, quote_number')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchError) {
+    sendQuoteDatabaseError(res, fetchError);
+    return;
+  }
+
+  const canManageAll = await actorCanManageAllQuotes(actor.id);
+  const isOwnerOrAssignee = quote && (quote.assigned_to === actor.id || quote.created_by === actor.id);
+  if (!quote || (!canManageAll && !isOwnerOrAssignee)) {
+    res.status(404).json({ error: 'Cotation introuvable.' });
+    return;
+  }
+
+  // Anti-falsification : seul le commercial assigné déclenche first_opened_at (idempotent)
+  if (quote.assigned_to === actor.id && !quote.first_opened_at) {
+    const nowIso = new Date().toISOString();
+    const { error: updateError } = await adminClient
+      .from('sales_quotes')
+      .update({ first_opened_at: nowIso, updated_at: nowIso })
+      .eq('id', id)
+      .is('first_opened_at', null);
+
+    if (updateError) {
+      sendQuoteDatabaseError(res, updateError);
+      return;
+    }
+
+    await recordQuoteEvent(adminClient, {
+      quoteId: id,
+      eventType: 'opened_by_rep',
+      actorUserId: actor.id,
+      metadata: { quoteNumber: String(quote.quote_number) },
+    });
+
+    res.json({ opened: true, firstOpenedAt: nowIso });
+    return;
+  }
+
+  res.json({ opened: Boolean(quote.first_opened_at), firstOpenedAt: quote.first_opened_at ?? null });
+};
+
+export const blockQuoteHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  const id = typeof req.params['id'] === 'string' ? req.params['id'] : '';
+  if (!adminClient) return;
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!UUID_PATTERN.test(id)) {
+    res.status(400).json({ error: 'Identifiant de cotation invalide.' });
+    return;
+  }
+
+  const rawCategory = req.body?.['category'];
+  const rawReason = req.body?.['reason'];
+  if (typeof rawCategory !== 'string' || !(QUOTE_BLOCK_CATEGORIES as readonly string[]).includes(rawCategory)) {
+    res.status(400).json({ error: 'Catégorie de blocage invalide.' });
+    return;
+  }
+  if (typeof rawReason !== 'string' || rawReason.trim().length < 3 || rawReason.trim().length > 500) {
+    res.status(400).json({ error: 'Le motif du blocage doit contenir entre 3 et 500 caractères.' });
+    return;
+  }
+
+  const category = rawCategory as QuoteBlockCategory;
+  const reason = rawReason.trim();
+
+  const { data: quote, error: fetchError } = await adminClient
+    .from('sales_quotes')
+    .select('id, assigned_to, created_by, quote_number, title')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchError) {
+    sendQuoteDatabaseError(res, fetchError);
+    return;
+  }
+
+  const canManageAll = await actorCanManageAllQuotes(actor.id);
+  const isOwnerOrAssignee = quote && (quote.assigned_to === actor.id || quote.created_by === actor.id);
+  if (!quote || (!canManageAll && !isOwnerOrAssignee)) {
+    res.status(404).json({ error: 'Cotation introuvable.' });
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: updated, error: updateError } = await adminClient
+    .from('sales_quotes')
+    .update({
+      blocked_at: nowIso,
+      blocked_category: category,
+      blocked_reason: reason,
+      updated_at: nowIso,
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (updateError || !updated) {
+    sendQuoteDatabaseError(res, updateError || { message: 'block quote returned no row' });
+    return;
+  }
+
+  await recordQuoteEvent(adminClient, {
+    quoteId: id,
+    eventType: 'blocked',
+    actorUserId: actor.id,
+    metadata: {
+      category,
+      categoryLabel: QUOTE_BLOCK_CATEGORY_LABELS[category],
+      reason,
+    },
+  });
+
+  // Notification prioritaire aux managers et administrateurs actifs
+  const { data: supervisors } = await adminClient
+    .from('profiles')
+    .select('id')
+    .in('role', ['manager', 'admin'])
+    .eq('is_active', true)
+    .neq('id', actor.id)
+    .limit(20);
+
+  for (const supervisor of supervisors || []) {
+    await createAppNotification(adminClient, {
+      recipientId: String(supervisor.id),
+      actorId: actor.id,
+      notificationType: 'quote_blocked',
+      title: `Cotation bloquée : ${String(quote.quote_number)}`,
+      message: `${QUOTE_BLOCK_CATEGORY_LABELS[category]} — ${reason.slice(0, 140)}`,
+      href: '/dashboard/crm',
+      sourceType: 'quote',
+      sourceId: id,
+      dedupeKey: `quote:${id}:blocked:${nowIso}:${supervisor.id}`,
+    });
+  }
+
+  res.json({ quote: toQuoteResponse(updated) });
+};
+
+export const unblockQuoteHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  const id = typeof req.params['id'] === 'string' ? req.params['id'] : '';
+  if (!adminClient) return;
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!UUID_PATTERN.test(id)) {
+    res.status(400).json({ error: 'Identifiant de cotation invalide.' });
+    return;
+  }
+
+  const rawNote = req.body?.['note'];
+  if (rawNote !== undefined && rawNote !== null && (typeof rawNote !== 'string' || rawNote.trim().length > 500)) {
+    res.status(400).json({ error: 'La note de résolution ne doit pas dépasser 500 caractères.' });
+    return;
+  }
+  const note = typeof rawNote === 'string' ? rawNote.trim() : '';
+
+  const { data: quote, error: fetchError } = await adminClient
+    .from('sales_quotes')
+    .select('id, assigned_to, created_by, quote_number')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchError) {
+    sendQuoteDatabaseError(res, fetchError);
+    return;
+  }
+
+  const canManageAll = await actorCanManageAllQuotes(actor.id);
+  const isOwnerOrAssignee = quote && (quote.assigned_to === actor.id || quote.created_by === actor.id);
+  if (!quote || (!canManageAll && !isOwnerOrAssignee)) {
+    res.status(404).json({ error: 'Cotation introuvable.' });
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: updated, error: updateError } = await adminClient
+    .from('sales_quotes')
+    .update({
+      blocked_at: null,
+      blocked_category: null,
+      blocked_reason: null,
+      updated_at: nowIso,
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (updateError || !updated) {
+    sendQuoteDatabaseError(res, updateError || { message: 'unblock quote returned no row' });
+    return;
+  }
+
+  await recordQuoteEvent(adminClient, {
+    quoteId: id,
+    eventType: 'unblocked',
+    actorUserId: actor.id,
+    metadata: note ? { note } : {},
+  });
+
+  res.json({ quote: toQuoteResponse(updated) });
+};
+
+export const listQuoteEventsHandler = async (req: express.Request, res: express.Response): Promise<void> => {
+  const adminClient = getAdminClient(res);
+  const actor = getActor(req);
+  const id = typeof req.params['id'] === 'string' ? req.params['id'] : '';
+  if (!adminClient) return;
+  if (!actor?.id) {
+    res.status(401).json({ error: 'Utilisateur non authentifié.' });
+    return;
+  }
+  if (!UUID_PATTERN.test(id)) {
+    res.status(400).json({ error: 'Identifiant de cotation invalide.' });
+    return;
+  }
+
+  const { data: quote, error: fetchError } = await adminClient
+    .from('sales_quotes')
+    .select('id, assigned_to, created_by')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchError) {
+    sendQuoteDatabaseError(res, fetchError);
+    return;
+  }
+
+  const [canManageAll, hasTiming] = await Promise.all([
+    actorCanManageAllQuotes(actor.id),
+    hasPermission(actor.id, 'quotes.timing.read', undefined),
+  ]);
+  const isOwnerOrAssignee = quote && (quote.assigned_to === actor.id || quote.created_by === actor.id);
+  if (!quote || (!canManageAll && !hasTiming && !isOwnerOrAssignee)) {
+    res.status(404).json({ error: 'Cotation introuvable.' });
+    return;
+  }
+
+  const { data: eventRows, error: eventsError } = await adminClient
+    .from('sales_quote_events')
+    .select('id, quote_id, event_type, actor_user_id, metadata, created_at')
+    .eq('quote_id', id)
+    .order('created_at', { ascending: true })
+    .limit(100);
+
+  if (eventsError) {
+    sendQuoteDatabaseError(res, eventsError);
+    return;
+  }
+
+  const actorIds = [...new Set((eventRows || []).map((e) => e.actor_user_id).filter((v): v is string => typeof v === 'string'))];
+  const { data: actorProfiles } = actorIds.length > 0
+    ? await adminClient.from('profiles').select('id, first_name, last_name, email').in('id', actorIds)
+    : { data: [] };
+
+  const actorNameMap = new Map(
+    (actorProfiles || []).map((p) => [
+      String(p.id),
+      `${p.first_name || ''} ${p.last_name || ''}`.trim() || String(p.email || 'Utilisateur'),
+    ])
+  );
+
+  res.json({
+    events: (eventRows || []).map((ev) => ({
+      id: String(ev.id),
+      quoteId: String(ev.quote_id),
+      eventType: String(ev.event_type),
+      actorUserId: typeof ev.actor_user_id === 'string' ? ev.actor_user_id : null,
+      actorName: typeof ev.actor_user_id === 'string' ? (actorNameMap.get(ev.actor_user_id) || 'Utilisateur') : 'Système',
+      metadata: isRecord(ev.metadata) ? ev.metadata : {},
+      createdAt: String(ev.created_at),
+      createdAtFormatted: formatQuoteDateTimeFr(ev.created_at),
+    })),
   });
 };
