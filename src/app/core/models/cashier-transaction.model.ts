@@ -40,9 +40,17 @@ export interface CashierTransaction {
   updatedAt?: string; // Date de modification ISO
 }
 
+export type CashierCategoryFilter = 'all' | 'entree' | 'sortie';
+export type CashierStatusFilter = 'all' | TransactionStatus;
+export type CashierServiceFilter = 'all' | Service;
+export type CashierPeriodFilter = 'all' | 'today' | 'month' | 'year';
+
 export interface CashierFilterState {
   searchQuery: string;
-  categoryFilter: 'all' | 'entree' | 'sortie';
+  categoryFilter: CashierCategoryFilter;
+  statusFilter?: CashierStatusFilter;
+  serviceFilter?: CashierServiceFilter;
+  periodFilter?: CashierPeriodFilter;
   pageIndex: number;
   pageSize: number;
 }

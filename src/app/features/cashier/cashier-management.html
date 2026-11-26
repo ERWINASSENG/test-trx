@@ -123,16 +123,240 @@
             </div>
           </div>
         } @else {
-          <div class="flex w-full items-center rounded border border-slate-300 bg-white px-2.5 py-1 text-xs transition focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]">
-            <mat-icon aria-hidden="true" class="mr-2 !h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
-            <input
-              type="search"
-              [formControl]="searchControl"
-              placeholder="Rechercher…"
-              aria-label="Rechercher dans les opérations de caisse"
-              class="min-w-[60px] flex-grow bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
-              id="cashier-control-search"
-              name="search" />
+          <div class="relative flex w-full min-w-[280px] items-center sm:min-w-[520px] lg:min-w-[640px]" id="cashier-filter-dropdown-container">
+            <div class="flex w-full flex-wrap items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-0.5 text-xs transition focus-within:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:focus-within:border-[#7cb3ff]">
+              <mat-icon aria-hidden="true" class="!h-4 !w-4 !text-[15px] shrink-0 text-slate-400">search</mat-icon>
+
+              @if (categoryFilterLabel(); as catLabel) {
+                <span class="inline-flex items-center gap-1 rounded bg-[#0b5ed7]/10 px-2 py-0.5 text-[11px] font-semibold text-[#0b5ed7] dark:bg-[#7cb3ff]/15 dark:text-[#a6ccff]">
+                  <span>{{ catLabel }}</span>
+                  <button
+                    type="button"
+                    (click)="onCategoryFilterChange('all')"
+                    class="flex items-center justify-center rounded-full p-0.5 hover:bg-[#0b5ed7]/20 dark:hover:bg-[#7cb3ff]/25"
+                    aria-label="Retirer le filtre de catégorie">
+                    <mat-icon class="!h-3 !w-3 !text-[12px] leading-none">close</mat-icon>
+                  </button>
+                </span>
+              }
+
+              @if (statusFilterLabel(); as stLabel) {
+                <span class="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300">
+                  <span>{{ stLabel }}</span>
+                  <button
+                    type="button"
+                    (click)="onStatusFilterChange('all')"
+                    class="flex items-center justify-center rounded-full p-0.5 hover:bg-emerald-500/20"
+                    aria-label="Retirer le filtre de statut">
+                    <mat-icon class="!h-3 !w-3 !text-[12px] leading-none">close</mat-icon>
+                  </button>
+                </span>
+              }
+
+              @if (filterState().serviceFilter && filterState().serviceFilter !== 'all') {
+                <span class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-400/15 dark:text-amber-300">
+                  <span>{{ filterState().serviceFilter }}</span>
+                  <button
+                    type="button"
+                    (click)="onServiceFilterChange('all')"
+                    class="flex items-center justify-center rounded-full p-0.5 hover:bg-amber-500/20"
+                    aria-label="Retirer le filtre de service">
+                    <mat-icon class="!h-3 !w-3 !text-[12px] leading-none">close</mat-icon>
+                  </button>
+                </span>
+              }
+
+              @if (periodFilterLabel(); as perLabel) {
+                <span class="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:bg-purple-400/15 dark:text-purple-300">
+                  <span>{{ perLabel }}</span>
+                  <button
+                    type="button"
+                    (click)="onPeriodFilterChange('all')"
+                    class="flex items-center justify-center rounded-full p-0.5 hover:bg-purple-500/20"
+                    aria-label="Retirer le filtre de période">
+                    <mat-icon class="!h-3 !w-3 !text-[12px] leading-none">close</mat-icon>
+                  </button>
+                </span>
+              }
+
+              <input
+                type="search"
+                [formControl]="searchControl"
+                maxlength="100"
+                placeholder="Rechercher par pièce, libellé, dossier, partenaire…"
+                aria-label="Rechercher dans les opérations de caisse"
+                class="h-6 w-full min-w-[220px] flex-1 bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 sm:min-w-[360px] lg:min-w-[440px] dark:text-white"
+                id="cashier-control-search"
+                name="search" />
+
+              @if (filterState().searchQuery) {
+                <button
+                  type="button"
+                  (click)="clearSearchQuery()"
+                  class="flex items-center justify-center rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+                  aria-label="Effacer la recherche"
+                  title="Effacer la recherche"
+                  id="cashier-clear-search-btn">
+                  <mat-icon class="!h-3.5 !w-3.5 !text-[14px] leading-none">close</mat-icon>
+                </button>
+              }
+
+              <button
+                type="button"
+                (click)="toggleFilterDropdown($event)"
+                [attr.aria-expanded]="isFilterDropdownOpen()"
+                aria-haspopup="menu"
+                aria-label="Ouvrir les filtres de caisse"
+                title="Filtrer les opérations"
+                class="ml-1 inline-flex items-center gap-1 border-l border-slate-200 pl-2 text-xs font-medium text-slate-600 transition hover:text-[#0b5ed7] dark:border-white/10 dark:text-slate-300 dark:hover:text-[#8cc2ff]"
+                id="cashier-filter-dropdown-btn">
+                @if (activeFiltersCount() > 0) {
+                  <span class="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#0b5ed7] px-1 text-[10px] font-bold text-white dark:bg-[#2563eb]">
+                    {{ activeFiltersCount() }}
+                  </span>
+                }
+                <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">arrow_drop_down</mat-icon>
+              </button>
+            </div>
+
+            @if (isFilterDropdownOpen()) {
+              <div
+                class="absolute right-0 top-full z-50 mt-1.5 w-80 rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-700 shadow-2xl dark:border-white/10 dark:bg-[#212529] dark:text-slate-200"
+                role="menu"
+                aria-label="Filtres des opérations de caisse"
+                id="cashier-filter-dropdown-menu">
+                <div class="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5 dark:border-white/10">
+                  <span class="inline-flex items-center font-bold text-slate-800 dark:text-white">
+                    Filtres avancés
+                  </span>
+                  @if (activeFiltersCount() > 0 || filterState().searchQuery) {
+                    <button
+                      type="button"
+                      (click)="resetAllFilters()"
+                      class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:underline dark:text-rose-400"
+                      id="cashier-filter-reset-btn">
+                      <mat-icon class="!h-3.5 !w-3.5 !text-[13px]">restart_alt</mat-icon>
+                      Réinitialiser
+                    </button>
+                  }
+                </div>
+
+                <!-- Filtre par Type de flux (Catégorie) -->
+                <div class="mb-2">
+                  <span class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Type de flux</span>
+                  <div class="grid grid-cols-3 gap-1">
+                    <button
+                      type="button"
+                      (click)="onCategoryFilterChange('all')"
+                      [class]="filterState().categoryFilter === 'all' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-cat-all">
+                      Tous
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onCategoryFilterChange('entree')"
+                      [class]="filterState().categoryFilter === 'entree' ? 'rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-cat-entree">
+                      Entrées (+)
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onCategoryFilterChange('sortie')"
+                      [class]="filterState().categoryFilter === 'sortie' ? 'rounded bg-rose-600 px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-cat-sortie">
+                      Sorties (-)
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Filtre par Statut -->
+                <div class="mb-2">
+                  <span class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Statut comptable</span>
+                  <div class="grid grid-cols-2 gap-1">
+                    <button
+                      type="button"
+                      (click)="onStatusFilterChange('all')"
+                      [class]="(filterState().statusFilter || 'all') === 'all' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-status-all">
+                      Tous
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onStatusFilterChange('draft')"
+                      [class]="filterState().statusFilter === 'draft' ? 'rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-status-draft">
+                      Brouillon
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onStatusFilterChange('posted')"
+                      [class]="filterState().statusFilter === 'posted' ? 'rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-status-posted">
+                      Comptabilisé
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onStatusFilterChange('cancelled')"
+                      [class]="filterState().statusFilter === 'cancelled' ? 'rounded bg-rose-600 px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-status-cancelled">
+                      Annulé
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Filtre par Service -->
+                <div class="mb-2">
+                  <label for="cashier-filter-service-select" class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Service analytique
+                  </label>
+                  <select
+                    id="cashier-filter-service-select"
+                    [value]="filterState().serviceFilter || 'all'"
+                    (change)="onServiceFilterChange($any($event.target).value)"
+                    class="w-full rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-800 outline-none focus:border-[#0b5ed7] dark:border-white/10 dark:bg-[#0d1f3a] dark:text-white">
+                    <option value="all">Tous les services</option>
+                    @for (srv of cashierServices; track srv) {
+                      <option [value]="srv">{{ srv }}</option>
+                    }
+                  </select>
+                </div>
+
+                <!-- Filtre par Période -->
+                <div>
+                  <span class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Période</span>
+                  <div class="grid grid-cols-2 gap-1">
+                    <button
+                      type="button"
+                      (click)="onPeriodFilterChange('all')"
+                      [class]="(filterState().periodFilter || 'all') === 'all' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-period-all">
+                      Toutes les dates
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onPeriodFilterChange('today')"
+                      [class]="filterState().periodFilter === 'today' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-period-today">
+                      Aujourd’hui
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onPeriodFilterChange('month')"
+                      [class]="filterState().periodFilter === 'month' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-period-month">
+                      Ce mois
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onPeriodFilterChange('year')"
+                      [class]="filterState().periodFilter === 'year' ? 'rounded bg-[#0b5ed7] px-2 py-1 text-[11px] font-semibold text-white' : 'rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'"
+                      id="cashier-filter-period-year">
+                      Cette année
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
           </div>
         }
       </div>

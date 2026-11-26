@@ -1,7 +1,11 @@
 import { Injectable, computed, inject, signal, effect, PLATFORM_ID, OnDestroy } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import {
+  CashierCategoryFilter,
   CashierFilterState,
+  CashierPeriodFilter,
+  CashierServiceFilter,
+  CashierStatusFilter,
   CashierTransaction,
   DailyCashierReport,
 } from '../models/cashier-transaction.model';
@@ -121,6 +125,7 @@ export class CashierService implements OnDestroy {
         this._transactions.set([]);
         this._serverSummary.set(null);
         this._error.set(null);
+        this.resetFilters();
         this.cleanupRealtimeSubscription();
       }
       if (user && this.isBrowser) {
@@ -150,6 +155,9 @@ export class CashierService implements OnDestroy {
   private readonly _filterState = signal<CashierFilterState>({
     searchQuery: '',
     categoryFilter: 'all',
+    statusFilter: 'all',
+    serviceFilter: 'all',
+    periodFilter: 'all',
     pageIndex: 0,
     pageSize: 80,
   });
@@ -413,10 +421,14 @@ export class CashierService implements OnDestroy {
   public readonly error = computed(() => this._error());
   public readonly allTransactions = computed(() => this._transactions());
 
-  // Transactions filtrées par mot-clé et type, puis triées de manière déterministe
+  // Transactions filtrées par mot-clé, catégorie, statut, service et période, puis triées de manière déterministe
   public readonly filteredTransactions = computed(() => {
-    const query = this._filterState().searchQuery.trim().toLowerCase();
-    const category = this._filterState().categoryFilter;
+    const state = this._filterState();
+    const query = (state.searchQuery || '').trim().slice(0, 100).toLowerCase();
+    const category = state.categoryFilter || 'all';
+    const status = state.statusFilter || 'all';
+    const service = state.serviceFilter || 'all';
+    const period = state.periodFilter || 'all';
     const field = this.sortField();
     const direction = this.sortDirection();
     const list = this.journalTransactions();
@@ -426,9 +438,20 @@ export class CashierService implements OnDestroy {
         category === 'all' || tx.category === category;
       if (!matchesCategory) return false;
 
+      const txStatus = tx.status || 'draft';
+      const matchesStatus =
+        status === 'all' || txStatus === status;
+      if (!matchesStatus) return false;
+
+      const matchesService =
+        service === 'all' || (tx.service || '').toUpperCase() === service.toUpperCase();
+      if (!matchesService) return false;
+
+      if (!this.matchesPeriodFilter(tx.date, period)) return false;
+
       if (!query) return true;
 
-      const searchableText = `${tx.libelle} ${tx.pieceComptable || ''} ${tx.service || ''} ${tx.typeDescription || ''} ${tx.firstName || ''} ${tx.employee || ''} ${tx.partenaire || ''} ${tx.noDossier || ''}`.toLowerCase();
+      const searchableText = `${tx.libelle} ${tx.pieceComptable || ''} ${tx.service || ''} ${tx.typeDescription || ''} ${tx.firstName || ''} ${tx.employee || ''} ${tx.partenaire || ''} ${tx.noDossier || ''} ${tx.date || ''} ${tx.montant ?? ''}`.toLowerCase();
       return searchableText.includes(query);
     });
 
@@ -513,6 +536,17 @@ export class CashierService implements OnDestroy {
 
   // État du filtre actuel en lecture seule
   public readonly filterState = computed(() => this._filterState());
+
+  // Nombre de filtres rapides actifs (hors barre de recherche)
+  public readonly activeFiltersCount = computed(() => {
+    const state = this._filterState();
+    let count = 0;
+    if (state.categoryFilter && state.categoryFilter !== 'all') count++;
+    if (state.statusFilter && state.statusFilter !== 'all') count++;
+    if (state.serviceFilter && state.serviceFilter !== 'all') count++;
+    if (state.periodFilter && state.periodFilter !== 'all') count++;
+    return count;
+  });
 
   // Indique si toutes les transactions affichées sont sélectionnées
   public readonly isAllSelected = computed(() => {
@@ -2166,19 +2200,103 @@ export class CashierService implements OnDestroy {
   }
 
   public setSearchQuery(query: string): void {
+    const safeQuery = (query ?? '').slice(0, 100);
     this._filterState.update((state) => ({
       ...state,
-      searchQuery: query,
+      searchQuery: safeQuery,
       pageIndex: 0,
     }));
   }
 
-  public setCategoryFilter(category: 'all' | 'entree' | 'sortie'): void {
+  public setCategoryFilter(category: CashierCategoryFilter): void {
     this._filterState.update((state) => ({
       ...state,
       categoryFilter: category,
       pageIndex: 0,
     }));
+  }
+
+  public setStatusFilter(status: CashierStatusFilter): void {
+    this._filterState.update((state) => ({
+      ...state,
+      statusFilter: status,
+      pageIndex: 0,
+    }));
+  }
+
+  public setServiceFilter(service: CashierServiceFilter): void {
+    this._filterState.update((state) => ({
+      ...state,
+      serviceFilter: service,
+      pageIndex: 0,
+    }));
+  }
+
+  public setPeriodFilter(period: CashierPeriodFilter): void {
+    this._filterState.update((state) => ({
+      ...state,
+      periodFilter: period,
+      pageIndex: 0,
+    }));
+  }
+
+  public resetFilters(): void {
+    this._filterState.update((state) => ({
+      ...state,
+      searchQuery: '',
+      categoryFilter: 'all',
+      statusFilter: 'all',
+      serviceFilter: 'all',
+      periodFilter: 'all',
+      pageIndex: 0,
+    }));
+  }
+
+  private matchesPeriodFilter(dateStr: string | undefined, period: CashierPeriodFilter): boolean {
+    if (!period || period === 'all') return true;
+    if (!dateStr) return false;
+
+    let day = 0;
+    let month = 0;
+    let year = 0;
+
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        day = Number(parts[0]);
+        month = Number(parts[1]);
+        year = Number(parts[2]);
+      }
+    } else if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      year = Number(dateStr.slice(0, 4));
+      month = Number(dateStr.slice(5, 7));
+      day = Number(dateStr.slice(8, 10));
+    } else {
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        year = parsed.getFullYear();
+        month = parsed.getMonth() + 1;
+        day = parsed.getDate();
+      }
+    }
+
+    if (!year || !month || !day) return false;
+
+    const now = new Date();
+    const nowYear = now.getFullYear();
+    const nowMonth = now.getMonth() + 1;
+    const nowDay = now.getDate();
+
+    if (period === 'today') {
+      return year === nowYear && month === nowMonth && day === nowDay;
+    }
+    if (period === 'month') {
+      return year === nowYear && month === nowMonth;
+    }
+    if (period === 'year') {
+      return year === nowYear;
+    }
+    return true;
   }
 
   public setPageIndex(index: number): void {

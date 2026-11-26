@@ -41,6 +41,10 @@ import { JournalService } from '../../core/services/journal.service';
 import { DossierService } from '../../core/services/dossier.service';
 import {
   CASHIER_SERVICES,
+  CashierCategoryFilter,
+  CashierPeriodFilter,
+  CashierServiceFilter,
+  CashierStatusFilter,
   CashierTransaction,
   Service,
   TransactionStatus,
@@ -80,7 +84,7 @@ export interface CaisseTimelineData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:click)': 'onDocumentClick($event)',
-    '(document:keydown.escape)': 'closeActionsMenu()',
+    '(document:keydown.escape)': 'closeAllMenus()',
     '(document:touchstart)': 'onDocumentTouchStart($event)',
     '(document:touchmove)': 'onDocumentTouchMove($event)',
     '(document:touchend)': 'onDocumentTouchEnd($event)',
@@ -256,11 +260,35 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
   public readonly currentBalance = this.cashierService.currentBalance;
   public readonly totalCount = this.cashierService.totalCount;
   public readonly filterState = this.cashierService.filterState;
+  public readonly activeFiltersCount = this.cashierService.activeFiltersCount;
   public readonly isAllSelected = this.cashierService.isAllSelected;
   public readonly isLoading = this.cashierService.isLoading;
   public readonly error = this.cashierService.error;
   public readonly sortField = this.cashierService.sortField;
   public readonly sortDirection = this.cashierService.sortDirection;
+
+  public readonly categoryFilterLabel = computed<string | null>(() => {
+    const cat = this.filterState().categoryFilter;
+    if (cat === 'entree') return 'Entrées (+)';
+    if (cat === 'sortie') return 'Sorties (-)';
+    return null;
+  });
+
+  public readonly statusFilterLabel = computed<string | null>(() => {
+    const st = this.filterState().statusFilter;
+    if (st === 'draft') return 'Brouillon';
+    if (st === 'posted') return 'Comptabilisé';
+    if (st === 'cancelled') return 'Annulé';
+    return null;
+  });
+
+  public readonly periodFilterLabel = computed<string | null>(() => {
+    const p = this.filterState().periodFilter;
+    if (p === 'today') return 'Aujourd’hui';
+    if (p === 'month') return 'Ce mois';
+    if (p === 'year') return 'Cette année';
+    return null;
+  });
 
   /**
    * Bascule le tri sur un champ donné
@@ -731,11 +759,57 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
   public toggleActionsMenu(event?: Event): void {
     event?.stopPropagation();
+    this.isFilterDropdownOpen.set(false);
     this.isActionsMenuOpen.update((open) => !open);
   }
 
   public closeActionsMenu(): void {
     this.isActionsMenuOpen.set(false);
+  }
+
+  public toggleFilterDropdown(event?: Event): void {
+    event?.stopPropagation();
+    this.isActionsMenuOpen.set(false);
+    this.isFilterDropdownOpen.update((open) => !open);
+  }
+
+  public closeFilterDropdown(): void {
+    this.isFilterDropdownOpen.set(false);
+  }
+
+  public closeAllMenus(): void {
+    this.isActionsMenuOpen.set(false);
+    this.isFilterDropdownOpen.set(false);
+  }
+
+  public onCategoryFilterChange(category: CashierCategoryFilter): void {
+    const current = this.filterState().categoryFilter;
+    this.cashierService.setCategoryFilter(current === category && category !== 'all' ? 'all' : category);
+  }
+
+  public onStatusFilterChange(status: CashierStatusFilter): void {
+    const current = this.filterState().statusFilter || 'all';
+    this.cashierService.setStatusFilter(current === status && status !== 'all' ? 'all' : status);
+  }
+
+  public onServiceFilterChange(service: CashierServiceFilter): void {
+    this.cashierService.setServiceFilter(service);
+  }
+
+  public onPeriodFilterChange(period: CashierPeriodFilter): void {
+    const current = this.filterState().periodFilter || 'all';
+    this.cashierService.setPeriodFilter(current === period && period !== 'all' ? 'all' : period);
+  }
+
+  public clearSearchQuery(): void {
+    this.searchControl.setValue('', { emitEvent: false });
+    this.cashierService.setSearchQuery('');
+  }
+
+  public resetAllFilters(): void {
+    this.searchControl.setValue('', { emitEvent: false });
+    this.cashierService.resetFilters();
+    this.closeFilterDropdown();
   }
 
   public onExportAction(): void {
@@ -1148,6 +1222,9 @@ export class CashierManagement implements OnInit, AfterViewInit, OnDestroy {
 
     if (target.closest('#cashier-actions-dropdown-container')) return;
     this.closeActionsMenu();
+
+    if (target.closest('#cashier-filter-dropdown-container')) return;
+    this.closeFilterDropdown();
 
     // Ignorer si l'élément n'est plus dans le DOM ou fait partie d'un composant flottant (popover, datepicker, dropdown)
     if (

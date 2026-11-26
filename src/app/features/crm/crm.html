@@ -79,7 +79,7 @@
               (cdkDropListDropped)="onOpportunityDrop($event)"
               [attr.aria-label]="column.label + ', ' + column.opportunities.length + ' opportunités'">              @for (opportunity of column.opportunities; track opportunity.id) {
                 <article
-                  class="opportunity-card interactive-card rounded-xl border border-slate-200 bg-white text-slate-950 shadow-xs dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 transition-[border-color,box-shadow] hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 p-3.5 space-y-2.5"
+                  class="opportunity-card interactive-card rounded-lg border border-slate-200 bg-white text-slate-950 shadow-xs dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50 transition-[border-color,box-shadow] hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700"
                   cdkDrag
                   [cdkDragData]="opportunity"
                   [cdkDragDisabled]="opportunity.stage === 'won' || !canUpdate()"
@@ -90,12 +90,12 @@
                   [attr.aria-label]="'Modifier l’opportunité ' + opportunity.title">
                   
                   <!-- CardHeader : Badges & Titres (Shadcn UI) -->
-                  <div class="card-header space-y-1.5">
-                    <div class="card-topline flex items-center justify-between gap-2">
-                      <div class="card-badges flex flex-wrap gap-1.5">
-                        <span class="tag-badge mode inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors">{{ modeLabel(opportunity.transportMode) }}</span>
+                  <div class="card-header">
+                    <div class="card-topline flex items-center justify-between gap-1.5">
+                      <div class="card-badges flex flex-wrap gap-1">
+                        <span class="tag-badge mode inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition-colors">{{ modeLabel(opportunity.transportMode) }}</span>
                         @if (opportunity.direction) {
-                          <span class="tag-badge direction inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-colors">{{ directionLabel(opportunity.direction) }}</span>
+                          <span class="tag-badge direction inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition-colors">{{ directionLabel(opportunity.direction) }}</span>
                         }
                       </div>
                     </div>
@@ -104,7 +104,7 @@
                   </div>
 
                   <!-- CardContent : Itinéraire trade lane, Échéance & Montant -->
-                  <div class="card-content space-y-2.5 pt-1">
+                  <div class="card-content">
                     @if (opportunity.origin || opportunity.destination) {
                       <div class="trade-lane-route">
                         <mat-icon aria-hidden="true">route</mat-icon>
@@ -119,7 +119,7 @@
                       </div>
                     }
 
-                    <div class="card-meta flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <div class="card-meta flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
                       <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                         @if (opportunity.expectedCloseDate) {
                           <span class="meta-item">{{ opportunity.expectedCloseDate | date:'dd/MM/yyyy' }}</span>
@@ -136,12 +136,11 @@
                     </div>
 
                     @if (opportunity.quoteNumber || opportunity.dossierNumber || (opportunity.stage === 'won' && canCreate())) {
-                      <div class="card-links pt-1 flex flex-wrap items-center gap-2">
+                      <div class="card-links flex flex-wrap items-center gap-1.5">
                         @if (opportunity.quoteNumber) {
-                          <a class="linked-record inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-2 py-0.5 text-xs font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-slate-100" [routerLink]="['/quotes']"
+                          <a class="linked-record inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-1.5 py-0.5 text-xs font-semibold text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-slate-100" [routerLink]="['/quotes']"
                             [queryParams]="{ quoteId: opportunity.quoteId }"
                             (click)="$event.stopPropagation()">
-                            
                             {{ opportunity.quoteNumber }}
                           </a>
                           @if (opportunity.quoteStatus) {
@@ -149,15 +148,13 @@
                           }
                         }
                         @if (opportunity.dossierNumber) {
-                          <a class="linked-record inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100" [routerLink]="['/dossiers']"
+                          <a class="linked-record inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 px-1.5 py-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100" [routerLink]="['/dossiers']"
                             [queryParams]="{ dossierId: opportunity.dossierId }"
                             (click)="$event.stopPropagation()">
-                            
                             {{ opportunity.dossierNumber }}
                           </a>
                         } @else if (opportunity.stage === 'won' && canCreate()) {
-                          <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors" (click)="openDossierDialog(opportunity); $event.stopPropagation()">
-                            
+                          <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-0.5 transition-colors" (click)="openDossierDialog(opportunity); $event.stopPropagation()">
                             Créer le dossier
                           </button>
                         }
@@ -166,24 +163,24 @@
                   </div>
 
                   <!-- CardFooter : Actions contextuelles Shadcn UI Button (Cotation, Relance, Rappel, Valider accord) -->
-                  <footer class="card-actions flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60 mt-1">
+                  <footer class="card-actions flex items-center justify-end gap-1 pt-1 border-t border-slate-100 dark:border-slate-800/60">
                     @if (!opportunity.quoteNumber && opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
-                      <a class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }" (click)="$event.stopPropagation()">
+                      <a class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-0.5 transition-colors" [routerLink]="['/quotes']" [queryParams]="{ prospectId: opportunity.prospectId, opportunityId: opportunity.id }" (click)="$event.stopPropagation()">
                         Cotation
                       </a>
                     }
                     @if (opportunity.quoteNumber && (opportunity.stage === 'quote_sent' || opportunity.stage === 'negotiation') && canCreate()) {
-                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
+                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-medium text-[#0b5ed7] dark:text-[#8cc2ff] hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-0.5 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
                         Relance
                       </button>
                     }
                     @if (canCreate() && opportunity.stage !== 'won' && opportunity.stage !== 'lost') {
-                      <button type="button" class="action-button icon-text-action inline-flex items-center justify-center rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 px-2.5 py-1 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
+                      <button type="button" class="action-button icon-text-action inline-flex items-center justify-center rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-0.5 transition-colors cursor-pointer" (click)="openActivityDialog(opportunity); $event.stopPropagation()">
                         Rappel
                       </button>
                     }
                     @if (opportunity.stage === 'negotiation' && canUpdate()) {
-                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2.5 py-1 transition-colors cursor-pointer" (click)="openWinDialog(opportunity); $event.stopPropagation()">
+                      <button type="button" class="action-button text-link inline-flex items-center justify-center rounded-md text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2 py-0.5 transition-colors cursor-pointer" (click)="openWinDialog(opportunity); $event.stopPropagation()">
                         Valider accord
                       </button>
                     }

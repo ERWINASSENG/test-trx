@@ -845,4 +845,109 @@ describe('CashierService - Architecture Hybride & Signals', () => {
       expect(service.allTransactions()[0].selected).toBe(false);
     });
   });
+
+  describe('Filtrage multicritère & recherche bornée (S4)', () => {
+    it('devrait filtrer par catégorie, statut, service et période sans altérer le solde global', () => {
+      const now = new Date();
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const previousYearIso = `${now.getFullYear() - 1}-05-15`;
+
+      const mockRows = [
+        {
+          id: 'tx-today-transit',
+          piece_comptable: `CSH1/${now.getFullYear()}/00001`,
+          date: todayIso,
+          libelle: 'Avance dédouanement conteneur',
+          service: 'TRANSIT',
+          category: 'sortie' as const,
+          status: 'posted' as const,
+          no_dossier: 'DOS-100',
+          partenaire: 'Camrail',
+          montant: -40000,
+        },
+        {
+          id: 'tx-today-transport-draft',
+          piece_comptable: null,
+          date: todayIso,
+          libelle: 'Règlement client transport',
+          service: 'TRANSPORT',
+          category: 'entree' as const,
+          status: 'draft' as const,
+          no_dossier: 'DOS-200',
+          partenaire: 'SABC',
+          montant: 120000,
+        },
+        {
+          id: 'tx-prev-year-manut',
+          piece_comptable: `CSH1/${now.getFullYear() - 1}/00009`,
+          date: previousYearIso,
+          libelle: 'Location grue portuaire',
+          service: 'MANUT',
+          category: 'sortie' as const,
+          status: 'cancelled' as const,
+          no_dossier: 'DOS-050',
+          partenaire: 'PAD',
+          montant: -25000,
+        },
+      ];
+
+      const mapped = service.mapDatabaseOperations(mockRows);
+      (service as unknown as { _transactions: { set: (v: unknown) => void } })._transactions.set(mapped);
+
+      expect(service.filteredTransactions().length).toBe(3);
+      expect(service.activeFiltersCount()).toBe(0);
+      expect(service.currentBalance()).toBe(-40000);
+
+      // Filtre par catégorie
+      service.setCategoryFilter('entree');
+      expect(service.filteredTransactions().map((t) => t.id)).toEqual(['tx-today-transport-draft']);
+      expect(service.activeFiltersCount()).toBe(1);
+
+      // Filtre par statut
+      service.setCategoryFilter('all');
+      service.setStatusFilter('cancelled');
+      expect(service.filteredTransactions().map((t) => t.id)).toEqual(['tx-prev-year-manut']);
+      expect(service.activeFiltersCount()).toBe(1);
+
+      // Filtre par service
+      service.setStatusFilter('all');
+      service.setServiceFilter('TRANSIT');
+      expect(service.filteredTransactions().map((t) => t.id)).toEqual(['tx-today-transit']);
+      expect(service.activeFiltersCount()).toBe(1);
+
+      // Filtre par période (today / year)
+      service.setServiceFilter('all');
+      service.setPeriodFilter('today');
+      expect(service.filteredTransactions().map((t) => t.id)).toEqual([
+        'tx-today-transport-draft',
+        'tx-today-transit',
+      ]);
+      expect(service.activeFiltersCount()).toBe(1);
+
+      service.setPeriodFilter('year');
+      expect(service.filteredTransactions().length).toBe(2);
+
+      // Le solde de la caisse reste inchangé quel que soit le filtre actif
+      expect(service.currentBalance()).toBe(-40000);
+
+      // Réinitialisation complète des filtres
+      service.setPageIndex(2);
+      service.resetFilters();
+      expect(service.filterState().categoryFilter).toBe('all');
+      expect(service.filterState().statusFilter).toBe('all');
+      expect(service.filterState().serviceFilter).toBe('all');
+      expect(service.filterState().periodFilter).toBe('all');
+      expect(service.filterState().searchQuery).toBe('');
+      expect(service.filterState().pageIndex).toBe(0);
+      expect(service.activeFiltersCount()).toBe(0);
+      expect(service.filteredTransactions().length).toBe(3);
+    });
+
+    it('devrait borner la requête de recherche à 100 caractères (S4)', () => {
+      const longQuery = 'a'.repeat(160);
+      service.setSearchQuery(longQuery);
+      expect(service.filterState().searchQuery.length).toBe(100);
+    });
+  });
 });
+

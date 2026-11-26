@@ -321,10 +321,10 @@
 .opportunity-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   border: 1px solid var(--crm-border);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
   background: var(--crm-surface);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
   cursor: grab;
@@ -371,36 +371,37 @@
 .card-header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 
   .card-topline {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    margin-bottom: 2px;
   }
 
   .client-company-title {
     margin: 0;
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    line-height: 1.25;
+    line-height: 1.2;
     color: var(--crm-text);
     letter-spacing: -0.01em;
   }
 
   .opportunity-title {
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     color: var(--crm-subtle);
-    line-height: 1.35;
+    line-height: 1.25;
   }
 }
 
 .card-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 /* Angular CDK Drag and Drop - Styles d'animation et de prévisualisation */
@@ -409,13 +410,13 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-width: 270px;
   max-width: 310px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--crm-action, #0b5ed7);
   background: var(--crm-surface, #fff);
-  padding: 14px;
+  padding: 10px 12px;
   box-shadow: 0 14px 28px -4px rgba(11, 94, 215, 0.22), 0 8px 12px rgba(0, 0, 0, 0.08);
   transform: rotate(1.2deg);
   cursor: grabbing !important;
@@ -426,20 +427,20 @@
 
   .opportunity-title {
     margin: 0;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: var(--crm-text, #123c6d);
   }
 
   .client-company-title {
     margin: 0;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
     color: var(--crm-subtle, #35517a);
   }
 
   .opportunity-value {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: var(--crm-action, #0b5ed7);
   }
@@ -449,8 +450,8 @@
 :host ::ng-deep .cdk-drag-placeholder,
 .cdk-drag-placeholder {
   box-sizing: border-box;
-  min-height: 90px;
-  border-radius: 12px;
+  min-height: 76px;
+  border-radius: 10px;
   border: 2px dashed var(--crm-action, #0b5ed7) !important;
   background: color-mix(in srgb, var(--crm-action, #0b5ed7) 8%, transparent) !important;
   opacity: 0.85;
@@ -475,8 +476,8 @@
   align-items: center;
   border: 1px solid var(--crm-border);
   border-radius: 6px;
-  padding: 1px 7px;
-  font-size: 0.69rem;
+  padding: 1px 6px;
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--crm-subtle);
   background: var(--crm-muted);
@@ -497,11 +498,11 @@
 .trade-lane-route {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
+  gap: 5px;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--crm-text);
-  padding: 2px 0;
+  padding: 0;
 
   &.unset {
     color: var(--crm-subtle);
@@ -523,7 +524,7 @@
 
 .opportunity-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--crm-text);
 }
@@ -532,7 +533,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   font-size: 0.72rem;
   color: var(--crm-subtle);
 }
@@ -541,8 +542,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-top: 6px;
+  gap: 6px;
+  padding-top: 4px;
   border-top: 1px solid var(--crm-border);
 }
 
@@ -550,7 +551,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* CardFooter : Boutons d'actions contextuels Shadcn UI */
@@ -558,10 +559,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  padding-top: 8px;
+  gap: 4px;
+  padding-top: 5px;
   border-top: 1px solid var(--crm-border);
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .action-button {
