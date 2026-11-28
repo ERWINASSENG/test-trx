@@ -4,11 +4,13 @@ import { resolveSafePublicMailHost } from './mail-crypto';
 import {
   encodeMailMessageRef,
   type MailAddress,
+  type MailAttachmentDownload,
   type MailAttachmentMeta,
   type MailConnectionContext,
   type MailDetail,
   type MailFolder,
   type MailFolderSpecialUse,
+  type MailMoveTarget,
   type MailPageResult,
   type MailProvider,
   type MailSummary,
@@ -22,7 +24,10 @@ import {
 import { withMailboxLock } from './mail-sync';
 
 const MAX_PAGE_LIMIT = 50;
+const MAX_SEARCH_RESULTS = 50;
 const MAX_DETAIL_SOURCE_BYTES = 5 * 1024 * 1024; // 5 Mo max par message consulté
+const MAX_ATTACHMENT_SOURCE_BYTES = 10 * 1024 * 1024; // 10 Mo max pour extraire une pièce jointe
+const MAX_ATTACHMENT_DOWNLOAD_BYTES = 4 * 1024 * 1024; // 4 Mo max en réponse directe Vercel
 
 const FOLDER_SORT_ORDER: Record<MailFolderSpecialUse, number> = {
   inbox: 0,
@@ -189,19 +194,20 @@ export class ImapSmtpProvider implements MailProvider {
 
   public async listMessages(
     ctx: MailConnectionContext,
-    options: { folder: string; page: number; limit: number }
+    options: { folder: string; page: number; limit: number; query?: string }
   ): Promise<MailPageResult> {
     const safePage = Math.max(1, Math.floor(options.page || 1));
     const safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, Math.floor(options.limit || 25)));
+    const searchQuery = options.query?.trim() || '';
 
     return withImapClient(ctx, async (client) => {
       const lock = await client.getMailboxLock(options.folder, { readOnly: true });
       try {
         const mailbox = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox : null;
-        const total = Number(mailbox?.exists ?? 0);
+        const totalInFolder = Number(mailbox?.exists ?? 0);
         const uidValidity = Number(mailbox?.uidValidity ?? 0n);
 
-        if (total <= 0) {
+        if (totalInFolder <= 0) {
           return {
             folder: options.folder,
             uidValidity,
@@ -213,65 +219,130 @@ export class ImapSmtpProvider implements MailProvider {
           };
         }
 
-        const endSeq = total - (safePage - 1) * safeLimit;
-        if (endSeq <= 0) {
-          return {
-            folder: options.folder,
-            uidValidity,
-            page: safePage,
-            limit: safeLimit,
-            total,
-            hasNextPage: false,
-            messages: [],
-          };
-        }
+        const fetchedRows: { sortKey: number; summary: MailSummary }[] = [];
+        let effectiveTotal = totalInFolder;
+        let hasNextPage = false;
 
-        const startSeq = Math.max(1, endSeq - safeLimit + 1);
-        const fetchedRows: { seq: number; summary: MailSummary }[] = [];
+        if (searchQuery) {
+          let rawMatches: number[] | false | undefined;
+          try {
+            rawMatches = await client.search(
+              { or: [{ subject: searchQuery }, { from: searchQuery }, { body: searchQuery }] },
+              { uid: true }
+            );
+          } catch {
+            rawMatches = await client.search({ text: searchQuery }, { uid: true });
+          }
 
-        for await (const msg of client.fetch(`${startSeq}:${endSeq}`, {
-          uid: true,
-          flags: true,
-          envelope: true,
-          bodyStructure: true,
-          size: true,
-          internalDate: true,
-        })) {
-          const fromList = mapEnvelopeAddresses(msg.envelope?.from);
-          const toList = mapEnvelopeAddresses(msg.envelope?.to);
-          const subject = (msg.envelope?.subject || '').trim() || '(Sans objet)';
-          const dateIso = toIsoDate(msg.envelope?.date ?? msg.internalDate);
+          const matchedUids = Array.isArray(rawMatches)
+            ? [...rawMatches].sort((a, b) => b - a).slice(0, MAX_SEARCH_RESULTS)
+            : [];
 
-          fetchedRows.push({
-            seq: msg.seq,
-            summary: {
-              ref: encodeMailMessageRef(options.folder, uidValidity, msg.uid),
+          effectiveTotal = matchedUids.length;
+          const offset = (safePage - 1) * safeLimit;
+          const sliceUids = matchedUids.slice(offset, offset + safeLimit);
+          hasNextPage = offset + safeLimit < effectiveTotal;
+
+          if (sliceUids.length > 0) {
+            for await (const msg of client.fetch(
+              sliceUids.join(','),
+              {
+                uid: true,
+                flags: true,
+                envelope: true,
+                bodyStructure: true,
+                size: true,
+                internalDate: true,
+              },
+              { uid: true }
+            )) {
+              const fromList = mapEnvelopeAddresses(msg.envelope?.from);
+              const toList = mapEnvelopeAddresses(msg.envelope?.to);
+              const subject = (msg.envelope?.subject || '').trim() || '(Sans objet)';
+              const dateIso = toIsoDate(msg.envelope?.date ?? msg.internalDate);
+
+              fetchedRows.push({
+                sortKey: msg.uid,
+                summary: {
+                  ref: encodeMailMessageRef(options.folder, uidValidity, msg.uid),
+                  folder: options.folder,
+                  uid: msg.uid,
+                  uidValidity,
+                  messageId: msg.envelope?.messageId ? String(msg.envelope.messageId).trim() : null,
+                  subject,
+                  from: fromList[0] ?? null,
+                  to: toList,
+                  date: dateIso,
+                  snippet: '',
+                  isRead: Boolean(msg.flags?.has('\\Seen')),
+                  isFlagged: Boolean(msg.flags?.has('\\Flagged')),
+                  hasAttachments: hasAttachmentInStructure(msg.bodyStructure),
+                  sizeBytes: Number(msg.size ?? 0),
+                },
+              });
+            }
+          }
+        } else {
+          const endSeq = totalInFolder - (safePage - 1) * safeLimit;
+          if (endSeq <= 0) {
+            return {
               folder: options.folder,
-              uid: msg.uid,
               uidValidity,
-              messageId: msg.envelope?.messageId ? String(msg.envelope.messageId).trim() : null,
-              subject,
-              from: fromList[0] ?? null,
-              to: toList,
-              date: dateIso,
-              snippet: '',
-              isRead: Boolean(msg.flags?.has('\\Seen')),
-              isFlagged: Boolean(msg.flags?.has('\\Flagged')),
-              hasAttachments: hasAttachmentInStructure(msg.bodyStructure),
-              sizeBytes: Number(msg.size ?? 0),
-            },
-          });
+              page: safePage,
+              limit: safeLimit,
+              total: totalInFolder,
+              hasNextPage: false,
+              messages: [],
+            };
+          }
+
+          const startSeq = Math.max(1, endSeq - safeLimit + 1);
+          hasNextPage = startSeq > 1;
+
+          for await (const msg of client.fetch(`${startSeq}:${endSeq}`, {
+            uid: true,
+            flags: true,
+            envelope: true,
+            bodyStructure: true,
+            size: true,
+            internalDate: true,
+          })) {
+            const fromList = mapEnvelopeAddresses(msg.envelope?.from);
+            const toList = mapEnvelopeAddresses(msg.envelope?.to);
+            const subject = (msg.envelope?.subject || '').trim() || '(Sans objet)';
+            const dateIso = toIsoDate(msg.envelope?.date ?? msg.internalDate);
+
+            fetchedRows.push({
+              sortKey: msg.seq,
+              summary: {
+                ref: encodeMailMessageRef(options.folder, uidValidity, msg.uid),
+                folder: options.folder,
+                uid: msg.uid,
+                uidValidity,
+                messageId: msg.envelope?.messageId ? String(msg.envelope.messageId).trim() : null,
+                subject,
+                from: fromList[0] ?? null,
+                to: toList,
+                date: dateIso,
+                snippet: '',
+                isRead: Boolean(msg.flags?.has('\\Seen')),
+                isFlagged: Boolean(msg.flags?.has('\\Flagged')),
+                hasAttachments: hasAttachmentInStructure(msg.bodyStructure),
+                sizeBytes: Number(msg.size ?? 0),
+              },
+            });
+          }
         }
 
-        fetchedRows.sort((a, b) => b.seq - a.seq);
+        fetchedRows.sort((a, b) => b.sortKey - a.sortKey);
 
         return {
           folder: options.folder,
           uidValidity,
           page: safePage,
           limit: safeLimit,
-          total,
-          hasNextPage: startSeq > 1,
+          total: effectiveTotal,
+          hasNextPage,
           messages: fetchedRows.map((row) => row.summary),
         };
       } finally {
@@ -434,6 +505,201 @@ export class ImapSmtpProvider implements MailProvider {
         unreadCount: status ? Number(status.unseen ?? 0) : 0,
         totalCount: status ? Number(status.messages ?? 0) : 0,
       };
+    });
+  }
+
+  public async updateMessageFlags(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      isRead?: boolean;
+      isFlagged?: boolean;
+    }
+  ): Promise<boolean> {
+    return withImapClient(ctx, async (client) => {
+      const lock = await client.getMailboxLock(options.folder, { readOnly: false });
+      try {
+        const mailbox = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox : null;
+        const currentUidValidity = Number(mailbox?.uidValidity ?? 0n);
+        if (
+          options.uidValidity > 0 &&
+          currentUidValidity > 0 &&
+          options.uidValidity !== currentUidValidity
+        ) {
+          return false;
+        }
+
+        const range = String(options.uid);
+        if (typeof options.isRead === 'boolean') {
+          if (options.isRead) {
+            await client.messageFlagsAdd(range, ['\\Seen'], { uid: true });
+          } else {
+            await client.messageFlagsRemove(range, ['\\Seen'], { uid: true });
+          }
+        }
+
+        if (typeof options.isFlagged === 'boolean') {
+          if (options.isFlagged) {
+            await client.messageFlagsAdd(range, ['\\Flagged'], { uid: true });
+          } else {
+            await client.messageFlagsRemove(range, ['\\Flagged'], { uid: true });
+          }
+        }
+
+        return true;
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  public async moveMessage(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      target: MailMoveTarget;
+      cachedTrashFolder?: string | null;
+    }
+  ): Promise<{ moved: boolean; destinationFolder: string | null }> {
+    return withImapClient(ctx, async (client) => {
+      let destinationFolder =
+        options.target === 'trash' && options.cachedTrashFolder?.trim()
+          ? options.cachedTrashFolder.trim()
+          : null;
+
+      if (!destinationFolder) {
+        const folders = await client.list();
+        const match = folders.find((entry) => mapSpecialUse(entry) === options.target);
+        destinationFolder = match?.path ?? null;
+      }
+
+      if (!destinationFolder) {
+        return { moved: false, destinationFolder: null };
+      }
+
+      if (destinationFolder === options.folder) {
+        return { moved: true, destinationFolder };
+      }
+
+      const lock = await client.getMailboxLock(options.folder, { readOnly: false });
+      try {
+        const mailbox = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox : null;
+        const currentUidValidity = Number(mailbox?.uidValidity ?? 0n);
+        if (
+          options.uidValidity > 0 &&
+          currentUidValidity > 0 &&
+          options.uidValidity !== currentUidValidity
+        ) {
+          return { moved: false, destinationFolder };
+        }
+
+        const moved = await client.messageMove(String(options.uid), destinationFolder, {
+          uid: true,
+        });
+        return { moved: Boolean(moved), destinationFolder };
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  public async deleteMessage(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+    }
+  ): Promise<boolean> {
+    return withImapClient(ctx, async (client) => {
+      const lock = await client.getMailboxLock(options.folder, { readOnly: false });
+      try {
+        const mailbox = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox : null;
+        const currentUidValidity = Number(mailbox?.uidValidity ?? 0n);
+        if (
+          options.uidValidity > 0 &&
+          currentUidValidity > 0 &&
+          options.uidValidity !== currentUidValidity
+        ) {
+          return false;
+        }
+
+        return await client.messageDelete(String(options.uid), { uid: true });
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  public async getAttachment(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      attachmentId: string;
+    }
+  ): Promise<MailAttachmentDownload | 'TOO_LARGE' | null> {
+    const idMatch = /^(\d{1,12})-(\d{1,4})$/.exec(options.attachmentId.trim());
+    if (!idMatch || Number(idMatch[1]) !== options.uid) {
+      return null;
+    }
+    const targetIdx = Number(idMatch[2]) - 1;
+    if (targetIdx < 0) return null;
+
+    return withImapClient(ctx, async (client) => {
+      const lock = await client.getMailboxLock(options.folder, { readOnly: true });
+      try {
+        const mailbox = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox : null;
+        const currentUidValidity = Number(mailbox?.uidValidity ?? 0n);
+        if (
+          options.uidValidity > 0 &&
+          currentUidValidity > 0 &&
+          options.uidValidity !== currentUidValidity
+        ) {
+          return null;
+        }
+
+        let sourceBuffer: Buffer | null = null;
+        for await (const msg of client.fetch(
+          String(options.uid),
+          {
+            uid: true,
+            source: { maxLength: MAX_ATTACHMENT_SOURCE_BYTES },
+          },
+          { uid: true }
+        )) {
+          if (msg.uid === options.uid && msg.source) {
+            sourceBuffer = msg.source;
+            break;
+          }
+        }
+
+        if (!sourceBuffer) return null;
+
+        const parsed = await simpleParser(sourceBuffer);
+        const attachment = (parsed.attachments || [])[targetIdx];
+        if (!attachment || !Buffer.isBuffer(attachment.content)) {
+          return null;
+        }
+
+        if (attachment.content.length > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+          return 'TOO_LARGE';
+        }
+
+        return {
+          filename: (attachment.filename || `piece-jointe-${targetIdx + 1}`).slice(0, 180),
+          contentType: attachment.contentType || 'application/octet-stream',
+          sizeBytes: attachment.content.length,
+          content: attachment.content,
+        };
+      } finally {
+        lock.release();
+      }
     });
   }
 }

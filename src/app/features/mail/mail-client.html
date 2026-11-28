@@ -240,6 +240,36 @@
           </div>
         </div>
 
+        <!-- Barre de recherche serveur IMAP -->
+        <form
+          class="flex items-center gap-1.5 px-3 py-2 border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] shrink-0"
+          (submit)="onSearchSubmit($event)"
+          role="search"
+          aria-label="Rechercher dans ce dossier"
+          id="mail-search-form">
+          <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4 text-slate-400 shrink-0">search</mat-icon>
+          <label for="mail-search-input" class="sr-only">Rechercher dans ce dossier</label>
+          <input
+            id="mail-search-input"
+            type="search"
+            maxlength="100"
+            [value]="searchDraft()"
+            (input)="onSearchInput($event)"
+            placeholder="Rechercher (objet, expéditeur, texte)…"
+            class="w-full min-w-0 bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none"
+          />
+          @if (searchDraft() || mailService.searchQuery()) {
+            <button
+              type="button"
+              class="mail-icon-btn !w-6 !h-6"
+              (click)="onClearSearch()"
+              aria-label="Effacer la recherche"
+              id="mail-search-clear-btn">
+              <mat-icon aria-hidden="true" class="!text-[15px] !w-[15px] !h-[15px]">close</mat-icon>
+            </button>
+          }
+        </form>
+
         <div class="mail-list-scroll">
           @if (mailService.isLoadingMessages()) {
             <div class="p-3 space-y-2.5" aria-busy="true" aria-label="Chargement des messages">
@@ -352,6 +382,88 @@
 
                 <button
                   type="button"
+                  class="mail-icon-btn"
+                  [disabled]="mailService.isMutating()"
+                  (click)="onToggleRead(detail)"
+                  [title]="detail.isRead ? 'Marquer comme non lu' : 'Marquer comme lu'"
+                  [attr.aria-label]="detail.isRead ? 'Marquer comme non lu' : 'Marquer comme lu'"
+                  id="mail-toggle-read-btn">
+                  <mat-icon aria-hidden="true" class="!text-[17px] !w-[17px] !h-[17px]">
+                    {{ detail.isRead ? 'mark_email_unread' : 'mark_email_read' }}
+                  </mat-icon>
+                </button>
+
+                <button
+                  type="button"
+                  class="mail-icon-btn"
+                  [disabled]="mailService.isMutating()"
+                  (click)="onToggleFlagged(detail)"
+                  [title]="detail.isFlagged ? 'Retirer le suivi' : 'Suivre ce message'"
+                  [attr.aria-label]="detail.isFlagged ? 'Retirer le suivi' : 'Suivre ce message'"
+                  id="mail-toggle-star-btn">
+                  <mat-icon
+                    aria-hidden="true"
+                    class="!text-[17px] !w-[17px] !h-[17px]"
+                    [class.text-amber-500]="detail.isFlagged">
+                    {{ detail.isFlagged ? 'star' : 'star_border' }}
+                  </mat-icon>
+                </button>
+
+                @if (activeFolderMeta()?.specialUse !== 'archive') {
+                  <button
+                    type="button"
+                    class="mail-icon-btn"
+                    [disabled]="mailService.isMutating()"
+                    (click)="onMoveMessage(detail, 'archive')"
+                    title="Archiver"
+                    aria-label="Archiver ce message"
+                    id="mail-archive-btn">
+                    <mat-icon aria-hidden="true" class="!text-[17px] !w-[17px] !h-[17px]">archive</mat-icon>
+                  </button>
+                }
+
+                @if (!isCurrentFolderTrash()) {
+                  <button
+                    type="button"
+                    class="mail-icon-btn"
+                    [disabled]="mailService.isMutating()"
+                    (click)="onMoveMessage(detail, 'trash')"
+                    title="Déplacer vers la corbeille"
+                    aria-label="Déplacer vers la corbeille"
+                    id="mail-trash-btn">
+                    <mat-icon aria-hidden="true" class="!text-[17px] !w-[17px] !h-[17px]">delete_outline</mat-icon>
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="mail-icon-btn text-rose-600"
+                    [disabled]="mailService.isMutating()"
+                    (click)="onRequestPermanentDelete(detail)"
+                    title="Supprimer définitivement"
+                    aria-label="Supprimer définitivement ce message"
+                    id="mail-delete-btn">
+                    <mat-icon aria-hidden="true" class="!text-[17px] !w-[17px] !h-[17px]">delete_forever</mat-icon>
+                  </button>
+                }
+
+                @if (canCreateQuote()) {
+                  <button
+                    type="button"
+                    class="mail-action-btn"
+                    [disabled]="mailService.isMutating()"
+                    (click)="onCreateOrOpenQuote(detail)"
+                    id="mail-create-quote-btn">
+                    <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4 text-[#0b5ed7] dark:text-[#60a5fa]">
+                      {{ detail.linkedQuoteId ? 'open_in_new' : 'request_quote' }}
+                    </mat-icon>
+                    <span class="hidden lg:inline">
+                      {{ detail.linkedQuoteId ? 'Ouvrir la cotation' : 'Créer cotation' }}
+                    </span>
+                  </button>
+                }
+
+                <button
+                  type="button"
                   class="mail-toggle-btn"
                   (click)="togglePlainTextView()"
                   id="mail-toggle-plain-text-btn">
@@ -359,6 +471,40 @@
                 </button>
               </div>
             </div>
+
+            @if (pendingDeleteConfirmRef() === detail.ref) {
+              <div
+                class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-800 dark:text-rose-200"
+                role="alert"
+                id="mail-delete-confirm-banner">
+                <span>Supprimer définitivement ce message de la corbeille ?</span>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="mail-banner-btn"
+                    (click)="onCancelPermanentDelete()"
+                    id="mail-cancel-delete-btn">
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    class="px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer"
+                    (click)="onConfirmPermanentDelete(detail)"
+                    id="mail-confirm-delete-btn">
+                    Confirmer la suppression
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (actionError(); as actErr) {
+              <div
+                class="rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-800 dark:text-rose-200"
+                role="alert"
+                id="mail-action-error">
+                {{ actErr }}
+              </div>
+            }
 
             <dl class="mail-detail-meta">
               <div class="mail-meta-row">
@@ -387,11 +533,18 @@
                   Pièces jointes ({{ detail.attachments.length }}) :
                 </span>
                 @for (att of detail.attachments; track att.id) {
-                  <span class="mail-attachment-chip" [title]="att.contentType">
-                    <mat-icon aria-hidden="true" class="!text-[14px] !w-3.5 !h-3.5">attach_file</mat-icon>
+                  <button
+                    type="button"
+                    class="mail-attachment-chip cursor-pointer hover:border-[#0b5ed7] hover:text-[#0b5ed7] dark:hover:text-[#93c5fd] transition disabled:opacity-50"
+                    [disabled]="downloadingAttachmentId() === att.id"
+                    (click)="onDownloadAttachment(detail, att)"
+                    [title]="'Télécharger ' + att.filename + ' (' + att.contentType + ')'">
+                    <mat-icon aria-hidden="true" class="!text-[14px] !w-3.5 !h-3.5">
+                      {{ downloadingAttachmentId() === att.id ? 'hourglass_top' : 'download' }}
+                    </mat-icon>
                     <span class="truncate max-w-[180px]">{{ att.filename }}</span>
                     <span class="text-slate-400">({{ formatFileSize(att.sizeBytes) }})</span>
-                  </span>
+                  </button>
                 }
               </div>
             }

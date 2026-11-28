@@ -25,6 +25,7 @@ function createMockMailService() {
     },
   ]);
   const selectedFolder = signal<string>('INBOX');
+  const searchQuery = signal<string>('');
   const messages = signal<MailSummaryDto[]>([]);
   const page = signal<number>(1);
   const limit = signal<number>(25);
@@ -37,6 +38,8 @@ function createMockMailService() {
   const isLoadingFolders = signal<boolean>(false);
   const isLoadingMessages = signal<boolean>(false);
   const isLoadingDetail = signal<boolean>(false);
+  const isSending = signal<boolean>(false);
+  const isMutating = signal<boolean>(false);
   const errorCode = signal<MailErrorCode | null>(null);
   const errorMessage = signal<string | null>(null);
 
@@ -44,6 +47,7 @@ function createMockMailService() {
     mailboxEmail,
     folders,
     selectedFolder,
+    searchQuery,
     messages,
     page,
     limit,
@@ -56,6 +60,8 @@ function createMockMailService() {
     isLoadingFolders,
     isLoadingMessages,
     isLoadingDetail,
+    isSending,
+    isMutating,
     errorCode,
     errorMessage,
     loadFolders: vi.fn().mockResolvedValue({
@@ -75,6 +81,18 @@ function createMockMailService() {
       },
     }),
     loadMessageDetail: vi.fn().mockResolvedValue({ success: true }),
+    updateFlags: vi.fn().mockResolvedValue({ success: true, data: { updated: true } }),
+    moveMessage: vi.fn().mockResolvedValue({ success: true, data: { moved: true } }),
+    deleteMessage: vi.fn().mockResolvedValue({ success: true, data: { deleted: true } }),
+    downloadAttachment: vi.fn().mockResolvedValue({ success: true, data: { downloaded: true } }),
+    createQuoteFromMessage: vi.fn().mockResolvedValue({
+      success: true,
+      data: { created: true, quoteId: 'quote-123' },
+    }),
+    sendMessage: vi.fn().mockResolvedValue({
+      success: true,
+      data: { sent: true, messageId: '<sent@transimex-cm.com>', acceptedCount: 1, rejectedCount: 0, sentFolderAppended: true },
+    }),
     clearSelectedMessage: vi.fn(() => {
       selectedMessageRef.set(null);
       selectedMessage.set(null);
@@ -226,5 +244,57 @@ describe('MailClientComponent', () => {
     const pre = el.querySelector('#mail-detail-plain-text');
     expect(pre?.textContent).toContain('Texte brut de suivi');
     expect(el.querySelector('#mail-detail-iframe')).toBeNull();
+  });
+
+  it('déclenche la recherche serveur IMAP et les actions de flags / cotation selon les permissions', async () => {
+    const detail: MailDetailDto = {
+      ref: 'SU5CT1g:12:77',
+      folder: 'INBOX',
+      uid: 77,
+      uidValidity: 12,
+      messageId: '<msg-77@example.com>',
+      subject: 'Cotation Douala',
+      from: { name: 'Client', address: 'client@example.com' },
+      to: [{ name: 'Erwin', address: 'erwinalberic@transimex-cm.com' }],
+      cc: [],
+      replyTo: [],
+      date: '2026-11-28T09:00:00.000Z',
+      snippet: 'Demande de tarif',
+      isRead: false,
+      isFlagged: false,
+      hasAttachments: false,
+      sizeBytes: 900,
+      inReplyTo: null,
+      references: [],
+      textBody: 'Demande de tarif',
+      sanitizedHtml: '<p>Demande de tarif</p>',
+      hasBlockedRemoteImages: false,
+      blockedRemoteImagesCount: 0,
+      attachments: [],
+      linkedQuoteId: null,
+    };
+    mockMailService.selectedMessageRef.set(detail.ref);
+    mockMailService.selectedMessage.set(detail);
+
+    const fixture = TestBed.createComponent(MailClientComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Sans quotes.create, le bouton Créer cotation est masqué
+    expect(el.querySelector('#mail-create-quote-btn')).toBeNull();
+
+    // Recherche serveur
+    fixture.componentInstance.searchDraft.set('  douala  ');
+    await fixture.componentInstance.onSearchSubmit();
+    expect(mockMailService.loadMessages).toHaveBeenCalledWith('INBOX', 1, 25, 'douala');
+
+    // Action Lu / Non lu
+    const readBtn = el.querySelector('#mail-toggle-read-btn') as HTMLButtonElement | null;
+    expect(readBtn).not.toBeNull();
+    readBtn?.click();
+    expect(mockMailService.updateFlags).toHaveBeenCalledWith('SU5CT1g:12:77', { isRead: true });
   });
 });

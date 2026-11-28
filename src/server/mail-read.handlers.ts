@@ -6,31 +6,41 @@ import { mailProvider } from './mail-imap';
 import {
   parseMailMessageRef,
   sanitizeFolderName,
+  sanitizeSearchQuery,
   type MailConnectionContext,
 } from './mail-provider';
 import { loadGlobalMailSettings } from './mail-sync';
 
-interface MailReadActor {
+export interface MailReadActor {
   id: string;
   email?: string;
   role?: string;
 }
 
-type MailboxResolutionResult =
-  | { ok: true; ctx: MailConnectionContext; mailboxEmail: string; watchedFolder: string }
+export type MailboxResolutionResult =
+  | {
+      ok: true;
+      ctx: MailConnectionContext;
+      mailboxEmail: string;
+      watchedFolder: string;
+      trashFolder: string | null;
+      accountRole: 'manager' | 'commercial';
+    }
   | { ok: false; status: number; code: string; error: string };
 
-function getActor(req: express.Request): MailReadActor | null {
+export function getMailActor(req: express.Request): MailReadActor | null {
   const user = (req as unknown as Record<string, unknown>)['user'] as MailReadActor | undefined;
   return user?.id ? user : null;
 }
 
-function setPrivateNoStoreHeaders(res: express.Response): void {
+export function setPrivateNoStoreHeaders(res: express.Response): void {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
 }
 
-async function resolveActorMailboxContext(actorId: string): Promise<MailboxResolutionResult> {
+export async function resolveActorMailboxContext(
+  actorId: string
+): Promise<MailboxResolutionResult> {
   if (!isMailEncryptionConfigured()) {
     return {
       ok: false,
@@ -54,7 +64,7 @@ async function resolveActorMailboxContext(actorId: string): Promise<MailboxResol
     loadGlobalMailSettings(adminClient),
     adminClient
       .from('mail_inbox_accounts')
-      .select('id, user_id, email_address, encrypted_password, is_active')
+      .select('id, user_id, email_address, account_role, trash_folder, encrypted_password, is_active')
       .eq('user_id', actorId)
       .maybeSingle(),
   ]);
@@ -103,6 +113,8 @@ async function resolveActorMailboxContext(actorId: string): Promise<MailboxResol
     ok: true,
     mailboxEmail: String(account.email_address),
     watchedFolder: settings.watched_folder || 'INBOX',
+    trashFolder: typeof account.trash_folder === 'string' ? account.trash_folder : null,
+    accountRole: account.account_role === 'manager' ? 'manager' : 'commercial',
     ctx: {
       accountId: String(account.id),
       userId: actorId,
@@ -115,7 +127,7 @@ async function resolveActorMailboxContext(actorId: string): Promise<MailboxResol
   };
 }
 
-function handleImapError(res: express.Response, err: unknown): void {
+export function handleImapError(res: express.Response, err: unknown): void {
   const correlationId = crypto.randomUUID().slice(0, 8);
   const rawMsg = err instanceof Error ? err.message.toLowerCase() : '';
 
@@ -171,7 +183,7 @@ export const listMailFoldersHandler = async (
   res: express.Response
 ): Promise<void> => {
   setPrivateNoStoreHeaders(res);
-  const actor = getActor(req);
+  const actor = getMailActor(req);
   if (!actor) {
     res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
@@ -199,7 +211,7 @@ export const listMailMessagesHandler = async (
   res: express.Response
 ): Promise<void> => {
   setPrivateNoStoreHeaders(res);
-  const actor = getActor(req);
+  const actor = getMailActor(req);
   if (!actor) {
     res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
@@ -212,6 +224,14 @@ export const listMailMessagesHandler = async (
       : sanitizeFolderName(rawFolder);
   if (!folder) {
     res.status(400).json({ error: 'Nom de dossier mail invalide.' });
+    return;
+  }
+
+  const query = sanitizeSearchQuery(req.query['q']);
+  if (query === 'INVALID') {
+    res.status(400).json({
+      error: 'Requête de recherche invalide (100 caractères max, sans caractères de contrôle).',
+    });
     return;
   }
 
@@ -233,6 +253,7 @@ export const listMailMessagesHandler = async (
       folder,
       page,
       limit,
+      ...(query ? { query } : {}),
     });
     res.json(result);
   } catch (err: unknown) {
@@ -245,7 +266,7 @@ export const getMailMessageHandler = async (
   res: express.Response
 ): Promise<void> => {
   setPrivateNoStoreHeaders(res);
-  const actor = getActor(req);
+  const actor = getMailActor(req);
   if (!actor) {
     res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;
@@ -282,7 +303,47 @@ export const getMailMessageHandler = async (
       return;
     }
 
-    res.json({ message });
+    let linkedQuoteId: string | null = null;
+    const adminClient = getSupabaseAdmin();
+    if (adminClient) {
+      const { data: linkByUid } = await adminClient
+        .from('mail_links')
+        .select('entity_id')
+        .eq('account_id', resolved.ctx.accountId)
+        .eq('folder', parsedRef.folder)
+        .eq('imap_uid', parsedRef.uid)
+        .eq('entity_type', 'quote')
+        .maybeSingle();
+
+      if (linkByUid?.entity_id) {
+        linkedQuoteId = String(linkByUid.entity_id);
+      } else if (message.messageId) {
+        const { data: linkByMsgId } = await adminClient
+          .from('mail_links')
+          .select('entity_id')
+          .eq('account_id', resolved.ctx.accountId)
+          .eq('internet_message_id', message.messageId)
+          .eq('entity_type', 'quote')
+          .maybeSingle();
+
+        if (linkByMsgId?.entity_id) {
+          linkedQuoteId = String(linkByMsgId.entity_id);
+        } else {
+          const { data: ingestedMatch } = await adminClient
+            .from('mail_ingested_messages')
+            .select('quote_id')
+            .eq('account_id', resolved.ctx.accountId)
+            .eq('internet_message_id', message.messageId)
+            .not('quote_id', 'is', null)
+            .maybeSingle();
+          if (ingestedMatch?.quote_id) {
+            linkedQuoteId = String(ingestedMatch.quote_id);
+          }
+        }
+      }
+    }
+
+    res.json({ message: { ...message, linkedQuoteId } });
   } catch (err: unknown) {
     handleImapError(res, err);
   }
@@ -293,7 +354,7 @@ export const getMailUnreadCountHandler = async (
   res: express.Response
 ): Promise<void> => {
   setPrivateNoStoreHeaders(res);
-  const actor = getActor(req);
+  const actor = getMailActor(req);
   if (!actor) {
     res.status(401).json({ error: 'Utilisateur non authentifié.' });
     return;

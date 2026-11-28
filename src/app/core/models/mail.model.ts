@@ -57,6 +57,7 @@ export interface MailDetailDto extends MailSummaryDto {
   hasBlockedRemoteImages: boolean;
   blockedRemoteImagesCount: number;
   attachments: MailAttachmentMetaDto[];
+  linkedQuoteId?: string | null;
 }
 
 export interface MailFoldersResponse {
@@ -96,7 +97,17 @@ export type MailErrorCode =
   | 'MAIL_INVALID_PAYLOAD'
   | 'MAIL_RECIPIENT_REJECTED'
   | 'MAIL_SMTP_SEND_FAILED'
+  | 'MAIL_ATTACHMENT_TOO_LARGE'
+  | 'MAIL_ATTACHMENT_NOT_FOUND'
   | 'UNKNOWN';
+
+export type MailMoveTarget = 'trash' | 'archive';
+
+export interface CreateQuoteFromMailResponseDto {
+  created: boolean;
+  quoteId: string;
+  quoteNumber?: string;
+}
 
 export interface SendMailRequestDto {
   to: string[];

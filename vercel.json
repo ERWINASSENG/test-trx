@@ -9,5 +9,11 @@
     "api/index.js": {
       "includeFiles": "dist/**"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/mail-sync",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }

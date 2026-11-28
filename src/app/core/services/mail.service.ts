@@ -1,11 +1,13 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
+  CreateQuoteFromMailResponseDto,
   MailDetailDto,
   MailErrorCode,
   MailFolderDto,
   MailFoldersResponse,
   MailMessageDetailResponse,
   MailMessagesPageResponse,
+  MailMoveTarget,
   MailSummaryDto,
   MailUnreadCountResponse,
   SendMailRequestDto,
@@ -32,6 +34,8 @@ const KNOWN_ERROR_CODES = new Set<MailErrorCode>([
   'MAIL_INVALID_PAYLOAD',
   'MAIL_RECIPIENT_REJECTED',
   'MAIL_SMTP_SEND_FAILED',
+  'MAIL_ATTACHMENT_TOO_LARGE',
+  'MAIL_ATTACHMENT_NOT_FOUND',
   'UNKNOWN',
 ]);
 
@@ -46,6 +50,7 @@ export class MailService {
   private readonly _mailboxEmail = signal<string | null>(null);
   private readonly _folders = signal<MailFolderDto[]>([]);
   private readonly _selectedFolder = signal<string>('INBOX');
+  private readonly _searchQuery = signal<string>('');
   private readonly _messages = signal<MailSummaryDto[]>([]);
   private readonly _page = signal<number>(1);
   private readonly _limit = signal<number>(25);
@@ -61,6 +66,7 @@ export class MailService {
   private readonly _isLoadingMessages = signal<boolean>(false);
   private readonly _isLoadingDetail = signal<boolean>(false);
   private readonly _isSending = signal<boolean>(false);
+  private readonly _isMutating = signal<boolean>(false);
 
   private readonly _errorCode = signal<MailErrorCode | null>(null);
   private readonly _errorMessage = signal<string | null>(null);
@@ -68,6 +74,7 @@ export class MailService {
   public readonly mailboxEmail = computed(() => this._mailboxEmail());
   public readonly folders = computed(() => this._folders());
   public readonly selectedFolder = computed(() => this._selectedFolder());
+  public readonly searchQuery = computed(() => this._searchQuery());
   public readonly messages = computed(() => this._messages());
   public readonly page = computed(() => this._page());
   public readonly limit = computed(() => this._limit());
@@ -83,6 +90,7 @@ export class MailService {
   public readonly isLoadingMessages = computed(() => this._isLoadingMessages());
   public readonly isLoadingDetail = computed(() => this._isLoadingDetail());
   public readonly isSending = computed(() => this._isSending());
+  public readonly isMutating = computed(() => this._isMutating());
 
   public readonly errorCode = computed(() => this._errorCode());
   public readonly errorMessage = computed(() => this._errorMessage());
@@ -121,10 +129,13 @@ export class MailService {
   public async loadMessages(
     folder = this._selectedFolder(),
     page = 1,
-    limit = this._limit()
+    limit = this._limit(),
+    query = this._searchQuery()
   ): Promise<MailReadApiResult<MailMessagesPageResponse>> {
     const seq = ++this.messagesRequestSeq;
+    const trimmedQuery = query.trim();
     this._selectedFolder.set(folder);
+    this._searchQuery.set(trimmedQuery);
     this._page.set(page);
     this._isLoadingMessages.set(true);
     this._errorCode.set(null);
@@ -136,6 +147,9 @@ export class MailService {
         page: String(page),
         limit: String(limit),
       });
+      if (trimmedQuery) {
+        params.set('q', trimmedQuery);
+      }
       const res = await this.get<MailMessagesPageResponse>(`/api/mail/messages?${params.toString()}`);
       if (seq !== this.messagesRequestSeq) {
         return res;
@@ -218,6 +232,179 @@ export class MailService {
     }
   }
 
+  public async updateFlags(
+    ref: string,
+    flags: { isRead?: boolean; isFlagged?: boolean }
+  ): Promise<MailReadApiResult<{ updated: boolean; isRead?: boolean; isFlagged?: boolean }>> {
+    this._isMutating.set(true);
+    try {
+      const encodedRef = encodeURIComponent(ref);
+      const res = await this.request<{ updated: boolean; isRead?: boolean; isFlagged?: boolean }>(
+        `/api/mail/messages/${encodedRef}/flags`,
+        'PATCH',
+        flags
+      );
+
+      if (res.success && res.data?.updated) {
+        const previousSummary = this._messages().find((m) => m.ref === ref) ?? null;
+        this._messages.update((items) =>
+          items.map((item) =>
+            item.ref === ref
+              ? {
+                  ...item,
+                  ...(flags.isRead !== undefined ? { isRead: flags.isRead } : {}),
+                  ...(flags.isFlagged !== undefined ? { isFlagged: flags.isFlagged } : {}),
+                }
+              : item
+          )
+        );
+        this._selectedMessage.update((cur) =>
+          cur && cur.ref === ref
+            ? {
+                ...cur,
+                ...(flags.isRead !== undefined ? { isRead: flags.isRead } : {}),
+                ...(flags.isFlagged !== undefined ? { isFlagged: flags.isFlagged } : {}),
+              }
+            : cur
+        );
+
+        if (
+          flags.isRead !== undefined &&
+          previousSummary &&
+          previousSummary.isRead !== flags.isRead
+        ) {
+          const delta = flags.isRead ? -1 : 1;
+          this.adjustFolderUnreadCount(previousSummary.folder, delta);
+        }
+      }
+      return res;
+    } finally {
+      this._isMutating.set(false);
+    }
+  }
+
+  public async moveMessage(
+    ref: string,
+    target: MailMoveTarget
+  ): Promise<MailReadApiResult<{ moved: boolean; target: MailMoveTarget; destinationFolder: string }>> {
+    this._isMutating.set(true);
+    try {
+      const encodedRef = encodeURIComponent(ref);
+      const res = await this.request<{
+        moved: boolean;
+        target: MailMoveTarget;
+        destinationFolder: string;
+      }>(`/api/mail/messages/${encodedRef}/move`, 'POST', { target });
+
+      if (res.success && res.data?.moved) {
+        this.removeMessageFromLocalState(ref);
+      }
+      return res;
+    } finally {
+      this._isMutating.set(false);
+    }
+  }
+
+  public async deleteMessage(ref: string): Promise<MailReadApiResult<{ deleted: boolean }>> {
+    this._isMutating.set(true);
+    try {
+      const encodedRef = encodeURIComponent(ref);
+      const res = await this.request<{ deleted: boolean }>(
+        `/api/mail/messages/${encodedRef}`,
+        'DELETE'
+      );
+
+      if (res.success && res.data?.deleted) {
+        this.removeMessageFromLocalState(ref);
+      }
+      return res;
+    } finally {
+      this._isMutating.set(false);
+    }
+  }
+
+  public async downloadAttachment(
+    ref: string,
+    attachmentId: string,
+    fallbackFilename: string
+  ): Promise<MailReadApiResult<{ downloaded: boolean }>> {
+    this.resetForAccountChange();
+    const token = this.authService.token();
+    if (!token) {
+      return { success: false, code: 'UNKNOWN', error: 'Session authentifiée introuvable.' };
+    }
+
+    try {
+      const url = `/api/mail/messages/${encodeURIComponent(ref)}/attachments/${encodeURIComponent(attachmentId)}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const errPayload: unknown = await response.json().catch(() => null);
+        return {
+          success: false,
+          code: this.extractErrorCode(errPayload),
+          error: getApiErrorMessage(
+            errPayload,
+            `Impossible de télécharger la pièce jointe (HTTP ${response.status}).`
+          ),
+        };
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = fallbackFilename || 'piece-jointe';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+
+      return { success: true, data: { downloaded: true } };
+    } catch {
+      return {
+        success: false,
+        code: 'MAIL_UPSTREAM_UNAVAILABLE',
+        error: 'Téléchargement impossible. Vérifiez votre connexion puis réessayez.',
+      };
+    }
+  }
+
+  public async createQuoteFromMessage(
+    ref: string
+  ): Promise<MailReadApiResult<CreateQuoteFromMailResponseDto>> {
+    this._isMutating.set(true);
+    try {
+      const encodedRef = encodeURIComponent(ref);
+      const res = await this.request<CreateQuoteFromMailResponseDto>(
+        `/api/mail/messages/${encodedRef}/create-quote`,
+        'POST',
+        {}
+      );
+
+      if (res.success && res.data?.quoteId) {
+        const quoteId = res.data.quoteId;
+        this._selectedMessage.update((cur) =>
+          cur && cur.ref === ref ? { ...cur, linkedQuoteId: quoteId } : cur
+        );
+      }
+
+      return res;
+    } finally {
+      this._isMutating.set(false);
+    }
+  }
+
   public async refreshUnreadCount(): Promise<void> {
     const res = await this.get<MailUnreadCountResponse>('/api/mail/unread-count');
     if (res.success && res.data) {
@@ -232,6 +419,7 @@ export class MailService {
     this._mailboxEmail.set(null);
     this._folders.set([]);
     this._selectedFolder.set('INBOX');
+    this._searchQuery.set('');
     this._messages.set([]);
     this._page.set(1);
     this._totalMessages.set(0);
@@ -244,8 +432,34 @@ export class MailService {
     this._isLoadingMessages.set(false);
     this._isLoadingDetail.set(false);
     this._isSending.set(false);
+    this._isMutating.set(false);
     this._errorCode.set(null);
     this._errorMessage.set(null);
+  }
+
+  private removeMessageFromLocalState(ref: string): void {
+    const existing = this._messages().find((m) => m.ref === ref) ?? null;
+    this._messages.update((items) => items.filter((item) => item.ref !== ref));
+    this._totalMessages.update((count) => Math.max(0, count - 1));
+    if (this._selectedMessageRef() === ref) {
+      this.clearSelectedMessage();
+    }
+    if (existing && !existing.isRead) {
+      this.adjustFolderUnreadCount(existing.folder, -1);
+    }
+  }
+
+  private adjustFolderUnreadCount(folderPath: string, delta: number): void {
+    this._folders.update((folders) =>
+      folders.map((folder) => {
+        if (folder.path !== folderPath) return folder;
+        const nextUnread = Math.max(0, folder.unreadMessages + delta);
+        if (folder.specialUse === 'inbox') {
+          this._unreadCount.set(nextUnread);
+        }
+        return { ...folder, unreadMessages: nextUnread };
+      })
+    );
   }
 
   private applyError(code: MailErrorCode | undefined, message: string | undefined): void {
@@ -281,7 +495,7 @@ export class MailService {
 
   private async request<T>(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     body?: unknown
   ): Promise<MailReadApiResult<T>> {
     this.resetForAccountChange();

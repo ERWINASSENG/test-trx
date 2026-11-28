@@ -130,6 +130,14 @@ import {
   sendMailHandler,
   testAdminSmtpSettingsHandler,
 } from './server/mail-send.handlers';
+import {
+  createQuoteFromMailHandler,
+  deleteMailMessageHandler,
+  downloadMailAttachmentHandler,
+  moveMailMessageHandler,
+  updateMailFlagsHandler,
+} from './server/mail-actions.handlers';
+import { cronMailSyncHandler } from './server/mail-cron.handler';
 import { startMailSyncWorker } from './server/mail-sync';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
@@ -1437,8 +1445,30 @@ const mailSendRateLimiter = rateLimit({
 app.get('/api/mail/folders', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailFoldersHandler);
 app.get('/api/mail/messages', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailMessagesHandler);
 app.get('/api/mail/messages/:ref', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailMessageHandler);
+app.get('/api/mail/messages/:ref/attachments/:attachmentId', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), downloadMailAttachmentHandler);
+app.patch('/api/mail/messages/:ref/flags', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), updateMailFlagsHandler);
+app.post('/api/mail/messages/:ref/move', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), moveMailMessageHandler);
+app.delete('/api/mail/messages/:ref', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), deleteMailMessageHandler);
+app.post(
+  '/api/mail/messages/:ref/create-quote',
+  requireAuth,
+  mailReadRateLimiter,
+  requirePermission('mail.read'),
+  requirePermission('quotes.create'),
+  createQuoteFromMailHandler
+);
 app.get('/api/mail/unread-count', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailUnreadCountHandler);
 app.post('/api/mail/send', requireAuth, mailSendRateLimiter, requirePermission('mail.send'), sendMailHandler);
+
+// Cron Vercel (synchro cotations IMAP) : rate-limiting anti-sonde + vérification CRON_SECRET interne.
+const cronMailSyncRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes sur le endpoint Cron.' },
+});
+app.get('/api/cron/mail-sync', cronMailSyncRateLimiter, cronMailSyncHandler);
 
 // Garde-fou pour toute route /api ou /api/* non reconnue :
 // garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).
@@ -1509,7 +1539,7 @@ app.use((req, res, next) => {
  * Start the server if this module is the main entry point, or it is ran via PM2.
  * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
  */
-if (!process.env['VITEST']) {
+if (!process.env['VITEST'] && !process.env['VERCEL']) {
   startMailSyncWorker();
 }
 

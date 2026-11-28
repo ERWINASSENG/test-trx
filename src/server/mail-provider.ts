@@ -60,7 +60,17 @@ export interface MailDetail extends MailSummary {
   hasBlockedRemoteImages: boolean;
   blockedRemoteImagesCount: number;
   attachments: MailAttachmentMeta[];
+  linkedQuoteId?: string | null;
 }
+
+export interface MailAttachmentDownload {
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  content: Buffer;
+}
+
+export type MailMoveTarget = 'trash' | 'archive';
 
 export interface MailPageResult {
   folder: string;
@@ -92,7 +102,7 @@ export interface MailProvider {
   listFolders(ctx: MailConnectionContext): Promise<MailFolder[]>;
   listMessages(
     ctx: MailConnectionContext,
-    options: { folder: string; page: number; limit: number }
+    options: { folder: string; page: number; limit: number; query?: string }
   ): Promise<MailPageResult>;
   getMessage(
     ctx: MailConnectionContext,
@@ -104,9 +114,47 @@ export interface MailProvider {
     }
   ): Promise<MailDetail | null>;
   getUnreadCount(ctx: MailConnectionContext, folder?: string): Promise<MailUnreadSummary>;
+  updateMessageFlags(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      isRead?: boolean;
+      isFlagged?: boolean;
+    }
+  ): Promise<boolean>;
+  moveMessage(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      target: MailMoveTarget;
+      cachedTrashFolder?: string | null;
+    }
+  ): Promise<{ moved: boolean; destinationFolder: string | null }>;
+  deleteMessage(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+    }
+  ): Promise<boolean>;
+  getAttachment(
+    ctx: MailConnectionContext,
+    options: {
+      folder: string;
+      uidValidity: number;
+      uid: number;
+      attachmentId: string;
+    }
+  ): Promise<MailAttachmentDownload | 'TOO_LARGE' | null>;
 }
 
 const MAX_FOLDER_LENGTH = 128;
+const MAX_SEARCH_QUERY_LENGTH = 100;
 
 function hasControlChars(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
@@ -116,6 +164,16 @@ function hasControlChars(value: string): boolean {
     }
   }
   return false;
+}
+
+export function sanitizeSearchQuery(rawQuery: unknown): string | null | 'INVALID' {
+  if (rawQuery === undefined || rawQuery === null || rawQuery === '') return null;
+  if (typeof rawQuery !== 'string') return 'INVALID';
+  if (hasControlChars(rawQuery)) return 'INVALID';
+  const trimmed = rawQuery.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MAX_SEARCH_QUERY_LENGTH) return 'INVALID';
+  return trimmed;
 }
 
 export function sanitizeFolderName(rawFolder: unknown): string | null {

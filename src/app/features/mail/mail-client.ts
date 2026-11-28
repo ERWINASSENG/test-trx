@@ -7,14 +7,16 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import {
   MailAddressDto,
+  MailAttachmentMetaDto,
   MailComposerDraft,
   MailDetailDto,
   MailFolderDto,
   MailFolderSpecialUse,
+  MailMoveTarget,
   MailSummaryDto,
   SendMailRequestDto,
 } from '../../core/models/mail.model';
@@ -30,6 +32,7 @@ import { MailComposerComponent } from './mail-composer/mail-composer';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MailClientComponent implements OnInit {
+  private readonly router = inject(Router);
   public readonly mailService = inject(MailService);
   public readonly accessControl = inject(AccessControlService);
 
@@ -39,6 +42,10 @@ export class MailClientComponent implements OnInit {
   public readonly activeComposerDraft = signal<MailComposerDraft | null>(null);
   public readonly composerError = signal<string | null>(null);
   public readonly sendFeedback = signal<string | null>(null);
+  public readonly searchDraft = signal<string>('');
+  public readonly actionError = signal<string | null>(null);
+  public readonly downloadingAttachmentId = signal<string | null>(null);
+  public readonly pendingDeleteConfirmRef = signal<string | null>(null);
 
   public readonly canReadMail = computed(() =>
     this.accessControl.hasPermission('mail.read')
@@ -48,6 +55,12 @@ export class MailClientComponent implements OnInit {
   );
   public readonly canConnectMail = computed(() =>
     this.accessControl.hasPermission('mail.self.connect')
+  );
+  public readonly canCreateQuote = computed(() =>
+    this.accessControl.hasPermission('quotes.create')
+  );
+  public readonly isCurrentFolderTrash = computed(
+    () => this.activeFolderMeta()?.specialUse === 'trash'
   );
 
   public readonly isMailboxMissing = computed(() => {
@@ -108,16 +121,57 @@ export class MailClientComponent implements OnInit {
     this.isMobileFoldersOpen.set(false);
     this.remoteImagesAllowed.set(false);
     this.showPlainText.set(false);
+    this.searchDraft.set('');
+    this.actionError.set(null);
+    this.pendingDeleteConfirmRef.set(null);
     this.mailService.clearSelectedMessage();
-    await this.mailService.loadMessages(folder.path, 1);
+    await this.mailService.loadMessages(folder.path, 1, this.mailService.limit(), '');
+  }
+
+  public onSearchInput(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    this.searchDraft.set(input?.value ?? '');
+  }
+
+  public async onSearchSubmit(event?: Event): Promise<void> {
+    event?.preventDefault();
+    const cleaned = this.searchDraft().trim().slice(0, 100);
+    this.searchDraft.set(cleaned);
+    this.actionError.set(null);
+    this.pendingDeleteConfirmRef.set(null);
+    this.mailService.clearSelectedMessage();
+    await this.mailService.loadMessages(
+      this.mailService.selectedFolder(),
+      1,
+      this.mailService.limit(),
+      cleaned
+    );
+  }
+
+  public async onClearSearch(): Promise<void> {
+    this.searchDraft.set('');
+    this.actionError.set(null);
+    this.mailService.clearSelectedMessage();
+    await this.mailService.loadMessages(
+      this.mailService.selectedFolder(),
+      1,
+      this.mailService.limit(),
+      ''
+    );
   }
 
   public async onRefresh(): Promise<void> {
     const currentFolder = this.mailService.selectedFolder();
     const currentPage = this.mailService.page();
+    const currentQuery = this.mailService.searchQuery();
     const foldersRes = await this.mailService.loadFolders();
     if (foldersRes.success) {
-      await this.mailService.loadMessages(currentFolder, currentPage);
+      await this.mailService.loadMessages(
+        currentFolder,
+        currentPage,
+        this.mailService.limit(),
+        currentQuery
+      );
     }
   }
 
@@ -125,7 +179,12 @@ export class MailClientComponent implements OnInit {
     const currentPage = this.mailService.page();
     if (currentPage <= 1 || this.mailService.isLoadingMessages()) return;
     this.mailService.clearSelectedMessage();
-    await this.mailService.loadMessages(this.mailService.selectedFolder(), currentPage - 1);
+    await this.mailService.loadMessages(
+      this.mailService.selectedFolder(),
+      currentPage - 1,
+      this.mailService.limit(),
+      this.mailService.searchQuery()
+    );
   }
 
   public async onNextPage(): Promise<void> {
@@ -133,14 +192,111 @@ export class MailClientComponent implements OnInit {
     this.mailService.clearSelectedMessage();
     await this.mailService.loadMessages(
       this.mailService.selectedFolder(),
-      this.mailService.page() + 1
+      this.mailService.page() + 1,
+      this.mailService.limit(),
+      this.mailService.searchQuery()
     );
   }
 
   public async onSelectMessage(summary: MailSummaryDto): Promise<void> {
     this.remoteImagesAllowed.set(false);
     this.showPlainText.set(false);
+    this.actionError.set(null);
+    this.pendingDeleteConfirmRef.set(null);
     await this.mailService.loadMessageDetail(summary.ref, false);
+  }
+
+  public async onToggleRead(detail: MailDetailDto): Promise<void> {
+    if (this.mailService.isMutating()) return;
+    this.actionError.set(null);
+    const res = await this.mailService.updateFlags(detail.ref, { isRead: !detail.isRead });
+    if (!res.success) {
+      this.actionError.set(res.error || 'Impossible de mettre à jour le statut de lecture.');
+    }
+  }
+
+  public async onToggleFlagged(detail: MailDetailDto): Promise<void> {
+    if (this.mailService.isMutating()) return;
+    this.actionError.set(null);
+    const res = await this.mailService.updateFlags(detail.ref, { isFlagged: !detail.isFlagged });
+    if (!res.success) {
+      this.actionError.set(res.error || 'Impossible de mettre à jour le suivi du message.');
+    }
+  }
+
+  public async onMoveMessage(detail: MailDetailDto, target: MailMoveTarget): Promise<void> {
+    if (this.mailService.isMutating()) return;
+    this.actionError.set(null);
+    this.pendingDeleteConfirmRef.set(null);
+    const res = await this.mailService.moveMessage(detail.ref, target);
+    if (!res.success) {
+      this.actionError.set(res.error || 'Impossible de déplacer ce message.');
+      return;
+    }
+    this.sendFeedback.set(
+      target === 'trash' ? 'Message déplacé vers la corbeille.' : 'Message archivé.'
+    );
+  }
+
+  public onRequestPermanentDelete(detail: MailDetailDto): void {
+    this.actionError.set(null);
+    this.pendingDeleteConfirmRef.set(detail.ref);
+  }
+
+  public onCancelPermanentDelete(): void {
+    this.pendingDeleteConfirmRef.set(null);
+  }
+
+  public async onConfirmPermanentDelete(detail: MailDetailDto): Promise<void> {
+    if (this.mailService.isMutating()) return;
+    this.actionError.set(null);
+    const res = await this.mailService.deleteMessage(detail.ref);
+    this.pendingDeleteConfirmRef.set(null);
+    if (!res.success) {
+      this.actionError.set(res.error || 'Impossible de supprimer définitivement ce message.');
+      return;
+    }
+    this.sendFeedback.set('Message supprimé définitivement.');
+  }
+
+  public async onDownloadAttachment(
+    detail: MailDetailDto,
+    att: MailAttachmentMetaDto
+  ): Promise<void> {
+    if (this.downloadingAttachmentId()) return;
+    this.actionError.set(null);
+    this.downloadingAttachmentId.set(att.id);
+    try {
+      const res = await this.mailService.downloadAttachment(detail.ref, att.id, att.filename);
+      if (!res.success) {
+        this.actionError.set(res.error || 'Impossible de télécharger cette pièce jointe.');
+      }
+    } finally {
+      this.downloadingAttachmentId.set(null);
+    }
+  }
+
+  public async onCreateOrOpenQuote(detail: MailDetailDto): Promise<void> {
+    if (!this.canCreateQuote()) return;
+    this.actionError.set(null);
+
+    if (detail.linkedQuoteId) {
+      await this.router.navigate(['/quotes'], {
+        queryParams: { quoteId: detail.linkedQuoteId },
+      });
+      return;
+    }
+
+    if (this.mailService.isMutating()) return;
+    const res = await this.mailService.createQuoteFromMessage(detail.ref);
+    if (!res.success || !res.data?.quoteId) {
+      this.actionError.set(res.error || 'Impossible de créer la cotation depuis cet email.');
+      return;
+    }
+
+    await this.router.navigate(['/quotes'], {
+      queryParams: { quoteId: res.data.quoteId },
+    });
   }
 
   public async onAllowRemoteImages(): Promise<void> {
