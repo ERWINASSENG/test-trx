@@ -193,6 +193,8 @@ export interface QuoteTimingItem {
   sentAtFormatted: string;
   respondedAtFormatted: string;
   sourceChannel?: QuoteSourceChannel;
+  emailReceivedAt?: string | null;
+  emailReceivedAtFormatted?: string;
   outlookReadAt?: string | null;
   outlookReadAtFormatted?: string;
   firstOpenedAt?: string | null;

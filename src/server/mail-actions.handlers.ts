@@ -644,6 +644,10 @@ export const createQuoteFromMailHandler = async (
 
     const quoteId = String(createdQuote.id);
     const quoteNumber = String(createdQuote.quote_number || '');
+    const parsedEmailTime = typeof detail.date === 'string' ? Date.parse(detail.date) : Number.NaN;
+    const emailReceivedAtIso = Number.isFinite(parsedEmailTime)
+      ? new Date(parsedEmailTime).toISOString()
+      : null;
 
     const postCreateTasks: PromiseLike<unknown>[] = [
       adminClient.from('mail_links').upsert(
@@ -666,6 +670,7 @@ export const createQuoteFromMailHandler = async (
           source: matchedAssignment ? 'webmail_forwarded_assign_create' : 'webmail_manual_create',
           senderEmail,
           subject: cleanSubject.slice(0, 200),
+          ...(emailReceivedAtIso ? { receivedAt: emailReceivedAtIso } : {}),
           ...(matchedAssignment ? { mailAssignmentId: matchedAssignment.id } : {}),
         },
       }),

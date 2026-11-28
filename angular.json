@@ -76,7 +76,11 @@
                 "express-rate-limit",
                 "helmet",
                 "jsonwebtoken",
-                "dotenv"
+                "dotenv",
+                "imapflow",
+                "mailparser",
+                "nodemailer",
+                "sanitize-html"
               ]
             }
           },

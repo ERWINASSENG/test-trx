@@ -744,217 +744,250 @@
   <!-- 7. MODALE CHRONOLOGIQUE : DÉTAILS DU CYCLE DE LA COTATION                 -->
   <!-- ========================================================================= -->
 @if (activeTimelineQuote(); as modalQuote) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-    <div class="relative w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-5">
-      
-      <!-- En-tête de la modale -->
-      <div class="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="font-mono text-sm font-bold text-slate-900 dark:text-white">{{ modalQuote.quoteNumber }}</span>
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="timeline-modal-title"
+      class="relative w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+
+      <!-- En-tête de la modale (fixe) -->
+      <div class="shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 pt-4 sm:pt-5 pb-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="timeline-modal-title" class="font-mono text-sm font-bold text-slate-900 dark:text-white break-all">{{ modalQuote.quoteNumber }}</span>
             <span class="rounded-md border border-slate-200 dark:border-slate-800 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-400">
               {{ modalQuote.status }}
             </span>
           </div>
-          <div class="text-xs text-slate-500 mt-0.5">{{ modalQuote.clientName }} • {{ modalQuote.repName }}</div>
+          <div class="text-xs text-slate-500 mt-0.5 break-words">{{ modalQuote.clientName }} • {{ modalQuote.repName }}</div>
         </div>
         <button
           type="button"
           (click)="closeTimelineModal()"
-          class="rounded-md p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">
+          aria-label="Fermer les détails de la cotation"
+          class="shrink-0 rounded-md p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">
           ✕
         </button>
       </div>
 
-      <!-- Métriques synthétiques de la cotation -->
-      <div class="grid grid-cols-3 gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-3 text-xs">
-        <div>
-          <div class="text-slate-400 text-[11px]">Délai commercial</div>
-          <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5">{{ modalQuote.commercialDelayFormatted }}</div>
-        </div>
-        <div>
-          <div class="text-slate-400 text-[11px]">Délai client</div>
-          <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5">{{ modalQuote.clientDelayFormatted }}</div>
-        </div>
-        <div>
-          <div class="text-slate-400 text-[11px]">Montant</div>
-          <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5">{{ modalQuote.amountFormatted }}</div>
-        </div>
-      </div>
+      <!-- Corps défilable de la modale -->
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-5">
 
-      <!-- Chronologie des 5 jalons du cycle de cotation (strictement conditionnels) -->
-      @let isAssigned = modalQuote.repId !== 'unassigned';
-      @let isOpened = !!(modalQuote.firstOpenedAt || modalQuote.outlookReadAt);
-      @let isSent = modalQuote.status !== 'draft';
-      @let isDecided = modalQuote.status === 'accepted' || modalQuote.status === 'rejected' || modalQuote.status === 'expired';
-      <div class="space-y-4 pt-1 text-xs">
-
-        <!-- Jalon 1 : Création de la cotation -->
-        <div class="flex gap-3" data-milestone-step="created" data-milestone-state="done">
-          <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5" aria-hidden="true"></div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
+        <!-- Métriques synthétiques de la cotation -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-3 text-xs">
+          <div class="min-w-0">
+            <div class="text-slate-400 text-[11px]">Délai commercial</div>
+            <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5 break-words">{{ modalQuote.commercialDelayFormatted }}</div>
           </div>
-          <div class="space-y-0.5 pb-2">
-            <div class="font-medium text-slate-900 dark:text-white">Création de la cotation</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.createdAtFormatted }}</div>
+          <div class="min-w-0">
+            <div class="text-slate-400 text-[11px]">Délai client</div>
+            <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5 break-words">{{ modalQuote.clientDelayFormatted }}</div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-slate-400 text-[11px]">Montant</div>
+            <div class="font-mono font-semibold text-slate-900 dark:text-white mt-0.5 break-words">{{ modalQuote.amountFormatted }}</div>
           </div>
         </div>
 
-        <!-- Jalon 2 : Attribution au commercial -->
-        <div class="flex gap-3" data-milestone-step="assigned" [attr.data-milestone-state]="isAssigned ? 'done' : 'pending'">
-          <div class="flex flex-col items-center">
-            <div
-              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
-              [class]="isAssigned ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
-              aria-hidden="true">
-            </div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
-          </div>
-          <div class="space-y-0.5 pb-2">
-            <div class="font-medium" [class]="isAssigned ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
-              Attribution au commercial
-            </div>
-            @if (isAssigned) {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.assignedAtFormatted || modalQuote.createdAtFormatted }}</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">{{ modalQuote.repName }}</div>
-            } @else {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’attribution</div>
-            }
-          </div>
-        </div>
+        <!-- Chronologie des 6 jalons du cycle de cotation (strictement conditionnels) -->
+        @let isAssigned = modalQuote.repId !== 'unassigned';
+        @let isMailReceived = !!(modalQuote.emailReceivedAt || modalQuote.sourceChannel === 'outlook_imap');
+        @let isOpened = !!(modalQuote.firstOpenedAt || modalQuote.outlookReadAt);
+        @let isSent = modalQuote.status !== 'draft';
+        @let isDecided = modalQuote.status === 'accepted' || modalQuote.status === 'rejected' || modalQuote.status === 'expired';
+        <div class="space-y-4 pt-1 text-xs">
 
-        <!-- Jalon 3 : Ouverture par le commercial -->
-        <div class="flex gap-3" data-milestone-step="opened" [attr.data-milestone-state]="isOpened ? 'done' : 'pending'">
-          <div class="flex flex-col items-center">
-            <div
-              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
-              [class]="isOpened ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
-              aria-hidden="true">
-            </div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
-          </div>
-          <div class="space-y-0.5 pb-2">
-            <div class="font-medium" [class]="isOpened ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
-              Ouverture par le commercial
-            </div>
-            @if (isOpened) {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                {{ modalQuote.firstOpenedAt ? modalQuote.firstOpenedAtFormatted : modalQuote.outlookReadAtFormatted }}
+          <!-- Jalon 1 : Attribution au commercial -->
+          <div class="flex gap-3" data-milestone-step="assigned" [attr.data-milestone-state]="isAssigned ? 'done' : 'pending'">
+            <div class="flex flex-col items-center">
+              <div
+                class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                [class]="isAssigned ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+                aria-hidden="true">
               </div>
-            } @else {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’ouverture</div>
-            }
-          </div>
-        </div>
-
-        <!-- Jalon 4 : Offre transmise au client -->
-        <div class="flex gap-3" data-milestone-step="sent" [attr.data-milestone-state]="isSent ? 'done' : 'pending'">
-          <div class="flex flex-col items-center">
-            <div
-              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
-              [class]="isSent ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
-              aria-hidden="true">
+              <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
             </div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
-          </div>
-          <div class="space-y-0.5 pb-2">
-            <div class="font-medium" [class]="isSent ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
-              Offre transmise au client
-            </div>
-            @if (isSent) {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.sentAtFormatted }}</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">Temps de chiffrage commercial : {{ modalQuote.commercialDelayFormatted }}</div>
-            } @else {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’envoi</div>
-            }
-          </div>
-        </div>
-
-        <!-- Jalon 5 : Décision du client -->
-        <div class="flex gap-3" data-milestone-step="decision" [attr.data-milestone-state]="isDecided ? 'done' : 'pending'">
-          <div class="flex flex-col items-center">
-            <div
-              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
-              [class]="isDecided ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
-              aria-hidden="true">
-            </div>
-          </div>
-          <div class="space-y-0.5">
-            <div class="font-medium" [class]="isDecided ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
-              Décision du client
-            </div>
-            @if (isDecided) {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.respondedAtFormatted }}</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">
-                Statut : {{ modalQuote.status === 'accepted' ? 'Acceptée' : modalQuote.status === 'rejected' ? 'Refusée' : 'Expirée' }}
+            <div class="min-w-0 flex-1 space-y-0.5 pb-2">
+              <div class="font-medium" [class]="isAssigned ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+                Attribution au commercial
               </div>
-            } @else {
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente de réponse</div>
-            }
+              @if (isAssigned) {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">{{ modalQuote.assignedAtFormatted || modalQuote.createdAtFormatted }}</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 break-words">{{ modalQuote.repName }}</div>
+              } @else {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’attribution</div>
+              }
+            </div>
           </div>
-        </div>
 
-      </div>
-
-      <!-- Alerte de blocage actif -->
-      @if (modalQuote.isBlocked) {
-        <div class="rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs space-y-1">
-          <div class="font-semibold text-rose-800 dark:text-rose-300">
-            Blocage actif — {{ modalQuote.blockedCategoryLabel || 'Blocage signalé' }}
+          <!-- Jalon 2 : Mail reçu -->
+          <div class="flex gap-3" data-milestone-step="mail_received" [attr.data-milestone-state]="isMailReceived ? 'done' : 'pending'">
+            <div class="flex flex-col items-center">
+              <div
+                class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                [class]="isMailReceived ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+                aria-hidden="true">
+              </div>
+              <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5 pb-2">
+              <div class="font-medium" [class]="isMailReceived ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+                Mail reçu
+              </div>
+              @if (isMailReceived) {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">{{ modalQuote.emailReceivedAtFormatted || 'Date inconnue' }}</div>
+              } @else {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">Création manuelle (sans mail)</div>
+              }
+            </div>
           </div>
-          @if (modalQuote.blockedReason) {
-            <div class="text-rose-700 dark:text-rose-200">{{ modalQuote.blockedReason }}</div>
-          }
-          <div class="text-[10px] font-mono text-rose-500">Signalé le {{ modalQuote.blockedAtFormatted }}</div>
-        </div>
-      }
 
-      <!-- Suivi d'ouverture (Outlook & Plateforme) -->
-      <div class="grid grid-cols-2 gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-3 text-xs">
-        <div>
-          <div class="text-slate-400 text-[11px]">Lecture mail (Outlook)</div>
-          <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5">
-            {{ modalQuote.outlookReadAtFormatted || 'Non lu' }}
-          </div>
-        </div>
-        <div>
-          <div class="text-slate-400 text-[11px]">1re ouverture plateforme</div>
-          <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5">
-            {{ modalQuote.firstOpenedAtFormatted || 'Non ouverte' }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Journal détaillé des événements (temps réel) -->
-      <div class="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3 text-xs">
-        <div class="font-semibold text-slate-700 dark:text-slate-200">
-          Parcours détaillé en temps réel
-        </div>
-        @if (isTimelineEventsLoading()) {
-          <div class="text-[11px] text-slate-400">Chargement de l'historique…</div>
-        } @else if (timelineEvents().length > 0) {
-          <div class="max-h-48 overflow-y-auto space-y-2 pr-1">
-            @for (ev of timelineEvents(); track ev.id) {
-              <div class="flex items-start justify-between gap-2 rounded-lg border border-slate-100 dark:border-slate-800 px-3 py-2">
-                <div class="space-y-0.5">
-                  <div class="font-medium text-slate-900 dark:text-white">{{ eventLabel(ev.eventType) }}</div>
-                  @if (eventMetadataSummary(ev)) {
-                    <div class="text-[11px] text-slate-600 dark:text-slate-300">{{ eventMetadataSummary(ev) }}</div>
-                  }
-                  <div class="text-[10px] text-slate-400">Par {{ ev.actorName || 'Système' }}</div>
+          <!-- Jalon 3 : Ouverture par le commercial -->
+          <div class="flex gap-3" data-milestone-step="opened" [attr.data-milestone-state]="isOpened ? 'done' : 'pending'">
+            <div class="flex flex-col items-center">
+              <div
+                class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                [class]="isOpened ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+                aria-hidden="true">
+              </div>
+              <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5 pb-2">
+              <div class="font-medium" [class]="isOpened ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+                Ouverture par le commercial
+              </div>
+              @if (isOpened) {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">
+                  {{ modalQuote.firstOpenedAt ? modalQuote.firstOpenedAtFormatted : modalQuote.outlookReadAtFormatted }}
                 </div>
-                <div class="shrink-0 font-mono text-[10px] text-slate-500">{{ ev.createdAtFormatted }}</div>
-              </div>
-            }
+              } @else {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’ouverture</div>
+              }
+            </div>
           </div>
-        } @else {
-          <div class="text-[11px] text-slate-400">Aucun événement détaillé supplémentaire enregistré.</div>
+
+          <!-- Jalon 4 : Création de la cotation -->
+          <div class="flex gap-3" data-milestone-step="created" data-milestone-state="done">
+            <div class="flex flex-col items-center">
+              <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5" aria-hidden="true"></div>
+              <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5 pb-2">
+              <div class="font-medium text-slate-900 dark:text-white">Création de la cotation</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">{{ modalQuote.createdAtFormatted }}</div>
+            </div>
+          </div>
+
+          <!-- Jalon 5 : Offre transmise au client -->
+          <div class="flex gap-3" data-milestone-step="sent" [attr.data-milestone-state]="isSent ? 'done' : 'pending'">
+            <div class="flex flex-col items-center">
+              <div
+                class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                [class]="isSent ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+                aria-hidden="true">
+              </div>
+              <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5 pb-2">
+              <div class="font-medium" [class]="isSent ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+                Offre transmise au client
+              </div>
+              @if (isSent) {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">{{ modalQuote.sentAtFormatted }}</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 break-words">Temps de chiffrage commercial : {{ modalQuote.commercialDelayFormatted }}</div>
+              } @else {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’envoi</div>
+              }
+            </div>
+          </div>
+
+          <!-- Jalon 6 : Décision du client -->
+          <div class="flex gap-3" data-milestone-step="decision" [attr.data-milestone-state]="isDecided ? 'done' : 'pending'">
+            <div class="flex flex-col items-center">
+              <div
+                class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                [class]="isDecided ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+                aria-hidden="true">
+              </div>
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5">
+              <div class="font-medium" [class]="isDecided ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+                Décision du client
+              </div>
+              @if (isDecided) {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">{{ modalQuote.respondedAtFormatted }}</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                  Statut : {{ modalQuote.status === 'accepted' ? 'Acceptée' : modalQuote.status === 'rejected' ? 'Refusée' : 'Expirée' }}
+                </div>
+              } @else {
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente de réponse</div>
+              }
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Alerte de blocage actif -->
+        @if (modalQuote.isBlocked) {
+          <div class="rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs space-y-1">
+            <div class="font-semibold text-rose-800 dark:text-rose-300 break-words">
+              Blocage actif — {{ modalQuote.blockedCategoryLabel || 'Blocage signalé' }}
+            </div>
+            @if (modalQuote.blockedReason) {
+              <div class="text-rose-700 dark:text-rose-200 break-words">{{ modalQuote.blockedReason }}</div>
+            }
+            <div class="text-[10px] font-mono text-rose-500">Signalé le {{ modalQuote.blockedAtFormatted }}</div>
+          </div>
         }
+
+        <!-- Suivi d'ouverture (Outlook & Plateforme) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-3 text-xs">
+          <div class="min-w-0">
+            <div class="text-slate-400 text-[11px]">Lecture mail (Outlook)</div>
+            <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5 break-words">
+              {{ modalQuote.outlookReadAtFormatted || 'Non lu' }}
+            </div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-slate-400 text-[11px]">1re ouverture plateforme</div>
+            <div class="font-mono font-medium text-slate-900 dark:text-white mt-0.5 break-words">
+              {{ modalQuote.firstOpenedAtFormatted || 'Non ouverte' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Journal détaillé des événements (temps réel) -->
+        <div class="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3 text-xs">
+          <div class="font-semibold text-slate-700 dark:text-slate-200">
+            Parcours détaillé en temps réel
+          </div>
+          @if (isTimelineEventsLoading()) {
+            <div class="text-[11px] text-slate-400">Chargement de l'historique…</div>
+          } @else if (timelineEvents().length > 0) {
+            <div class="max-h-48 overflow-y-auto space-y-2 pr-1">
+              @for (ev of timelineEvents(); track ev.id) {
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-2 rounded-lg border border-slate-100 dark:border-slate-800 px-3 py-2">
+                  <div class="min-w-0 flex-1 space-y-0.5">
+                    <div class="font-medium text-slate-900 dark:text-white break-words">{{ eventLabel(ev.eventType) }}</div>
+                    @if (eventMetadataSummary(ev)) {
+                      <div class="text-[11px] text-slate-600 dark:text-slate-300 break-words">{{ eventMetadataSummary(ev) }}</div>
+                    }
+                    <div class="text-[10px] text-slate-400 break-words">Par {{ ev.actorName || 'Système' }}</div>
+                  </div>
+                  <div class="shrink-0 font-mono text-[10px] text-slate-500">{{ ev.createdAtFormatted }}</div>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="text-[11px] text-slate-400">Aucun événement détaillé supplémentaire enregistré.</div>
+          }
+        </div>
+
       </div>
 
-      <!-- Pied de modale -->
-      <div class="flex justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
+      <!-- Pied de modale (fixe) -->
+      <div class="shrink-0 flex justify-end px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <button
           type="button"
           (click)="closeTimelineModal()"

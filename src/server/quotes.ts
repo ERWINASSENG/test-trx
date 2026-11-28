@@ -1418,14 +1418,64 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
   const UNOPENED_ALERT_THRESHOLD_MINUTES = 30;
   const quoteIds = (quoteRows || []).map((q) => String(q.id)).filter(Boolean);
   const eventsCountMap = new Map<string, number>();
+  const ingestedEmailReceivedMap = new Map<string, string>();
+  const eventEmailReceivedMap = new Map<string, string>();
+  const assignmentEmailReceivedMap = new Map<string, string>();
+
+  const keepEarliestIso = (map: Map<string, string>, quoteId: string, candidate: unknown): void => {
+    if (typeof candidate !== 'string' || !candidate) return;
+    const parsedMs = Date.parse(candidate);
+    if (!Number.isFinite(parsedMs)) return;
+    const normalizedIso = new Date(parsedMs).toISOString();
+    const existing = map.get(quoteId);
+    if (!existing || parsedMs < Date.parse(existing)) {
+      map.set(quoteId, normalizedIso);
+    }
+  };
+
   if (quoteIds.length > 0) {
-    const { data: eventRows } = await adminClient
-      .from('sales_quote_events')
-      .select('quote_id')
-      .in('quote_id', quoteIds);
-    for (const ev of eventRows || []) {
+    const [eventsRes, ingestedRes, assignmentsRes] = await Promise.all([
+      adminClient
+        .from('sales_quote_events')
+        .select('quote_id, event_type, metadata, created_at')
+        .in('quote_id', quoteIds),
+      adminClient
+        .from('mail_ingested_messages')
+        .select('quote_id, received_at')
+        .in('quote_id', quoteIds),
+      adminClient
+        .from('mail_assignments')
+        .select('quote_id, forwarded_at')
+        .in('quote_id', quoteIds),
+    ]);
+
+    for (const ev of eventsRes.data || []) {
       const qid = String(ev.quote_id);
       eventsCountMap.set(qid, (eventsCountMap.get(qid) || 0) + 1);
+      if (ev.event_type === 'email_received') {
+        const meta =
+          ev.metadata && typeof ev.metadata === 'object' && !Array.isArray(ev.metadata)
+            ? (ev.metadata as Record<string, unknown>)
+            : null;
+        const metaReceivedAt = typeof meta?.['receivedAt'] === 'string' ? meta['receivedAt'] : null;
+        const candidate =
+          metaReceivedAt && Number.isFinite(Date.parse(metaReceivedAt))
+            ? metaReceivedAt
+            : typeof ev.created_at === 'string'
+              ? ev.created_at
+              : null;
+        keepEarliestIso(eventEmailReceivedMap, qid, candidate);
+      }
+    }
+
+    for (const msg of ingestedRes.data || []) {
+      if (!msg.quote_id) continue;
+      keepEarliestIso(ingestedEmailReceivedMap, String(msg.quote_id), msg.received_at);
+    }
+
+    for (const assignment of assignmentsRes.data || []) {
+      if (!assignment.quote_id) continue;
+      keepEarliestIso(assignmentEmailReceivedMap, String(assignment.quote_id), assignment.forwarded_at);
     }
   }
 
@@ -1440,6 +1490,7 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
   }>();
 
   const formattedQuotes = (quoteRows || []).map((row) => {
+    const quoteIdStr = String(row.id);
     const createdAt = new Date(row.created_at).getTime();
     const assignedAt = row.assigned_at ? new Date(row.assigned_at).getTime() : null;
     const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : null;
@@ -1472,6 +1523,17 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
     const isOverdue = (status === 'draft' && commercialMinutes > 2880) || (status === 'draft' && isSlaBreach);
     const firstOpenedAt = typeof row.first_opened_at === 'string' ? row.first_opened_at : null;
     const outlookReadAt = typeof row.outlook_read_at === 'string' ? row.outlook_read_at : null;
+    const sourceChannel = row.source_channel === 'outlook_imap' ? 'outlook_imap' : 'manual';
+    const emailReceivedAt =
+      ingestedEmailReceivedMap.get(quoteIdStr) ||
+      eventEmailReceivedMap.get(quoteIdStr) ||
+      assignmentEmailReceivedMap.get(quoteIdStr) ||
+      null;
+    const emailReceivedAtFormatted = emailReceivedAt
+      ? formatDateTimeFr(emailReceivedAt)
+      : sourceChannel === 'outlook_imap'
+        ? 'Date inconnue'
+        : 'Création manuelle (sans mail)';
     const blockedAt = typeof row.blocked_at === 'string' ? row.blocked_at : null;
     const blockedCategory = typeof row.blocked_category === 'string'
       ? (row.blocked_category as QuoteBlockCategory)
@@ -1513,7 +1575,7 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
     }
 
     return {
-      id: String(row.id),
+      id: quoteIdStr,
       quoteNumber: String(row.quote_number),
       clientName,
       details: row.title || 'Demande de cotation',
@@ -1533,7 +1595,9 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
       assignedAtFormatted: assignedAt ? formatDateTimeFr(assignedAt) : (row.assigned_to ? formatDateTimeFr(row.created_at) : 'Non assigné'),
       sentAtFormatted: sentAt ? formatDateTimeFr(sentAt) : (status === 'sent' ? 'Envoyée' : 'En attente'),
       respondedAtFormatted: respondedAt ? formatDateTimeFr(respondedAt) : '—',
-      sourceChannel: row.source_channel === 'outlook_imap' ? 'outlook_imap' : 'manual',
+      sourceChannel,
+      emailReceivedAt,
+      emailReceivedAtFormatted,
       outlookReadAt,
       outlookReadAtFormatted: outlookReadAt ? formatDateTimeFr(outlookReadAt) : 'Non lu',
       firstOpenedAt,
@@ -1545,7 +1609,7 @@ export const getQuoteTimingAnalyticsHandler = async (req: express.Request, res: 
       blockedCategory,
       blockedCategoryLabel: blockedCategory ? QUOTE_BLOCK_CATEGORY_LABELS[blockedCategory] : null,
       blockedReason,
-      eventsCount: eventsCountMap.get(String(row.id)) || 0,
+      eventsCount: eventsCountMap.get(quoteIdStr) || 0,
     };
   });
 

@@ -1,13 +1,18 @@
 <div
   class="composer-backdrop"
-  (click)="onCancel()"
   id="mail-composer-backdrop">
+  <button
+    type="button"
+    class="composer-backdrop-dismiss"
+    [disabled]="isSending()"
+    (click)="onCancel()"
+    aria-label="Fermer la rédaction">
+  </button>
   <div
     class="composer-dialog"
     role="dialog"
     aria-modal="true"
     aria-labelledby="mail-composer-title"
-    (click)="$event.stopPropagation()"
     id="mail-composer-dialog">
 
     <header class="composer-header">

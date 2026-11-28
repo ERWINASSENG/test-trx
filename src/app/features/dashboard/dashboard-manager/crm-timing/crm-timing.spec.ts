@@ -311,11 +311,14 @@ describe('CrmTimingComponent', () => {
     expect(component.activeTimelineQuote()).toBeNull();
   });
 
-  it('ne devrait marquer aucun jalon comme réalisé avant ouverture, envoi et décision sur un brouillon non ouvert', () => {
+  it('ne devrait marquer aucun jalon comme réalisé avant ouverture, envoi et décision sur un brouillon manuel non ouvert', () => {
     const unopenedDraft: QuoteTimingItem = {
       ...MOCK_OVERDUE_QUOTE,
       status: 'draft',
       repId: 'rep-2',
+      sourceChannel: 'manual',
+      emailReceivedAt: null,
+      emailReceivedAtFormatted: 'Création manuelle (sans mail)',
       firstOpenedAt: null,
       firstOpenedAtFormatted: 'Non ouverte',
       outlookReadAt: null,
@@ -328,25 +331,42 @@ describe('CrmTimingComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
+    const stepsOrder = Array.from(host.querySelectorAll('[data-milestone-step]')).map((el) =>
+      el.getAttribute('data-milestone-step')
+    );
+    expect(stepsOrder).toEqual([
+      'assigned',
+      'mail_received',
+      'opened',
+      'created',
+      'sent',
+      'decision',
+    ]);
+
     const stateOf = (step: string) =>
       host.querySelector(`[data-milestone-step="${step}"]`)?.getAttribute('data-milestone-state');
 
-    expect(stateOf('created')).toBe('done');
     expect(stateOf('assigned')).toBe('done');
+    expect(stateOf('mail_received')).toBe('pending');
     expect(stateOf('opened')).toBe('pending');
+    expect(stateOf('created')).toBe('done');
     expect(stateOf('sent')).toBe('pending');
     expect(stateOf('decision')).toBe('pending');
 
     const text = host.textContent || '';
+    expect(text).toContain('Création manuelle (sans mail)');
     expect(text).toContain('En attente d’ouverture');
     expect(text).toContain('En attente d’envoi');
     expect(text).toContain('En attente de réponse');
   });
 
-  it('devrait marquer tous les jalons comme réalisés pour une cotation ouverte, envoyée et acceptée', () => {
+  it('devrait marquer tous les jalons dans l’ordre attendu pour une cotation issue d’un mail ouverte, envoyée et acceptée', () => {
     const acceptedQuote: QuoteTimingItem = {
       ...MOCK_QUOTE_ITEM,
       status: 'accepted',
+      sourceChannel: 'outlook_imap',
+      emailReceivedAt: '2026-10-20T08:50:00Z',
+      emailReceivedAtFormatted: '20/10/2026 à 08:50',
       firstOpenedAt: '2026-10-20T09:20:00Z',
       firstOpenedAtFormatted: '20/10/2026 à 09:20',
     };
@@ -355,15 +375,32 @@ describe('CrmTimingComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
+    const stepsOrder = Array.from(host.querySelectorAll('[data-milestone-step]')).map((el) =>
+      el.getAttribute('data-milestone-step')
+    );
+    expect(stepsOrder).toEqual([
+      'assigned',
+      'mail_received',
+      'opened',
+      'created',
+      'sent',
+      'decision',
+    ]);
+
     const stateOf = (step: string) =>
       host.querySelector(`[data-milestone-step="${step}"]`)?.getAttribute('data-milestone-state');
 
-    expect(stateOf('created')).toBe('done');
     expect(stateOf('assigned')).toBe('done');
+    expect(stateOf('mail_received')).toBe('done');
     expect(stateOf('opened')).toBe('done');
+    expect(stateOf('created')).toBe('done');
     expect(stateOf('sent')).toBe('done');
     expect(stateOf('decision')).toBe('done');
-    expect(host.textContent || '').toContain('Acceptée');
+
+    const text = host.textContent || '';
+    expect(text).toContain('Mail reçu');
+    expect(text).toContain('20/10/2026 à 08:50');
+    expect(text).toContain('Acceptée');
   });
 
   // -------------------------------------------------------------------------
