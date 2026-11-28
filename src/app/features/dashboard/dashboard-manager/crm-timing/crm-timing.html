@@ -574,67 +574,116 @@
         </div>
       </div>
 
-      <!-- Chronologie des 5 jalons du cycle de cotation -->
+      <!-- Chronologie des 5 jalons du cycle de cotation (strictement conditionnels) -->
+      @let isAssigned = modalQuote.repId !== 'unassigned';
+      @let isOpened = !!(modalQuote.firstOpenedAt || modalQuote.outlookReadAt);
+      @let isSent = modalQuote.status !== 'draft';
+      @let isDecided = modalQuote.status === 'accepted' || modalQuote.status === 'rejected' || modalQuote.status === 'expired';
       <div class="space-y-4 pt-1 text-xs">
-        
+
         <!-- Jalon 1 : Création de la cotation -->
-        <div class="flex gap-3">
+        <div class="flex gap-3" data-milestone-step="created" data-milestone-state="done">
           <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5" aria-hidden="true"></div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
           </div>
           <div class="space-y-0.5 pb-2">
             <div class="font-medium text-slate-900 dark:text-white">Création de la cotation</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.createdAtFormatted }}</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.createdAtFormatted }}</div>
           </div>
         </div>
 
-        <!-- Jalon 2 : Attribution de la cotation -->
-        <div class="flex gap-3">
+        <!-- Jalon 2 : Attribution au commercial -->
+        <div class="flex gap-3" data-milestone-step="assigned" [attr.data-milestone-state]="isAssigned ? 'done' : 'pending'">
           <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+            <div
+              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+              [class]="isAssigned ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+              aria-hidden="true">
+            </div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
           </div>
           <div class="space-y-0.5 pb-2">
-            <div class="font-medium text-slate-900 dark:text-white">Attribution de la cotation</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.assignedAtFormatted }}</div>
+            <div class="font-medium" [class]="isAssigned ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+              Attribution au commercial
+            </div>
+            @if (isAssigned) {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.assignedAtFormatted || modalQuote.createdAtFormatted }}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">{{ modalQuote.repName }}</div>
+            } @else {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’attribution</div>
+            }
           </div>
         </div>
 
-        <!-- Jalon 3 : Transmission de l'offre au client -->
-        <div class="flex gap-3">
+        <!-- Jalon 3 : Ouverture par le commercial -->
+        <div class="flex gap-3" data-milestone-step="opened" [attr.data-milestone-state]="isOpened ? 'done' : 'pending'">
           <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+            <div
+              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+              [class]="isOpened ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+              aria-hidden="true">
+            </div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
           </div>
           <div class="space-y-0.5 pb-2">
-            <div class="font-medium text-slate-900 dark:text-white">Transmission de l'offre au client</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.status === 'draft' ? 'En cours' : 'Traitée' }}</div>
-            <div class="text-[11px] text-slate-400">Temps de chiffrage commercial : {{ modalQuote.commercialDelayFormatted }}</div>
+            <div class="font-medium" [class]="isOpened ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+              Ouverture par le commercial
+            </div>
+            @if (isOpened) {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                {{ modalQuote.firstOpenedAt ? modalQuote.firstOpenedAtFormatted : modalQuote.outlookReadAtFormatted }}
+              </div>
+            } @else {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’ouverture</div>
+            }
           </div>
         </div>
 
-        <!-- Jalon 4 : Offre transmise -->
-        <div class="flex gap-3">
+        <!-- Jalon 4 : Offre transmise au client -->
+        <div class="flex gap-3" data-milestone-step="sent" [attr.data-milestone-state]="isSent ? 'done' : 'pending'">
           <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full bg-slate-900 dark:bg-white shrink-0 mt-0.5"></div>
-            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1"></div>
+            <div
+              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+              [class]="isSent ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+              aria-hidden="true">
+            </div>
+            <div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 mt-1" aria-hidden="true"></div>
           </div>
           <div class="space-y-0.5 pb-2">
-            <div class="font-medium text-slate-900 dark:text-white">Offre transmise</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.sentAtFormatted }}</div>
+            <div class="font-medium" [class]="isSent ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+              Offre transmise au client
+            </div>
+            @if (isSent) {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.sentAtFormatted }}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">Temps de chiffrage commercial : {{ modalQuote.commercialDelayFormatted }}</div>
+            } @else {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente d’envoi</div>
+            }
           </div>
         </div>
 
         <!-- Jalon 5 : Décision du client -->
-        <div class="flex gap-3">
+        <div class="flex gap-3" data-milestone-step="decision" [attr.data-milestone-state]="isDecided ? 'done' : 'pending'">
           <div class="flex flex-col items-center">
-            <div class="w-3 h-3 rounded-full border-2 border-slate-900 dark:border-white bg-white dark:bg-slate-900 shrink-0 mt-0.5"></div>
+            <div
+              class="w-3 h-3 rounded-full shrink-0 mt-0.5"
+              [class]="isDecided ? 'bg-slate-900 dark:bg-white' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'"
+              aria-hidden="true">
+            </div>
           </div>
           <div class="space-y-0.5">
-            <div class="font-medium text-slate-900 dark:text-white">Décision du client</div>
-            <div class="text-[11px] text-slate-500 font-mono">{{ modalQuote.respondedAtFormatted }}</div>
-            <div class="text-[11px] text-slate-400">Statut : {{ modalQuote.status }}</div>
+            <div class="font-medium" [class]="isDecided ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'">
+              Décision du client
+            </div>
+            @if (isDecided) {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{{ modalQuote.respondedAtFormatted }}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                Statut : {{ modalQuote.status === 'accepted' ? 'Acceptée' : modalQuote.status === 'rejected' ? 'Refusée' : 'Expirée' }}
+              </div>
+            } @else {
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 italic">En attente de réponse</div>
+            }
           </div>
         </div>
 

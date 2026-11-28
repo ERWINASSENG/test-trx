@@ -235,6 +235,61 @@ describe('CrmTimingComponent', () => {
     expect(component.activeTimelineQuote()).toBeNull();
   });
 
+  it('ne devrait marquer aucun jalon comme réalisé avant ouverture, envoi et décision sur un brouillon non ouvert', () => {
+    const unopenedDraft: QuoteTimingItem = {
+      ...MOCK_OVERDUE_QUOTE,
+      status: 'draft',
+      repId: 'rep-2',
+      firstOpenedAt: null,
+      firstOpenedAtFormatted: 'Non ouverte',
+      outlookReadAt: null,
+      outlookReadAtFormatted: 'Non lu',
+      sentAtFormatted: 'En attente',
+      respondedAtFormatted: '—',
+    };
+
+    component.openTimelineModal(unopenedDraft);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const stateOf = (step: string) =>
+      host.querySelector(`[data-milestone-step="${step}"]`)?.getAttribute('data-milestone-state');
+
+    expect(stateOf('created')).toBe('done');
+    expect(stateOf('assigned')).toBe('done');
+    expect(stateOf('opened')).toBe('pending');
+    expect(stateOf('sent')).toBe('pending');
+    expect(stateOf('decision')).toBe('pending');
+
+    const text = host.textContent || '';
+    expect(text).toContain('En attente d’ouverture');
+    expect(text).toContain('En attente d’envoi');
+    expect(text).toContain('En attente de réponse');
+  });
+
+  it('devrait marquer tous les jalons comme réalisés pour une cotation ouverte, envoyée et acceptée', () => {
+    const acceptedQuote: QuoteTimingItem = {
+      ...MOCK_QUOTE_ITEM,
+      status: 'accepted',
+      firstOpenedAt: '2026-10-20T09:20:00Z',
+      firstOpenedAtFormatted: '20/10/2026 à 09:20',
+    };
+
+    component.openTimelineModal(acceptedQuote);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const stateOf = (step: string) =>
+      host.querySelector(`[data-milestone-step="${step}"]`)?.getAttribute('data-milestone-state');
+
+    expect(stateOf('created')).toBe('done');
+    expect(stateOf('assigned')).toBe('done');
+    expect(stateOf('opened')).toBe('done');
+    expect(stateOf('sent')).toBe('done');
+    expect(stateOf('decision')).toBe('done');
+    expect(host.textContent || '').toContain('Acceptée');
+  });
+
   // -------------------------------------------------------------------------
   // SECTION 8 : GESTION DES CAS LIMITES (LISTE VIDE ET ERREUR)
   // -------------------------------------------------------------------------
