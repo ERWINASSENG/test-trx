@@ -139,3 +139,72 @@ export interface MailComposerDraft {
   inReplyTo: string | null;
   references: string[];
 }
+
+export type MailAssignmentStatus = 'sent' | 'opened' | 'quote_created';
+export type MailAssignmentOpenedChannel = 'webmail' | 'imap_seen';
+
+export interface ForwardAssignMailRequestDto {
+  assignedTo: string;
+  clientEmail?: string | null;
+  clientName?: string | null;
+  note?: string | null;
+}
+
+export interface ForwardAssignMailResponseDto {
+  assignment: {
+    id: string;
+    assignedTo: string;
+    assignedToName: string;
+    clientEmail: string;
+    clientName: string | null;
+    subject: string;
+    status: MailAssignmentStatus;
+    forwardedAt: string;
+    forwardedAtFormatted: string;
+    messageId: string;
+  };
+}
+
+export interface MailAssignmentItemDto {
+  id: string;
+  managerUserId: string;
+  managerName: string;
+  assignedTo: string;
+  repName: string;
+  clientEmail: string;
+  clientName: string | null;
+  subject: string;
+  managerNote: string | null;
+  status: MailAssignmentStatus;
+  forwardedAt: string;
+  forwardedAtFormatted: string;
+  openedAt: string | null;
+  openedAtFormatted: string;
+  openedChannel: MailAssignmentOpenedChannel | null;
+  quoteId: string | null;
+  quoteNumber: string | null;
+  quoteStatus: string | null;
+  quoteCreatedAt: string | null;
+  quoteCreatedAtFormatted: string;
+  isUnopened: boolean;
+  isUnopenedAlert: boolean;
+}
+
+export interface MailAssignmentSummaryDto {
+  totalCount: number;
+  unopenedCount: number;
+  openedCount: number;
+  quoteCreatedCount: number;
+}
+
+export interface MailAssignmentListResponseDto {
+  summary: MailAssignmentSummaryDto;
+  assignments: MailAssignmentItemDto[];
+}
+
+export interface MailAssignmentFilterDto {
+  period?: '7d' | 'month' | 'quarter' | 'year' | 'day';
+  date?: string | null;
+  repId?: string;
+  status?: MailAssignmentStatus | 'all';
+}

@@ -262,8 +262,8 @@ export async function syncMailInboxAccount(
       const lock = await client.getMailboxLock(settings.watched_folder, { readOnly: true });
 
       try {
-        // 1. Vérification du flag \Seen sur les cotations DÉJÀ créées et liées à un email de cette boîte
-        const [unseenIngestedRes, linkedQuotesRes] = await Promise.all([
+        // 1. Vérification du flag \Seen sur les cotations DÉJÀ créées et les mails transférés suivis
+        const [unseenIngestedRes, linkedQuotesRes, pendingAssignmentsRes] = await Promise.all([
           adminClient
             .from('mail_ingested_messages')
             .select('id, imap_uid, quote_id')
@@ -279,9 +279,20 @@ export async function syncMailInboxAccount(
             .eq('folder', settings.watched_folder)
             .eq('entity_type', 'quote')
             .limit(50),
+          adminClient
+            .from('mail_assignments')
+            .select('id, forwarded_message_id, assigned_imap_uid, status')
+            .eq('assigned_to', String(account.user_id))
+            .is('opened_at', null)
+            .limit(50),
         ]);
 
-        const uidMap = new Map<number, { ingestedRowId?: string; quoteId: string }>();
+        const uidMap = new Map<
+          number,
+          { ingestedRowId?: string; quoteId?: string; assignmentId?: string; assignmentStatus?: string }
+        >();
+        const pendingAssignmentByMsgId = new Map<string, { id: string; status: string }>();
+
         for (const row of unseenIngestedRes.data || []) {
           uidMap.set(Number(row.imap_uid), {
             ingestedRowId: String(row.id),
@@ -290,8 +301,27 @@ export async function syncMailInboxAccount(
         }
         for (const link of linkedQuotesRes.data || []) {
           const uid = Number(link.imap_uid);
-          if (!uidMap.has(uid)) {
+          const existing = uidMap.get(uid);
+          if (!existing) {
             uidMap.set(uid, { quoteId: String(link.entity_id) });
+          } else if (!existing.quoteId) {
+            existing.quoteId = String(link.entity_id);
+          }
+        }
+        for (const assign of pendingAssignmentsRes.data || []) {
+          const assignId = String(assign.id);
+          const assignStatus = String(assign.status || 'sent');
+          const msgId = String(assign.forwarded_message_id || '').trim();
+          const uid = assign.assigned_imap_uid ? Number(assign.assigned_imap_uid) : null;
+          if (uid && uid > 0) {
+            const existing = uidMap.get(uid) || {};
+            uidMap.set(uid, {
+              ...existing,
+              assignmentId: assignId,
+              assignmentStatus: assignStatus,
+            });
+          } else if (msgId) {
+            pendingAssignmentByMsgId.set(msgId, { id: assignId, status: assignStatus });
           }
         }
 
@@ -310,28 +340,52 @@ export async function syncMailInboxAccount(
                   .eq('id', target.ingestedRowId);
               }
 
-              const { data: updatedQuote } = await adminClient
-                .from('sales_quotes')
-                .update({ outlook_read_at: seenIso, updated_at: seenIso })
-                .eq('id', target.quoteId)
-                .is('outlook_read_at', null)
-                .select('id')
-                .maybeSingle();
+              if (target.quoteId) {
+                const { data: updatedQuote } = await adminClient
+                  .from('sales_quotes')
+                  .update({ outlook_read_at: seenIso, updated_at: seenIso })
+                  .eq('id', target.quoteId)
+                  .is('outlook_read_at', null)
+                  .select('id')
+                  .maybeSingle();
 
-              if (updatedQuote?.id) {
-                await recordQuoteEvent(adminClient, {
-                  quoteId: target.quoteId,
-                  eventType: 'email_seen_in_outlook',
-                  actorUserId: String(account.user_id),
-                  metadata: { mailboxEmail: String(account.email_address) },
-                });
-                seenUpdatedCount++;
+                if (updatedQuote?.id) {
+                  await recordQuoteEvent(adminClient, {
+                    quoteId: target.quoteId,
+                    eventType: 'email_seen_in_outlook',
+                    actorUserId: String(account.user_id),
+                    metadata: { mailboxEmail: String(account.email_address) },
+                  });
+                  seenUpdatedCount++;
+                }
+              }
+
+              if (target.assignmentId) {
+                const assignmentUpdate: Record<string, unknown> = {
+                  opened_at: seenIso,
+                  opened_channel: 'imap_seen',
+                  updated_at: seenIso,
+                };
+                if (target.assignmentStatus === 'sent') {
+                  assignmentUpdate['status'] = 'opened';
+                }
+                const { data: updatedAssign } = await adminClient
+                  .from('mail_assignments')
+                  .update(assignmentUpdate)
+                  .eq('id', target.assignmentId)
+                  .eq('assigned_to', String(account.user_id))
+                  .is('opened_at', null)
+                  .select('id')
+                  .maybeSingle();
+                if (updatedAssign?.id) {
+                  seenUpdatedCount++;
+                }
               }
             }
           }
         }
 
-        // 2. Suivi des réponses clients (In-Reply-To / References) sur les cotations DÉJÀ existantes uniquement
+        // 2. Suivi des mails transférés (Message-ID) et des réponses clients (In-Reply-To / References)
         const uidNext = Number(client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.uidNext || 1 : 1);
         let startUid = maxProcessedUid + 1;
         if (maxProcessedUid === 0) {
@@ -382,6 +436,34 @@ export async function syncMailInboxAccount(
 
           for (const candidate of boundedCandidates) {
             maxProcessedUid = Math.max(maxProcessedUid, candidate.uid);
+
+            // Rapprochement d'un mail transféré par un manager (avant filtre expéditeurs exclus)
+            if (candidate.messageId && pendingAssignmentByMsgId.has(candidate.messageId)) {
+              const matchedAssign = pendingAssignmentByMsgId.get(candidate.messageId)!;
+              const nowMatchIso = new Date().toISOString();
+              const assignUpdate: Record<string, unknown> = {
+                assigned_imap_uid: candidate.uid,
+                assigned_mailbox_account_id: accountId,
+                updated_at: nowMatchIso,
+              };
+              if (candidate.isSeen) {
+                assignUpdate['opened_at'] = nowMatchIso;
+                assignUpdate['opened_channel'] = 'imap_seen';
+                if (matchedAssign.status === 'sent') {
+                  assignUpdate['status'] = 'opened';
+                }
+              }
+              const { data: updatedAssign } = await adminClient
+                .from('mail_assignments')
+                .update(assignUpdate)
+                .eq('id', matchedAssign.id)
+                .eq('assigned_to', String(account.user_id))
+                .select('id')
+                .maybeSingle();
+              if (updatedAssign?.id && candidate.isSeen) {
+                seenUpdatedCount++;
+              }
+            }
 
             if (isExcludedSender(candidate.senderEmail, String(account.email_address), settings.excluded_senders)) {
               continue;

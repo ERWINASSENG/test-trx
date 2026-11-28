@@ -1,6 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   CreateQuoteFromMailResponseDto,
+  ForwardAssignMailRequestDto,
+  ForwardAssignMailResponseDto,
+  MailAssignmentFilterDto,
+  MailAssignmentListResponseDto,
   MailDetailDto,
   MailErrorCode,
   MailFolderDto,
@@ -70,6 +74,9 @@ export class MailService {
 
   private readonly _errorCode = signal<MailErrorCode | null>(null);
   private readonly _errorMessage = signal<string | null>(null);
+  private readonly _assignments = signal<MailAssignmentListResponseDto | null>(null);
+  private readonly _isLoadingAssignments = signal<boolean>(false);
+  private readonly _assignmentsError = signal<string | null>(null);
 
   public readonly mailboxEmail = computed(() => this._mailboxEmail());
   public readonly folders = computed(() => this._folders());
@@ -94,6 +101,9 @@ export class MailService {
 
   public readonly errorCode = computed(() => this._errorCode());
   public readonly errorMessage = computed(() => this._errorMessage());
+  public readonly assignments = computed(() => this._assignments());
+  public readonly isLoadingAssignments = computed(() => this._isLoadingAssignments());
+  public readonly assignmentsError = computed(() => this._assignmentsError());
 
   constructor() {
     effect(() => {
@@ -405,6 +415,49 @@ export class MailService {
     }
   }
 
+  public async forwardAssignMessage(
+    ref: string,
+    payload: ForwardAssignMailRequestDto
+  ): Promise<MailReadApiResult<ForwardAssignMailResponseDto>> {
+    this._isSending.set(true);
+    try {
+      const encodedRef = encodeURIComponent(ref);
+      return await this.request<ForwardAssignMailResponseDto>(
+        `/api/mail/messages/${encodedRef}/forward-assign`,
+        'POST',
+        payload
+      );
+    } finally {
+      this._isSending.set(false);
+    }
+  }
+
+  public async listMailAssignments(
+    filter: MailAssignmentFilterDto = {}
+  ): Promise<MailReadApiResult<MailAssignmentListResponseDto>> {
+    this._isLoadingAssignments.set(true);
+    this._assignmentsError.set(null);
+    try {
+      const params = new URLSearchParams();
+      if (filter.period) params.set('period', filter.period);
+      if (filter.date) params.set('date', filter.date);
+      if (filter.repId && filter.repId !== 'all') params.set('repId', filter.repId);
+      if (filter.status && filter.status !== 'all') params.set('status', filter.status);
+      const qs = params.toString();
+      const path = qs ? `/api/mail/assignments?${qs}` : '/api/mail/assignments';
+
+      const res = await this.get<MailAssignmentListResponseDto>(path);
+      if (res.success && res.data) {
+        this._assignments.set(res.data);
+      } else {
+        this._assignmentsError.set(res.error || 'Impossible de charger les mails transférés.');
+      }
+      return res;
+    } finally {
+      this._isLoadingAssignments.set(false);
+    }
+  }
+
   public async refreshUnreadCount(): Promise<void> {
     const res = await this.get<MailUnreadCountResponse>('/api/mail/unread-count');
     if (res.success && res.data) {
@@ -435,6 +488,9 @@ export class MailService {
     this._isMutating.set(false);
     this._errorCode.set(null);
     this._errorMessage.set(null);
+    this._assignments.set(null);
+    this._isLoadingAssignments.set(false);
+    this._assignmentsError.set(null);
   }
 
   private removeMessageFromLocalState(ref: string): void {

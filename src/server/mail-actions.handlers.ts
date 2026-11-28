@@ -3,6 +3,11 @@ import express from 'express';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
 import { mailProvider } from './mail-imap';
+import {
+  findMailAssignmentForQuoteCreation,
+  isInternalCompanyEmail,
+  markMailAssignmentOpenedByMessageId,
+} from './mail-assignments.handlers';
 import { parseMailMessageRef, type MailMoveTarget } from './mail-provider';
 import {
   getMailActor,
@@ -156,6 +161,40 @@ export const updateMailFlagsHandler = async (
         error: 'Message introuvable ou déplacé.',
       });
       return;
+    }
+
+    // Détection temps réel d'ouverture d'un mail transféré par un manager (mutation PATCH, jamais sur GET)
+    if (isRead === true) {
+      const adminClient = getSupabaseAdmin();
+      if (adminClient) {
+        try {
+          const { data: pendingAssignments } = await adminClient
+            .from('mail_assignments')
+            .select('id')
+            .eq('assigned_to', actor.id)
+            .is('opened_at', null)
+            .limit(1);
+
+          if (pendingAssignments && pendingAssignments.length > 0) {
+            const detail = await mailProvider.getMessage(resolved.ctx, {
+              folder: parsedRef.folder,
+              uidValidity: parsedRef.uidValidity,
+              uid: parsedRef.uid,
+              allowRemoteImages: false,
+            });
+            if (detail?.messageId) {
+              await markMailAssignmentOpenedByMessageId(adminClient, {
+                assignedTo: actor.id,
+                messageId: detail.messageId,
+                channel: 'webmail',
+                imapUid: parsedRef.uid,
+              });
+            }
+          }
+        } catch {
+          // Non bloquant pour la mise à jour du flag IMAP
+        }
+      }
     }
 
     res.json({
@@ -468,12 +507,50 @@ export const createQuoteFromMailHandler = async (
       }
     }
 
-    // 4. Résolution ou création d'un prospect minimal strictement sur l'email expéditeur (zéro donnée devinée)
-    const senderEmail = (detail.from?.address || '').trim().toLowerCase();
-    const senderName = (detail.from?.name || '').trim();
+    // 4. Vérifie si ce mail est un transfert suivi par un manager (mail_assignments)
+    const matchedAssignment = await findMailAssignmentForQuoteCreation(adminClient, {
+      actorId: actor.id,
+      messageId: detail.messageId,
+    });
+
+    if (matchedAssignment?.quote_id) {
+      await adminClient.from('mail_links').upsert(
+        {
+          user_id: actor.id,
+          account_id: resolved.ctx.accountId,
+          internet_message_id: detail.messageId ? detail.messageId.slice(0, 255) : null,
+          folder: parsedRef.folder,
+          imap_uid: parsedRef.uid,
+          entity_type: 'quote',
+          entity_id: matchedAssignment.quote_id,
+        },
+        { onConflict: 'account_id,folder,imap_uid,entity_type' }
+      );
+      res.json({ created: false, quoteId: matchedAssignment.quote_id });
+      return;
+    }
+
+    // Résolution du vrai client d'origine (jamais le manager sur un mail transféré)
+    const senderEmail = matchedAssignment
+      ? matchedAssignment.client_email
+      : (detail.from?.address || '').trim().toLowerCase();
+    const senderName = matchedAssignment
+      ? (matchedAssignment.client_name || '').trim()
+      : (detail.from?.name || '').trim();
+
     if (!senderEmail) {
       res.status(422).json({
         error: 'Impossible de créer la cotation : adresse email de l’expéditeur introuvable.',
+      });
+      return;
+    }
+
+    // Garde-fou anti-interne : évite de créer un prospect au nom d'un manager/collègue si transféré hors /mail
+    if (!matchedAssignment && (await isInternalCompanyEmail(adminClient, senderEmail))) {
+      res.status(422).json({
+        code: 'MAIL_INTERNAL_SENDER_GUARD',
+        error:
+          'Cet email provient d’un collaborateur interne. Utilisez « Transférer à un commercial » depuis la messagerie pour conserver le vrai client, ou créez la cotation depuis le module Cotations.',
       });
       return;
     }
@@ -520,7 +597,9 @@ export const createQuoteFromMailHandler = async (
     const descColId = crypto.randomUUID();
     const amountColId = crypto.randomUUID();
     const createdIso = new Date().toISOString();
-    const cleanSubject = (detail.subject || '').trim().slice(0, 480) || 'Demande de cotation';
+    const cleanSubject =
+      (matchedAssignment?.subject || detail.subject || '').trim().slice(0, 480) ||
+      'Demande de cotation';
     const senderDisplay = senderName
       ? `${senderName} <${senderEmail}>`.slice(0, 310)
       : senderEmail.slice(0, 310);
@@ -533,7 +612,7 @@ export const createQuoteFromMailHandler = async (
         opportunity_id: null,
         contact_id: null,
         assigned_to: actor.id,
-        assigned_at: createdIso,
+        assigned_at: matchedAssignment ? matchedAssignment.forwarded_at : createdIso,
         created_by: actor.id,
         title: cleanSubject,
         currency: 'XAF',
@@ -552,7 +631,8 @@ export const createQuoteFromMailHandler = async (
         source_email_sender: senderDisplay,
         source_email_subject: cleanSubject,
         source_email_body_text: plainBody,
-        outlook_read_at: detail.isRead ? createdIso : null,
+        outlook_read_at: matchedAssignment?.opened_at || (detail.isRead ? createdIso : null),
+        first_opened_at: createdIso,
       })
       .select('id, quote_number')
       .single();
@@ -565,7 +645,7 @@ export const createQuoteFromMailHandler = async (
     const quoteId = String(createdQuote.id);
     const quoteNumber = String(createdQuote.quote_number || '');
 
-    await Promise.all([
+    const postCreateTasks: PromiseLike<unknown>[] = [
       adminClient.from('mail_links').upsert(
         {
           user_id: actor.id,
@@ -583,9 +663,10 @@ export const createQuoteFromMailHandler = async (
         eventType: 'email_received',
         actorUserId: actor.id,
         metadata: {
-          source: 'webmail_manual_create',
+          source: matchedAssignment ? 'webmail_forwarded_assign_create' : 'webmail_manual_create',
           senderEmail,
           subject: cleanSubject.slice(0, 200),
+          ...(matchedAssignment ? { mailAssignmentId: matchedAssignment.id } : {}),
         },
       }),
       writeAuditLog(adminClient, {
@@ -596,9 +677,32 @@ export const createQuoteFromMailHandler = async (
         details: {
           quote_number: quoteNumber,
           folder: parsedRef.folder,
+          ...(matchedAssignment ? { mail_assignment_id: matchedAssignment.id } : {}),
         },
       }),
-    ]);
+    ];
+
+    if (matchedAssignment) {
+      const assignmentUpdate: Record<string, unknown> = {
+        status: 'quote_created',
+        quote_id: quoteId,
+        quote_created_at: createdIso,
+        updated_at: createdIso,
+      };
+      if (!matchedAssignment.opened_at) {
+        assignmentUpdate['opened_at'] = createdIso;
+        assignmentUpdate['opened_channel'] = 'webmail';
+      }
+      postCreateTasks.push(
+        adminClient
+          .from('mail_assignments')
+          .update(assignmentUpdate)
+          .eq('id', matchedAssignment.id)
+          .eq('assigned_to', actor.id)
+      );
+    }
+
+    await Promise.all(postCreateTasks);
 
     res.status(201).json({
       created: true,

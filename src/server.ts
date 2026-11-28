@@ -137,6 +137,10 @@ import {
   moveMailMessageHandler,
   updateMailFlagsHandler,
 } from './server/mail-actions.handlers';
+import {
+  forwardAssignMailHandler,
+  listMailAssignmentsHandler,
+} from './server/mail-assignments.handlers';
 import { cronMailSyncHandler } from './server/mail-cron.handler';
 import { startMailSyncWorker } from './server/mail-sync';
 
@@ -1456,6 +1460,22 @@ app.post(
   requirePermission('mail.read'),
   requirePermission('quotes.create'),
   createQuoteFromMailHandler
+);
+app.post(
+  '/api/mail/messages/:ref/forward-assign',
+  requireAuth,
+  mailSendRateLimiter,
+  requirePermission('mail.read'),
+  requirePermission('mail.send'),
+  requirePermission('quotes.assign'),
+  forwardAssignMailHandler
+);
+app.get(
+  '/api/mail/assignments',
+  requireAuth,
+  mailReadRateLimiter,
+  requirePermission('quotes.timing.read'),
+  listMailAssignmentsHandler
 );
 app.get('/api/mail/unread-count', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailUnreadCountHandler);
 app.post('/api/mail/send', requireAuth, mailSendRateLimiter, requirePermission('mail.send'), sendMailHandler);

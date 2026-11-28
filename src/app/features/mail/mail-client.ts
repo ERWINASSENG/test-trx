@@ -20,8 +20,10 @@ import {
   MailSummaryDto,
   SendMailRequestDto,
 } from '../../core/models/mail.model';
+import { QuoteAssignee } from '../../core/models/quote.model';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { MailService } from '../../core/services/mail.service';
+import { QuoteService } from '../../core/services/quote.service';
 import { MailComposerComponent } from './mail-composer/mail-composer';
 
 @Component({
@@ -33,6 +35,7 @@ import { MailComposerComponent } from './mail-composer/mail-composer';
 })
 export class MailClientComponent implements OnInit {
   private readonly router = inject(Router);
+  private readonly quoteService = inject(QuoteService, { optional: true });
   public readonly mailService = inject(MailService);
   public readonly accessControl = inject(AccessControlService);
 
@@ -47,6 +50,15 @@ export class MailClientComponent implements OnInit {
   public readonly downloadingAttachmentId = signal<string | null>(null);
   public readonly pendingDeleteConfirmRef = signal<string | null>(null);
 
+  // Modale « Transférer à un commercial (avec suivi) »
+  public readonly forwardAssignTarget = signal<MailDetailDto | null>(null);
+  public readonly forwardAssignRepId = signal<string>('');
+  public readonly forwardAssignClientEmail = signal<string>('');
+  public readonly forwardAssignClientName = signal<string>('');
+  public readonly forwardAssignNote = signal<string>('');
+  public readonly forwardAssignError = signal<string | null>(null);
+  public readonly isLoadingAssignees = signal<boolean>(false);
+
   public readonly canReadMail = computed(() =>
     this.accessControl.hasPermission('mail.read')
   );
@@ -58,6 +70,12 @@ export class MailClientComponent implements OnInit {
   );
   public readonly canCreateQuote = computed(() =>
     this.accessControl.hasPermission('quotes.create')
+  );
+  public readonly canForwardAssign = computed(
+    () => this.canSendMail() && this.accessControl.hasPermission('quotes.assign')
+  );
+  public readonly commercialAssignees = computed<QuoteAssignee[]>(
+    () => this.quoteService?.assignees() ?? []
   );
   public readonly isCurrentFolderTrash = computed(
     () => this.activeFolderMeta()?.specialUse === 'trash'
@@ -400,6 +418,100 @@ export class MailClientComponent implements OnInit {
       inReplyTo: null,
       references: [],
     });
+  }
+
+  public async onOpenForwardAssign(detail: MailDetailDto): Promise<void> {
+    if (!this.canForwardAssign()) return;
+    this.forwardAssignError.set(null);
+    this.sendFeedback.set(null);
+    this.forwardAssignTarget.set(detail);
+    this.forwardAssignRepId.set('');
+    this.forwardAssignClientEmail.set((detail.from?.address || '').trim());
+    this.forwardAssignClientName.set(
+      detail.from?.name && detail.from.name !== detail.from.address
+        ? detail.from.name.trim()
+        : ''
+    );
+    this.forwardAssignNote.set('');
+
+    if (this.quoteService && this.quoteService.assignees().length === 0) {
+      this.isLoadingAssignees.set(true);
+      try {
+        await this.quoteService.loadAssignees();
+      } finally {
+        this.isLoadingAssignees.set(false);
+      }
+    }
+  }
+
+  public onCloseForwardAssign(): void {
+    this.forwardAssignError.set(null);
+    this.forwardAssignTarget.set(null);
+  }
+
+  public onForwardAssignRepChange(event: Event): void {
+    this.forwardAssignRepId.set((event.target as HTMLSelectElement).value);
+  }
+
+  public onForwardAssignClientEmailChange(event: Event): void {
+    this.forwardAssignClientEmail.set((event.target as HTMLInputElement).value);
+  }
+
+  public onForwardAssignClientNameChange(event: Event): void {
+    this.forwardAssignClientName.set((event.target as HTMLInputElement).value);
+  }
+
+  public onForwardAssignNoteChange(event: Event): void {
+    this.forwardAssignNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  public formatAssigneeLabel(assignee: QuoteAssignee): string {
+    const full = `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim();
+    return full ? `${full} (${assignee.email})` : assignee.email;
+  }
+
+  public async onSubmitForwardAssign(event: Event): Promise<void> {
+    event.preventDefault();
+    const detail = this.forwardAssignTarget();
+    if (!detail || !this.canForwardAssign()) return;
+
+    const assignedTo = this.forwardAssignRepId().trim();
+    const clientEmail = this.forwardAssignClientEmail().trim();
+    const clientName = this.forwardAssignClientName().trim();
+    const note = this.forwardAssignNote().trim();
+
+    if (!assignedTo) {
+      this.forwardAssignError.set('Sélectionnez le commercial destinataire.');
+      return;
+    }
+    if (!clientEmail) {
+      this.forwardAssignError.set('Renseignez l’adresse email du client d’origine.');
+      return;
+    }
+
+    this.forwardAssignError.set(null);
+    const res = await this.mailService.forwardAssignMessage(detail.ref, {
+      assignedTo,
+      clientEmail,
+      clientName: clientName || null,
+      note: note || null,
+    });
+
+    if (!res.success || !res.data?.assignment) {
+      this.forwardAssignError.set(
+        res.error || 'Impossible de transférer cette demande au commercial.'
+      );
+      return;
+    }
+
+    this.forwardAssignTarget.set(null);
+    this.sendFeedback.set(
+      `Demande transférée à ${res.data.assignment.assignedToName} avec suivi d’ouverture (aucune cotation créée automatiquement).`
+    );
+
+    if (this.activeFolderMeta()?.specialUse === 'sent') {
+      await this.mailService.loadMessages(this.mailService.selectedFolder(), 1);
+    }
   }
 
   public onCloseComposer(): void {

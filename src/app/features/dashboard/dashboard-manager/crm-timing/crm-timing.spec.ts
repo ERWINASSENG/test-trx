@@ -7,8 +7,10 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CrmTimingComponent } from './crm-timing';
+import { MailService } from '../../../../core/services/mail.service';
 import { QuoteService } from '../../../../core/services/quote.service';
 import { AccessControlService } from '../../../../core/services/access-control.service';
+import { MailAssignmentListResponseDto } from '../../../../core/models/mail.model';
 import {
   QuoteTimingAnalyticsResponse,
   QuoteTimingItem,
@@ -93,6 +95,65 @@ const MOCK_ANALYTICS: QuoteTimingAnalyticsResponse = {
   totalCount: 2,
 };
 
+const MOCK_FORWARDED_ASSIGNMENTS: MailAssignmentListResponseDto = {
+  summary: {
+    totalCount: 2,
+    unopenedCount: 1,
+    openedCount: 0,
+    quoteCreatedCount: 1,
+  },
+  assignments: [
+    {
+      id: 'assign-unopened',
+      managerUserId: 'mgr-1',
+      managerName: 'Paul Manager',
+      assignedTo: 'rep-2',
+      repName: 'Marie Claire',
+      clientEmail: 'achats@boissons-cm.com',
+      clientName: 'Boissons Cameroun',
+      subject: 'Demande de cotation fret aérien Douala',
+      managerNote: 'À traiter aujourd’hui',
+      status: 'sent',
+      forwardedAt: '2026-11-28T07:00:00.000Z',
+      forwardedAtFormatted: '28/11/2026 à 08:00',
+      openedAt: null,
+      openedAtFormatted: 'En attente d’ouverture',
+      openedChannel: null,
+      quoteId: null,
+      quoteNumber: null,
+      quoteStatus: null,
+      quoteCreatedAt: null,
+      quoteCreatedAtFormatted: 'Aucune cotation créée',
+      isUnopened: true,
+      isUnopenedAlert: true,
+    },
+    {
+      id: 'assign-quoted',
+      managerUserId: 'mgr-1',
+      managerName: 'Paul Manager',
+      assignedTo: 'rep-1',
+      repName: 'Jean Dupont',
+      clientEmail: 'logistique@socapalm.cm',
+      clientName: 'SOCAPALM Cameroun',
+      subject: 'Cotation 2x40HC Le Havre - Douala',
+      managerNote: null,
+      status: 'quote_created',
+      forwardedAt: '2026-11-27T09:00:00.000Z',
+      forwardedAtFormatted: '27/11/2026 à 10:00',
+      openedAt: '2026-11-27T09:15:00.000Z',
+      openedAtFormatted: '27/11/2026 à 10:15',
+      openedChannel: 'webmail',
+      quoteId: 'quote-1',
+      quoteNumber: 'COT-2026-001',
+      quoteStatus: 'draft',
+      quoteCreatedAt: '2026-11-27T09:20:00.000Z',
+      quoteCreatedAtFormatted: '27/11/2026 à 10:20',
+      isUnopened: false,
+      isUnopenedAlert: false,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // SECTION 2 : CONFIGURATION DU TESTBED & INSTANCIATION
 // ---------------------------------------------------------------------------
@@ -104,6 +165,8 @@ describe('CrmTimingComponent', () => {
   let mockIsLoadingSignal: ReturnType<typeof signal<boolean>>;
   let mockErrorSignal: ReturnType<typeof signal<string | null>>;
   let mockLoadTimingAnalytics: ReturnType<typeof vi.fn>;
+  let mockAssignmentsSignal: ReturnType<typeof signal<MailAssignmentListResponseDto | null>>;
+  let mockListMailAssignments: ReturnType<typeof vi.fn>;
 
   const mockAccessControl = {
     hasPermission: vi.fn((perm: string) => perm === 'quotes.timing.read'),
@@ -114,6 +177,11 @@ describe('CrmTimingComponent', () => {
     mockIsLoadingSignal = signal<boolean>(false);
     mockErrorSignal = signal<string | null>(null);
     mockLoadTimingAnalytics = vi.fn().mockResolvedValue(undefined);
+    mockAssignmentsSignal = signal<MailAssignmentListResponseDto | null>(MOCK_FORWARDED_ASSIGNMENTS);
+    mockListMailAssignments = vi.fn().mockResolvedValue({
+      success: true,
+      data: MOCK_FORWARDED_ASSIGNMENTS,
+    });
 
     const mockQuoteService = {
       timingAnalytics: mockTimingAnalyticsSignal,
@@ -122,10 +190,18 @@ describe('CrmTimingComponent', () => {
       loadTimingAnalytics: mockLoadTimingAnalytics,
     };
 
+    const mockMailService = {
+      assignments: mockAssignmentsSignal,
+      isLoadingAssignments: signal<boolean>(false),
+      assignmentsError: signal<string | null>(null),
+      listMailAssignments: mockListMailAssignments,
+    };
+
     await TestBed.configureTestingModule({
       imports: [CrmTimingComponent],
       providers: [
         { provide: QuoteService, useValue: mockQuoteService },
+        { provide: MailService, useValue: mockMailService },
         { provide: AccessControlService, useValue: mockAccessControl },
       ],
     }).compileComponents();
@@ -322,6 +398,40 @@ describe('CrmTimingComponent', () => {
     fixture.detectChanges();
 
     expect(component.error()).toBe('Erreur réseau de communication avec le serveur');
+  });
+
+  // -------------------------------------------------------------------------
+  // SECTION 9 : ONGLET MAILS TRANSFÉRÉS (SUIVI SANS COTATION AUTO)
+  // -------------------------------------------------------------------------
+  it('devrait afficher les 3 jalons réels (Transféré, Ouvert, Cotation) dans l’onglet Mails transférés', () => {
+    component.switchSubTab('forwarded');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('#forwarded-mails-panel')).toBeTruthy();
+
+    const unopenedRow = host.querySelector('[data-assignment-id="assign-unopened"]');
+    expect(unopenedRow?.querySelector('[data-forward-step="sent"]')?.getAttribute('data-forward-state')).toBe('done');
+    expect(unopenedRow?.querySelector('[data-forward-step="opened"]')?.getAttribute('data-forward-state')).toBe('pending');
+    expect(unopenedRow?.querySelector('[data-forward-step="quote"]')?.getAttribute('data-forward-state')).toBe('pending');
+    expect(unopenedRow?.textContent || '').toContain('En attente d’ouverture');
+    expect(unopenedRow?.textContent || '').toContain('Aucune cotation créée');
+
+    const quotedRow = host.querySelector('[data-assignment-id="assign-quoted"]');
+    expect(quotedRow?.querySelector('[data-forward-step="sent"]')?.getAttribute('data-forward-state')).toBe('done');
+    expect(quotedRow?.querySelector('[data-forward-step="opened"]')?.getAttribute('data-forward-state')).toBe('done');
+    expect(quotedRow?.querySelector('[data-forward-step="quote"]')?.getAttribute('data-forward-state')).toBe('done');
+    expect(quotedRow?.textContent || '').toContain('COT-2026-001');
+  });
+
+  it('devrait filtrer les mails transférés par statut (non ouvert vs cotation créée)', () => {
+    component.selectedForwardedStatusFilter.set('sent');
+    expect(component.filteredForwardedAssignments().length).toBe(1);
+    expect(component.filteredForwardedAssignments()[0].id).toBe('assign-unopened');
+
+    component.selectedForwardedStatusFilter.set('quote_created');
+    expect(component.filteredForwardedAssignments().length).toBe(1);
+    expect(component.filteredForwardedAssignments()[0].id).toBe('assign-quoted');
   });
 });
 

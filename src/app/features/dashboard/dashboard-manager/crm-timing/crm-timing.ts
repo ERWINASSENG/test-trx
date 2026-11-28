@@ -11,6 +11,11 @@ import {
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
+  MailAssignmentItemDto,
+  MailAssignmentStatus,
+  MailAssignmentSummaryDto,
+} from '../../../../core/models/mail.model';
+import {
   QuoteEventItem,
   QuoteEventType,
   QuoteTimingFilter,
@@ -19,6 +24,7 @@ import {
   QuoteTimingPeriod,
   SalesRepPerformance,
 } from '../../../../core/models/quote.model';
+import { MailService } from '../../../../core/services/mail.service';
 import { QuoteService } from '../../../../core/services/quote.service';
 import { AccessControlService } from '../../../../core/services/access-control.service';
 
@@ -45,6 +51,7 @@ export interface CalendarDayCell {
 })
 export class CrmTimingComponent implements OnInit, OnDestroy {
   private readonly quoteService = inject(QuoteService);
+  private readonly mailService = inject(MailService, { optional: true });
   private readonly accessControl = inject(AccessControlService);
   private readonly elementRef = inject(ElementRef);
 
@@ -60,12 +67,35 @@ export class CrmTimingComponent implements OnInit, OnDestroy {
   public readonly isCalendarOpen = signal<boolean>(false);
 
   // Sous-onglets de vue
-  public readonly currentSubTab = signal<'quotes' | 'reps' | 'analytics'>('quotes');
+  public readonly currentSubTab = signal<'quotes' | 'forwarded' | 'reps' | 'analytics'>('quotes');
 
-  // Filtres dans la vue des cotations
+  // Filtres dans la vue des cotations & mails transférés
   public readonly searchQuery = signal<string>('');
   public readonly selectedRepFilter = signal<string>('all');
   public readonly selectedSlaFilter = signal<string>('all');
+  public readonly selectedForwardedStatusFilter = signal<MailAssignmentStatus | 'all'>('all');
+
+  // Suivi des mails transférés Manager -> Commercial (sans cotation auto-créée)
+  public readonly forwardedAssignments = computed<MailAssignmentItemDto[]>(
+    () => this.mailService?.assignments()?.assignments ?? []
+  );
+  public readonly forwardedSummary = computed<MailAssignmentSummaryDto>(() => {
+    const summary = this.mailService?.assignments()?.summary;
+    return (
+      summary ?? {
+        totalCount: 0,
+        unopenedCount: 0,
+        openedCount: 0,
+        quoteCreatedCount: 0,
+      }
+    );
+  });
+  public readonly isForwardedLoading = computed<boolean>(
+    () => this.mailService?.isLoadingAssignments() ?? false
+  );
+  public readonly forwardedError = computed<string | null>(
+    () => this.mailService?.assignmentsError() ?? null
+  );
 
   // Modale chronologique de détails
   public readonly activeTimelineQuote = signal<QuoteTimingItem | null>(null);
@@ -217,6 +247,28 @@ export class CrmTimingComponent implements OnInit, OnDestroy {
     });
   });
 
+  // Mails transférés filtrés dynamiquement
+  public readonly filteredForwardedAssignments = computed<MailAssignmentItemDto[]>(() => {
+    const items = this.forwardedAssignments();
+    const search = this.searchQuery().toLowerCase().trim();
+    const rep = this.selectedRepFilter();
+    const status = this.selectedForwardedStatusFilter();
+
+    return items.filter((item) => {
+      const matchesSearch =
+        !search ||
+        item.subject.toLowerCase().includes(search) ||
+        item.clientEmail.toLowerCase().includes(search) ||
+        (item.clientName || '').toLowerCase().includes(search) ||
+        item.repName.toLowerCase().includes(search) ||
+        (item.quoteNumber || '').toLowerCase().includes(search);
+
+      const matchesRep = rep === 'all' || item.assignedTo === rep;
+      const matchesStatus = status === 'all' || item.status === status;
+      return matchesSearch && matchesRep && matchesStatus;
+    });
+  });
+
   public ngOnInit(): void {
     void this.loadData();
     if (typeof this.quoteService.subscribeToTimingRealtime === 'function') {
@@ -239,12 +291,23 @@ export class CrmTimingComponent implements OnInit, OnDestroy {
   }
 
   public async loadData(): Promise<void> {
+    const repId = this.selectedRepFilter() !== 'all' ? this.selectedRepFilter() : undefined;
     const filter: Partial<QuoteTimingFilter> = {
       period: this.currentPeriod(),
       date: this.selectedDate(),
-      repId: this.selectedRepFilter() !== 'all' ? this.selectedRepFilter() : undefined,
+      repId,
     };
-    await this.quoteService.loadTimingAnalytics(filter);
+    const tasks: Promise<unknown>[] = [this.quoteService.loadTimingAnalytics(filter)];
+    if (this.mailService && typeof this.mailService.listMailAssignments === 'function') {
+      tasks.push(
+        this.mailService.listMailAssignments({
+          period: this.currentPeriod(),
+          date: this.selectedDate(),
+          repId,
+        })
+      );
+    }
+    await Promise.all(tasks);
   }
 
   // --- Gestion du sélecteur temporel et du calendrier ---
@@ -299,7 +362,7 @@ export class CrmTimingComponent implements OnInit, OnDestroy {
 
   // --- Gestion des sous-onglets et filtres ---
 
-  public switchSubTab(tab: 'quotes' | 'reps' | 'analytics'): void {
+  public switchSubTab(tab: 'quotes' | 'forwarded' | 'reps' | 'analytics'): void {
     this.currentSubTab.set(tab);
   }
 
@@ -312,6 +375,7 @@ export class CrmTimingComponent implements OnInit, OnDestroy {
     this.searchQuery.set('');
     this.selectedRepFilter.set('all');
     this.selectedSlaFilter.set('all');
+    this.selectedForwardedStatusFilter.set('all');
     this.selectedDate.set(null);
     this.selectedDateLabel.set('7 jours');
     this.currentPeriod.set('month');
