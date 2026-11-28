@@ -297,4 +297,53 @@ describe('MailClientComponent', () => {
     readBtn?.click();
     expect(mockMailService.updateFlags).toHaveBeenCalledWith('SU5CT1g:12:77', { isRead: true });
   });
+
+  it('marque automatiquement un mail non lu comme lu à l’ouverture (et ne ré-appelle pas si déjà lu)', async () => {
+    const unreadDetail: MailDetailDto = {
+      ref: 'SU5CT1g:12:88',
+      folder: 'INBOX',
+      uid: 88,
+      uidValidity: 12,
+      messageId: '<msg-88@example.com>',
+      subject: 'Nouvelle demande client',
+      from: { name: 'Client', address: 'client@example.com' },
+      to: [{ name: 'Erwin', address: 'erwinalberic@transimex-cm.com' }],
+      cc: [],
+      replyTo: [],
+      date: '2026-11-28T10:00:00.000Z',
+      snippet: 'Bonjour',
+      isRead: false,
+      isFlagged: false,
+      hasAttachments: false,
+      sizeBytes: 512,
+      inReplyTo: null,
+      references: [],
+      textBody: 'Bonjour',
+      sanitizedHtml: '<p>Bonjour</p>',
+      hasBlockedRemoteImages: false,
+      blockedRemoteImagesCount: 0,
+      attachments: [],
+      linkedQuoteId: null,
+    };
+
+    const fixture = TestBed.createComponent(MailClientComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    mockMailService.loadMessageDetail.mockResolvedValueOnce({
+      success: true,
+      data: unreadDetail,
+    });
+    await fixture.componentInstance.onSelectMessage(unreadDetail);
+    expect(mockMailService.updateFlags).toHaveBeenCalledWith('SU5CT1g:12:88', { isRead: true });
+
+    mockMailService.updateFlags.mockClear();
+    const readDetail: MailDetailDto = { ...unreadDetail, ref: 'SU5CT1g:12:89', uid: 89, isRead: true };
+    mockMailService.loadMessageDetail.mockResolvedValueOnce({
+      success: true,
+      data: readDetail,
+    });
+    await fixture.componentInstance.onSelectMessage(readDetail);
+    expect(mockMailService.updateFlags).not.toHaveBeenCalled();
+  });
 });

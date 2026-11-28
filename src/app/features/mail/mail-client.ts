@@ -221,7 +221,10 @@ export class MailClientComponent implements OnInit {
     this.showPlainText.set(false);
     this.actionError.set(null);
     this.pendingDeleteConfirmRef.set(null);
-    await this.mailService.loadMessageDetail(summary.ref, false);
+    const res = await this.mailService.loadMessageDetail(summary.ref, false);
+    if (res.success && res.data && !res.data.isRead) {
+      void this.mailService.updateFlags(summary.ref, { isRead: true });
+    }
   }
 
   public async onToggleRead(detail: MailDetailDto): Promise<void> {
