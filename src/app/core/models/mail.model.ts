@@ -88,8 +88,43 @@ export interface MailUnreadCountResponse {
 export type MailErrorCode =
   | 'MAILBOX_NOT_CONNECTED'
   | 'MAIL_SERVER_NOT_CONFIGURED'
+  | 'MAIL_SMTP_NOT_CONFIGURED'
   | 'MAILBOX_AUTH_FAILED'
   | 'MAIL_FOLDER_NOT_FOUND'
   | 'MAIL_MESSAGE_NOT_FOUND'
   | 'MAIL_UPSTREAM_UNAVAILABLE'
+  | 'MAIL_INVALID_PAYLOAD'
+  | 'MAIL_RECIPIENT_REJECTED'
+  | 'MAIL_SMTP_SEND_FAILED'
   | 'UNKNOWN';
+
+export interface SendMailRequestDto {
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  textBody: string;
+  inReplyTo?: string | null;
+  references?: string[];
+}
+
+export interface SendMailResponseDto {
+  sent: boolean;
+  messageId: string;
+  acceptedCount: number;
+  rejectedCount: number;
+  sentFolderAppended: boolean;
+}
+
+export type MailComposerMode = 'new' | 'reply' | 'reply_all' | 'forward';
+
+export interface MailComposerDraft {
+  mode: MailComposerMode;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  textBody: string;
+  inReplyTo: string | null;
+  references: string[];
+}

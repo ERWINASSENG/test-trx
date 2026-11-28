@@ -1,5 +1,5 @@
 import { ImapFlow } from 'imapflow';
-import nodemailer from 'nodemailer';
+import nodemailer, { type SendMailOptions } from 'nodemailer';
 import { resolveSafePublicMailHost } from './mail-crypto';
 import { withMailboxLock } from './mail-sync';
 
@@ -325,7 +325,7 @@ export async function sendMailViaSmtp(
     ? { name: safeDisplayName, address: ctx.emailAddress }
     : ctx.emailAddress;
 
-  const baseMailOptions: nodemailer.SendMailOptions = {
+  const baseMailOptions: SendMailOptions = {
     from: fromField,
     to: payload.to,
     ...(payload.cc.length > 0 ? { cc: payload.cc } : {}),

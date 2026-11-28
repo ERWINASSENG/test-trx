@@ -126,6 +126,10 @@ import {
   listMailFoldersHandler,
   listMailMessagesHandler,
 } from './server/mail-read.handlers';
+import {
+  sendMailHandler,
+  testAdminSmtpSettingsHandler,
+} from './server/mail-send.handlers';
 import { startMailSyncWorker } from './server/mail-sync';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
@@ -190,6 +194,7 @@ app.use(
 );
 
 // Parsing JSON pour les requêtes d'API avec limite explicite de payload
+app.use('/api/mail/send', express.json({ limit: '512kb' }));
 app.use(express.json({ limit: '256kb' }));
 
 app.use('/api', (req, res, next): void => {
@@ -1399,6 +1404,7 @@ app.delete('/api/profile/mail-account', requireAuth, mailConnectorRateLimiter, r
 app.get('/api/quotes/mailboxes-status', requireAuth, requirePermission('quotes.timing.read'), listTeamMailboxesStatusHandler);
 app.get('/api/configuration/mail-settings', requireAuth, requirePermission('configuration.read'), getAdminMailSettingsHandler);
 app.put('/api/configuration/mail-settings', requireAuth, mailConnectorRateLimiter, requirePermission('configuration.manage'), updateAdminMailSettingsHandler);
+app.post('/api/configuration/mail-settings/test-smtp', requireAuth, mailConnectorRateLimiter, requirePermission('configuration.manage'), testAdminSmtpSettingsHandler);
 
 // Module Messagerie (lecture IMAP directe) : rate-limiting dédié (120 req / min / utilisateur — S11).
 const mailReadRateLimiter = rateLimit({
@@ -1414,10 +1420,25 @@ const mailReadRateLimiter = rateLimit({
   message: { error: 'Trop de requêtes sur votre messagerie. Patientez quelques instants.' },
 });
 
+// Module Messagerie (envoi SMTP) : rate-limiting strict anti-spam (30 envois / heure / utilisateur — S11).
+const mailSendRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: express.Request) => {
+    const u = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
+    return u?.id ? `mail-send-user:${u.id}` : `mail-send-ip:${req.ip || 'unknown'}`;
+  },
+  message: { error: 'Limite d’envoi atteinte (30 emails par heure). Réessayez plus tard.' },
+});
+
 app.get('/api/mail/folders', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailFoldersHandler);
 app.get('/api/mail/messages', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailMessagesHandler);
 app.get('/api/mail/messages/:ref', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailMessageHandler);
 app.get('/api/mail/unread-count', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailUnreadCountHandler);
+app.post('/api/mail/send', requireAuth, mailSendRateLimiter, requirePermission('mail.send'), sendMailHandler);
 
 // Garde-fou pour toute route /api ou /api/* non reconnue :
 // garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).

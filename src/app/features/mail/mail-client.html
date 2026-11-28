@@ -28,6 +28,17 @@
     </div>
 
     <div class="mail-toolbar-right">
+      @if (canSendMail() && mailService.isMailboxConnected()) {
+        <button
+          type="button"
+          class="mail-primary-btn"
+          (click)="onOpenNewMessage()"
+          id="mail-compose-new-btn">
+          <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4">edit</mat-icon>
+          <span>Nouveau message</span>
+        </button>
+      }
+
       @if (canReadMail() && mailService.isMailboxConnected()) {
         <button
           type="button"
@@ -103,6 +114,26 @@
       </div>
     </div>
   } @else {
+    <!-- Bandeau de confirmation après envoi -->
+    @if (sendFeedback(); as okMsg) {
+      <div
+        class="flex items-center justify-between gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium shrink-0"
+        role="status"
+        id="mail-send-feedback-banner">
+        <div class="flex items-center gap-2 min-w-0">
+          <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4 shrink-0">check_circle</mat-icon>
+          <span class="truncate">{{ okMsg }}</span>
+        </div>
+        <button
+          type="button"
+          class="mail-icon-btn"
+          (click)="dismissSendFeedback()"
+          aria-label="Fermer la notification d’envoi">
+          <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4">close</mat-icon>
+        </button>
+      </div>
+    }
+
     <!-- Bandeau d'erreur IMAP / authentification -->
     @if (mailService.errorMessage(); as errorMsg) {
       <div class="mail-error-banner" role="alert" id="mail-error-banner">
@@ -291,13 +322,42 @@
                 </h2>
               </div>
 
-              <button
-                type="button"
-                class="mail-toggle-btn shrink-0"
-                (click)="togglePlainTextView()"
-                id="mail-toggle-plain-text-btn">
-                {{ showPlainText() ? 'Vue HTML' : 'Texte brut' }}
-              </button>
+              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                @if (canSendMail()) {
+                  <button
+                    type="button"
+                    class="mail-action-btn"
+                    (click)="onReply(detail, false)"
+                    id="mail-reply-btn">
+                    <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4">reply</mat-icon>
+                    <span class="hidden sm:inline">Répondre</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="mail-action-btn"
+                    (click)="onReply(detail, true)"
+                    id="mail-reply-all-btn">
+                    <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4">reply_all</mat-icon>
+                    <span class="hidden xl:inline">Répondre à tous</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="mail-action-btn"
+                    (click)="onForward(detail)"
+                    id="mail-forward-btn">
+                    <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4">forward</mat-icon>
+                    <span class="hidden xl:inline">Transférer</span>
+                  </button>
+                }
+
+                <button
+                  type="button"
+                  class="mail-toggle-btn"
+                  (click)="togglePlainTextView()"
+                  id="mail-toggle-plain-text-btn">
+                  {{ showPlainText() ? 'Vue HTML' : 'Texte brut' }}
+                </button>
+              </div>
             </div>
 
             <dl class="mail-detail-meta">
@@ -386,5 +446,16 @@
         }
       </main>
     </div>
+  }
+
+  @if (activeComposerDraft(); as composerDraft) {
+    <app-mail-composer
+      [draft]="composerDraft"
+      [senderEmail]="mailService.mailboxEmail()"
+      [isSending]="mailService.isSending()"
+      [serverError]="composerError()"
+      (send)="onSendMail($event)"
+      (closed)="onCloseComposer()">
+    </app-mail-composer>
   }
 </section>

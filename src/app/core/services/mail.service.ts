@@ -8,6 +8,8 @@ import {
   MailMessagesPageResponse,
   MailSummaryDto,
   MailUnreadCountResponse,
+  SendMailRequestDto,
+  SendMailResponseDto,
 } from '../models/mail.model';
 import { getApiErrorMessage } from '../utils/api-error.util';
 import { AuthService } from './auth.service';
@@ -22,10 +24,14 @@ export interface MailReadApiResult<T> {
 const KNOWN_ERROR_CODES = new Set<MailErrorCode>([
   'MAILBOX_NOT_CONNECTED',
   'MAIL_SERVER_NOT_CONFIGURED',
+  'MAIL_SMTP_NOT_CONFIGURED',
   'MAILBOX_AUTH_FAILED',
   'MAIL_FOLDER_NOT_FOUND',
   'MAIL_MESSAGE_NOT_FOUND',
   'MAIL_UPSTREAM_UNAVAILABLE',
+  'MAIL_INVALID_PAYLOAD',
+  'MAIL_RECIPIENT_REJECTED',
+  'MAIL_SMTP_SEND_FAILED',
   'UNKNOWN',
 ]);
 
@@ -54,6 +60,7 @@ export class MailService {
   private readonly _isLoadingFolders = signal<boolean>(false);
   private readonly _isLoadingMessages = signal<boolean>(false);
   private readonly _isLoadingDetail = signal<boolean>(false);
+  private readonly _isSending = signal<boolean>(false);
 
   private readonly _errorCode = signal<MailErrorCode | null>(null);
   private readonly _errorMessage = signal<string | null>(null);
@@ -75,6 +82,7 @@ export class MailService {
   public readonly isLoadingFolders = computed(() => this._isLoadingFolders());
   public readonly isLoadingMessages = computed(() => this._isLoadingMessages());
   public readonly isLoadingDetail = computed(() => this._isLoadingDetail());
+  public readonly isSending = computed(() => this._isSending());
 
   public readonly errorCode = computed(() => this._errorCode());
   public readonly errorMessage = computed(() => this._errorMessage());
@@ -190,6 +198,26 @@ export class MailService {
     this._isLoadingDetail.set(false);
   }
 
+  public async sendMessage(
+    payload: SendMailRequestDto
+  ): Promise<MailReadApiResult<SendMailResponseDto>> {
+    this._isSending.set(true);
+    try {
+      const safeBody: SendMailRequestDto = {
+        to: payload.to,
+        cc: payload.cc ?? [],
+        bcc: payload.bcc ?? [],
+        subject: payload.subject,
+        textBody: payload.textBody,
+        inReplyTo: payload.inReplyTo ?? null,
+        references: payload.references ?? [],
+      };
+      return await this.request<SendMailResponseDto>('/api/mail/send', 'POST', safeBody);
+    } finally {
+      this._isSending.set(false);
+    }
+  }
+
   public async refreshUnreadCount(): Promise<void> {
     const res = await this.get<MailUnreadCountResponse>('/api/mail/unread-count');
     if (res.success && res.data) {
@@ -215,6 +243,7 @@ export class MailService {
     this._isLoadingFolders.set(false);
     this._isLoadingMessages.set(false);
     this._isLoadingDetail.set(false);
+    this._isSending.set(false);
     this._errorCode.set(null);
     this._errorMessage.set(null);
   }
@@ -247,6 +276,14 @@ export class MailService {
   }
 
   private async get<T>(path: string): Promise<MailReadApiResult<T>> {
+    return this.request<T>(path, 'GET');
+  }
+
+  private async request<T>(
+    path: string,
+    method: 'GET' | 'POST',
+    body?: unknown
+  ): Promise<MailReadApiResult<T>> {
     this.resetForAccountChange();
     const requestedUserId = this.authService.currentUser()?.id ?? null;
     const token = this.authService.token();
@@ -256,11 +293,13 @@ export class MailService {
 
     try {
       const response = await fetch(path, {
-        method: 'GET',
+        method,
         headers: {
           Accept: 'application/json',
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           Authorization: `Bearer ${token}`,
         },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         cache: 'no-store',
       });
 

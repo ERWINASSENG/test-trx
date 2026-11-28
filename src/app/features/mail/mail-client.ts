@@ -11,16 +11,20 @@ import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import {
   MailAddressDto,
+  MailComposerDraft,
+  MailDetailDto,
   MailFolderDto,
   MailFolderSpecialUse,
   MailSummaryDto,
+  SendMailRequestDto,
 } from '../../core/models/mail.model';
 import { AccessControlService } from '../../core/services/access-control.service';
 import { MailService } from '../../core/services/mail.service';
+import { MailComposerComponent } from './mail-composer/mail-composer';
 
 @Component({
   selector: 'app-mail-client',
-  imports: [DatePipe, RouterLink, MatIconModule],
+  imports: [DatePipe, RouterLink, MatIconModule, MailComposerComponent],
   templateUrl: './mail-client.html',
   styleUrl: './mail-client.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,9 +36,15 @@ export class MailClientComponent implements OnInit {
   public readonly remoteImagesAllowed = signal<boolean>(false);
   public readonly showPlainText = signal<boolean>(false);
   public readonly isMobileFoldersOpen = signal<boolean>(false);
+  public readonly activeComposerDraft = signal<MailComposerDraft | null>(null);
+  public readonly composerError = signal<string | null>(null);
+  public readonly sendFeedback = signal<string | null>(null);
 
   public readonly canReadMail = computed(() =>
     this.accessControl.hasPermission('mail.read')
+  );
+  public readonly canSendMail = computed(() =>
+    this.accessControl.hasPermission('mail.send')
   );
   public readonly canConnectMail = computed(() =>
     this.accessControl.hasPermission('mail.self.connect')
@@ -152,6 +162,153 @@ export class MailClientComponent implements OnInit {
 
   public toggleMobileFolders(): void {
     this.isMobileFoldersOpen.update((v) => !v);
+  }
+
+  public onOpenNewMessage(): void {
+    if (!this.canSendMail()) return;
+    this.composerError.set(null);
+    this.sendFeedback.set(null);
+    this.activeComposerDraft.set({
+      mode: 'new',
+      to: [],
+      cc: [],
+      bcc: [],
+      subject: '',
+      textBody: '',
+      inReplyTo: null,
+      references: [],
+    });
+  }
+
+  public onReply(detail: MailDetailDto, replyAll = false): void {
+    if (!this.canSendMail()) return;
+    this.composerError.set(null);
+    this.sendFeedback.set(null);
+
+    const ownEmailLower = (this.mailService.mailboxEmail() || '').trim().toLowerCase();
+    const replyPrimary =
+      detail.replyTo.map((a) => a.address).filter(Boolean)[0] ||
+      detail.from?.address ||
+      '';
+    const toList = replyPrimary ? [replyPrimary] : [];
+    const seen = new Set<string>(toList.map((e) => e.toLowerCase()));
+    if (ownEmailLower) seen.add(ownEmailLower);
+
+    const ccList: string[] = [];
+    if (replyAll) {
+      for (const addr of [...detail.to, ...detail.cc]) {
+        const clean = (addr.address || '').trim();
+        if (!clean) continue;
+        const lower = clean.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          ccList.push(clean);
+        }
+      }
+    }
+
+    const baseSubject = detail.subject.trim();
+    const replySubject = /^re\s*:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject}`;
+    const references = [...detail.references];
+    if (detail.messageId && !references.includes(detail.messageId)) {
+      references.push(detail.messageId);
+    }
+
+    this.activeComposerDraft.set({
+      mode: replyAll ? 'reply_all' : 'reply',
+      to: toList,
+      cc: ccList,
+      bcc: [],
+      subject: replySubject.slice(0, 250),
+      textBody: this.buildQuotedReplyBody(detail, false),
+      inReplyTo: detail.messageId,
+      references,
+    });
+  }
+
+  public onForward(detail: MailDetailDto): void {
+    if (!this.canSendMail()) return;
+    this.composerError.set(null);
+    this.sendFeedback.set(null);
+
+    const baseSubject = detail.subject.trim();
+    const fwdSubject = /^(?:tr|fwd)\s*:/i.test(baseSubject) ? baseSubject : `Tr: ${baseSubject}`;
+
+    this.activeComposerDraft.set({
+      mode: 'forward',
+      to: [],
+      cc: [],
+      bcc: [],
+      subject: fwdSubject.slice(0, 250),
+      textBody: this.buildQuotedReplyBody(detail, true),
+      inReplyTo: null,
+      references: [],
+    });
+  }
+
+  public onCloseComposer(): void {
+    this.composerError.set(null);
+    this.activeComposerDraft.set(null);
+  }
+
+  public dismissSendFeedback(): void {
+    this.sendFeedback.set(null);
+  }
+
+  public async onSendMail(payload: SendMailRequestDto): Promise<void> {
+    this.composerError.set(null);
+    const res = await this.mailService.sendMessage(payload);
+    if (!res.success || !res.data?.sent) {
+      this.composerError.set(res.error || 'Impossible d’envoyer votre message.');
+      return;
+    }
+
+    this.activeComposerDraft.set(null);
+    this.sendFeedback.set(
+      res.data.sentFolderAppended
+        ? 'Message envoyé et enregistré dans vos éléments envoyés.'
+        : 'Message envoyé avec succès.'
+    );
+
+    if (this.activeFolderMeta()?.specialUse === 'sent') {
+      await this.mailService.loadMessages(this.mailService.selectedFolder(), 1);
+    }
+  }
+
+  private buildQuotedReplyBody(detail: MailDetailDto, isForward: boolean): string {
+    const senderLabel = detail.from
+      ? this.formatAddressList([detail.from])
+      : 'Expéditeur inconnu';
+    const dateLabel = detail.date
+      ? new Date(detail.date).toLocaleString('fr-FR')
+      : '';
+    const originalText = (detail.textBody || '').trim().slice(0, 20_000);
+
+    if (isForward) {
+      return [
+        '',
+        '',
+        '---------- Message transféré ----------',
+        `De : ${senderLabel}`,
+        ...(dateLabel ? [`Date : ${dateLabel}`] : []),
+        `Objet : ${detail.subject}`,
+        `À : ${this.formatAddressList(detail.to)}`,
+        '',
+        originalText,
+      ].join('\n');
+    }
+
+    const quotedLines = originalText
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n');
+
+    return [
+      '',
+      '',
+      `Le ${dateLabel || 'récemment'}, ${senderLabel} a écrit :`,
+      quotedLines,
+    ].join('\n');
   }
 
   public folderIcon(specialUse: MailFolderSpecialUse): string {

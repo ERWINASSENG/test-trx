@@ -160,6 +160,22 @@ export class MailAccountService {
     return { success: false, error: res.error };
   }
 
+  public async testSmtpSettings(params: {
+    smtpHost: string;
+    smtpPort: number;
+    smtpTls: boolean;
+  }): Promise<MailApiResult<{ ok: boolean; authenticated: boolean; message: string }>> {
+    return this.request<{ ok: boolean; authenticated: boolean; message: string }>(
+      '/api/configuration/mail-settings/test-smtp',
+      'POST',
+      {
+        smtpHost: params.smtpHost.trim(),
+        smtpPort: Number(params.smtpPort),
+        smtpTls: Boolean(params.smtpTls),
+      }
+    );
+  }
+
   private resetForAccountChange(): void {
     const userId = this.authService.currentUser()?.id ?? null;
     if (this.dataUserId === userId) return;

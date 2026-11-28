@@ -1,0 +1,165 @@
+<div
+  class="composer-backdrop"
+  (click)="onCancel()"
+  id="mail-composer-backdrop">
+  <div
+    class="composer-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="mail-composer-title"
+    (click)="$event.stopPropagation()"
+    id="mail-composer-dialog">
+
+    <header class="composer-header">
+      <div class="flex items-center gap-2 min-w-0">
+        <mat-icon aria-hidden="true" class="!text-[18px] !w-[18px] !h-[18px] text-[#0b5ed7] dark:text-[#60a5fa]">
+          edit_note
+        </mat-icon>
+        <h2 class="text-sm font-bold text-slate-900 dark:text-white truncate" id="mail-composer-title">
+          {{ titleLabel() }}
+        </h2>
+      </div>
+
+      <button
+        type="button"
+        class="composer-close-btn"
+        [disabled]="isSending()"
+        (click)="onCancel()"
+        aria-label="Fermer la rédaction"
+        id="mail-composer-close-btn">
+        <mat-icon aria-hidden="true" class="!text-[18px] !w-[18px] !h-[18px]">close</mat-icon>
+      </button>
+    </header>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="composer-form" id="mail-composer-form">
+      @if (validationError() || serverError(); as errMsg) {
+        <div class="composer-error-alert" role="alert" id="mail-composer-error">
+          <mat-icon aria-hidden="true" class="!text-[16px] !w-4 !h-4 shrink-0">error_outline</mat-icon>
+          <span>{{ errMsg }}</span>
+        </div>
+      }
+
+      @if (senderEmail(); as fromAddr) {
+        <div class="composer-field-row composer-from-row">
+          <span class="composer-label">De</span>
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-300 truncate" id="mail-composer-from">
+            {{ fromAddr }}
+          </span>
+        </div>
+      }
+
+      <div class="composer-field-row">
+        <label for="composer-to-input" class="composer-label">À</label>
+        <input
+          id="composer-to-input"
+          type="text"
+          formControlName="toText"
+          placeholder="destinataire@entreprise.com, autre@entreprise.com"
+          autocomplete="off"
+          class="composer-input"
+        />
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            class="composer-chip-toggle"
+            [class.is-active]="showCc()"
+            (click)="toggleCc()"
+            id="mail-composer-toggle-cc">
+            Cc
+          </button>
+          <button
+            type="button"
+            class="composer-chip-toggle"
+            [class.is-active]="showBcc()"
+            (click)="toggleBcc()"
+            id="mail-composer-toggle-bcc">
+            Cci
+          </button>
+        </div>
+      </div>
+
+      @if (showCc()) {
+        <div class="composer-field-row">
+          <label for="composer-cc-input" class="composer-label">Cc</label>
+          <input
+            id="composer-cc-input"
+            type="text"
+            formControlName="ccText"
+            placeholder="copie@entreprise.com"
+            autocomplete="off"
+            class="composer-input"
+          />
+        </div>
+      }
+
+      @if (showBcc()) {
+        <div class="composer-field-row">
+          <label for="composer-bcc-input" class="composer-label">Cci</label>
+          <input
+            id="composer-bcc-input"
+            type="text"
+            formControlName="bccText"
+            placeholder="copie-cachee@entreprise.com"
+            autocomplete="off"
+            class="composer-input"
+          />
+        </div>
+      }
+
+      <div class="composer-field-row">
+        <label for="composer-subject-input" class="composer-label">Objet</label>
+        <input
+          id="composer-subject-input"
+          type="text"
+          formControlName="subject"
+          maxlength="250"
+          placeholder="Objet de votre message"
+          class="composer-input font-medium"
+        />
+      </div>
+
+      <div class="composer-body-wrap">
+        <label for="composer-body-textarea" class="sr-only">Contenu du message</label>
+        <textarea
+          id="composer-body-textarea"
+          formControlName="textBody"
+          rows="12"
+          placeholder="Rédigez votre message en texte simple…"
+          (keydown)="onBodyKeydown($event)"
+          class="composer-textarea">
+        </textarea>
+      </div>
+
+      <footer class="composer-footer">
+        <span class="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
+          Texte simple · Ctrl+Entrée pour envoyer
+        </span>
+
+        <div class="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            class="composer-cancel-btn"
+            [disabled]="isSending()"
+            (click)="onCancel()"
+            id="mail-composer-cancel-btn">
+            Annuler
+          </button>
+
+          <button
+            type="submit"
+            class="composer-send-btn"
+            [disabled]="isSending()"
+            id="mail-composer-send-btn">
+            <mat-icon
+              aria-hidden="true"
+              class="!text-[16px] !w-4 !h-4"
+              [class.animate-spin]="isSending()">
+              {{ isSending() ? 'sync' : 'send' }}
+            </mat-icon>
+            <span>{{ isSending() ? 'Envoi en cours…' : 'Envoyer' }}</span>
+          </button>
+        </div>
+      </footer>
+    </form>
+  </div>
+</div>

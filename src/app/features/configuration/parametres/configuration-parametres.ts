@@ -33,8 +33,11 @@ export class ConfigurationParametresComponent implements OnInit {
   );
 
   public readonly isSaving = signal<boolean>(false);
+  public readonly isTestingSmtp = signal<boolean>(false);
   public readonly feedback = signal<string | null>(null);
   public readonly errorMessage = signal<string | null>(null);
+  public readonly smtpTestFeedback = signal<string | null>(null);
+  public readonly smtpTestError = signal<string | null>(null);
 
   public readonly settingsForm = new FormGroup({
     imapHost: new FormControl<string>('', { nonNullable: true }),
@@ -145,6 +148,42 @@ export class ConfigurationParametresComponent implements OnInit {
       this.feedback.set('Paramètres du serveur mail Outlook / IMAP enregistrés avec succès.');
     } finally {
       this.isSaving.set(false);
+    }
+  }
+
+  public async onTestSmtp(): Promise<void> {
+    if (!this.canManageConfig() || !this.mailAccountService || this.isTestingSmtp()) return;
+
+    const val = this.settingsForm.getRawValue();
+    const smtpHost = val.smtpHost.trim().toLowerCase();
+    const smtpPort = Number(val.smtpPort);
+
+    this.smtpTestFeedback.set(null);
+    this.smtpTestError.set(null);
+
+    if (!smtpHost) {
+      this.smtpTestError.set('Renseignez d’abord l’hôte du serveur SMTP avant de lancer le test.');
+      return;
+    }
+
+    this.isTestingSmtp.set(true);
+    try {
+      const res = await this.mailAccountService.testSmtpSettings({
+        smtpHost,
+        smtpPort,
+        smtpTls: Boolean(val.smtpTls),
+      });
+
+      if (!res.success || !res.data?.ok) {
+        this.smtpTestError.set(
+          res.data?.message || res.error || 'Échec du test de connexion SMTP.'
+        );
+        return;
+      }
+
+      this.smtpTestFeedback.set(res.data.message);
+    } finally {
+      this.isTestingSmtp.set(false);
     }
   }
 }
