@@ -137,7 +137,13 @@ export function validatePublicMailHostFormat(rawHost: unknown): { valid: boolean
   return { valid: true, host };
 }
 
-export async function assertSafePublicMailHost(rawHost: string): Promise<string> {
+export interface ResolvedSafeMailHost {
+  host: string;
+  resolvedIp: string;
+  family: 4 | 6;
+}
+
+export async function resolveSafePublicMailHost(rawHost: string): Promise<ResolvedSafeMailHost> {
   const check = validatePublicMailHostFormat(rawHost);
   if (!check.valid || !check.host) {
     throw new Error(check.error || 'Serveur mail non autorisé.');
@@ -154,5 +160,15 @@ export async function assertSafePublicMailHost(rawHost: string): Promise<string>
     }
   }
 
-  return check.host;
+  const preferred = records.find((record) => record.family === 4) ?? records[0];
+  return {
+    host: check.host,
+    resolvedIp: preferred.address,
+    family: preferred.family === 6 ? 6 : 4,
+  };
+}
+
+export async function assertSafePublicMailHost(rawHost: string): Promise<string> {
+  const resolved = await resolveSafePublicMailHost(rawHost);
+  return resolved.host;
 }

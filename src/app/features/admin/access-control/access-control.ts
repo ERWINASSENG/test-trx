@@ -61,7 +61,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     label: 'Cotations',
     description: 'Création et suivi des offres et devis commerciaux',
     icon: '/assets/module-icons/quotes.svg',
-    matches: (p) => ['quotes', 'module.quotes', 'mail.self'].includes(p.resourceKey) || p.permissionKey.startsWith('quotes.') || p.permissionKey.startsWith('mail.') || p.permissionKey === 'module.quotes.view',
+    matches: (p) => ['quotes', 'module.quotes'].includes(p.resourceKey) || p.permissionKey.startsWith('quotes.') || p.permissionKey === 'module.quotes.view',
   },
   {
     id: 'crm',
@@ -76,6 +76,13 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     description: 'Suivi des dossiers d’exploitation et dépenses associées',
     icon: '/assets/module-icons/dossier.svg',
     matches: (p) => ['dossiers', 'module.dossiers'].includes(p.resourceKey) || p.permissionKey.startsWith('dossiers.') || p.permissionKey === 'module.dossiers.view',
+  },
+  {
+    id: 'mail',
+    label: 'Messagerie',
+    description: 'Connexion de boîte mail, lecture et envoi d’emails intégrés',
+    icon: '/assets/module-icons/mail.svg',
+    matches: (p) => ['mail', 'mail.self', 'module.mail'].includes(p.resourceKey) || p.permissionKey.startsWith('mail.') || p.permissionKey === 'module.mail.view',
   },
   {
     id: 'configuration',

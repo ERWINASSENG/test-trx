@@ -1,0 +1,14 @@
+<svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_mail_module)">
+<rect x="4" y="10" width="42" height="32" rx="6" fill="#0B5ED7"/>
+<path d="M4 16C4 12.6863 6.68629 10 10 10H40C43.3137 10 46 12.6863 46 16V18L25 31L4 18V16Z" fill="#38BDF8"/>
+<path d="M4 18L25 31L46 18V36C46 39.3137 43.3137 42 40 42H10C6.68629 42 4 39.3137 4 36V18Z" fill="#1D4ED8"/>
+<path d="M10 10H40C41.8 10 43.4 10.8 44.5 12L25 24.5L5.5 12C6.6 10.8 8.2 10 10 10Z" fill="#93C5FD"/>
+<path d="M25 27.2L6.5 15.2C5.2 14.3 4 15.2 4 16.8V18.2L25 31.6L46 18.2V16.8C46 15.2 44.8 14.3 43.5 15.2L25 27.2Z" fill="white" fill-opacity="0.92"/>
+</g>
+<defs>
+<clipPath id="clip0_mail_module">
+<rect width="50" height="50" fill="white"/>
+</clipPath>
+</defs>
+</svg>

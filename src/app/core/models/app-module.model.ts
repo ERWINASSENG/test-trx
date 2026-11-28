@@ -75,6 +75,15 @@ export const APP_MODULES: readonly AppModule[] = [
     visibilityPermissionKey: 'module.dossiers.view',
   },
   {
+    id: 'mail',
+    label: 'Messagerie',
+    description: 'Consulter vos emails professionnels intégrés',
+    route: '/mail',
+    icon: '/assets/module-icons/mail.svg',
+    accent: '#0b5ed7',
+    visibilityPermissionKey: 'module.mail.view',
+  },
+  {
     id: 'administration',
     label: 'Paramètres',
     description: 'Configuration générale de l’application',

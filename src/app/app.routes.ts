@@ -96,6 +96,14 @@ export const routes: Routes = [
         title: 'Transmex - Dossiers',
       },
       {
+        path: 'mail',
+        loadComponent: () =>
+          import('./features/mail/mail-client').then((m) => m.MailClientComponent),
+        canActivate: [roleGuard],
+        data: { permission: 'module.mail.view' },
+        title: 'Transmex - Messagerie',
+      },
+      {
         path: 'admin/users',
         loadComponent: () =>
           import('./features/admin/access-control/access-control').then(

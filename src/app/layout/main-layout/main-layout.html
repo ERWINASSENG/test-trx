@@ -147,6 +147,25 @@
       <div class="topbar-right flex items-center gap-2 sm:gap-3.5 shrink-0" id="topbar-utilities-section">
 
         @if (currentUser()) {
+          @if (canAccessMail()) {
+            <a
+              routerLink="/mail"
+              routerLinkActive="bg-slate-100 text-[#0b5ed7] dark:bg-white/10 dark:text-[#8cc2ff]"
+              class="utility-icon-btn relative inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b5ed7] dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white cursor-pointer"
+              id="topbar-mail-link"
+              title="Messagerie"
+              [attr.aria-label]="mailService.unreadCount() > 0 ? 'Messagerie (' + mailService.unreadCount() + ' non lus)' : 'Messagerie'">
+              <mat-icon class="!text-[18px] !w-4.5 !h-4.5" aria-hidden="true">mail</mat-icon>
+              @if (mailService.unreadCount() > 0) {
+                <span
+                  class="absolute -right-0.5 -top-0.5 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-[#0b5ed7] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-[#212529]"
+                  id="topbar-mail-unread-badge">
+                  {{ mailService.unreadCount() > 99 ? '99+' : mailService.unreadCount() }}
+                </span>
+              }
+            </a>
+          }
+
           <div class="relative" id="notifications-container">
             <button
               type="button"

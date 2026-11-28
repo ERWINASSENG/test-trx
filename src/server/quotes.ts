@@ -1734,7 +1734,7 @@ export const blockQuoteHandler = async (req: express.Request, res: express.Respo
     await createAppNotification(adminClient, {
       recipientId: String(supervisor.id),
       actorId: actor.id,
-      notificationType: 'quote_blocked',
+      notificationType: 'reminder',
       title: `Cotation bloquée : ${String(quote.quote_number)}`,
       message: `${QUOTE_BLOCK_CATEGORY_LABELS[category]} — ${reason.slice(0, 140)}`,
       href: '/dashboard/crm',

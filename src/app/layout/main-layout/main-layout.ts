@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import { DatePipe, isPlatformBrowser } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs/operators';
@@ -15,6 +15,7 @@ import { AppNotification } from '../../core/models/app-notification.model';
 import { CashierImportModal } from '../../features/cashier/import-modal/cashier-import-modal.component';
 import { ParsedImportRow } from '../../core/services/import.service';
 import { JournalService } from '../../core/services/journal.service';
+import { MailService } from '../../core/services/mail.service';
 
 export interface NavOption {
   id: string;
@@ -37,7 +38,10 @@ type CrmView = 'pipeline' | 'clients' | 'activities' | 'campaigns';
     '(document:keydown.escape)': 'onEscape()',
   },
 })
-export class MainLayout implements OnInit {
+export class MainLayout implements OnInit, OnDestroy {
+  private readonly platformId = inject(PLATFORM_ID);
+  private mailUnreadTimer: ReturnType<typeof setInterval> | null = null;
+
   public readonly authService = inject(AuthService);
   public readonly accessControl = inject(AccessControlService);
   public readonly cashierService = inject(CashierService);
@@ -45,6 +49,7 @@ export class MainLayout implements OnInit {
   public readonly notificationService = inject(NotificationService);
   public readonly appNotificationService = inject(AppNotificationService);
   public readonly journalService = inject(JournalService);
+  public readonly mailService = inject(MailService);
   public readonly router = inject(Router);
 
   public readonly currentUser = this.authService.currentUser;
@@ -106,6 +111,14 @@ export class MainLayout implements OnInit {
       Boolean(this.currentUser()) &&
       this.accessControl.hasPermission('module.edition.view') &&
       this.isEditionContextRoute()
+    );
+  });
+
+  public readonly canAccessMail = computed(() => {
+    return (
+      Boolean(this.currentUser()) &&
+      this.accessControl.hasPermission('module.mail.view') &&
+      this.accessControl.hasPermission('mail.read')
     );
   });
 
@@ -187,7 +200,31 @@ export class MainLayout implements OnInit {
   });
 
   public ngOnInit(): void {
-    void this.accessControl.loadMyPermissions();
+    void this.initializeNavigationState();
+  }
+
+  public ngOnDestroy(): void {
+    if (this.mailUnreadTimer) {
+      clearInterval(this.mailUnreadTimer);
+      this.mailUnreadTimer = null;
+    }
+  }
+
+  private async initializeNavigationState(): Promise<void> {
+    await this.accessControl.loadMyPermissions();
+    if (!isPlatformBrowser(this.platformId)) return;
+
+    if (this.canAccessMail()) {
+      void this.mailService.refreshUnreadCount();
+    }
+
+    if (!this.mailUnreadTimer) {
+      this.mailUnreadTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && this.canAccessMail()) {
+          void this.mailService.refreshUnreadCount();
+        }
+      }, 60_000);
+    }
   }
 
   public roleLabel(role: UserRole | undefined): string {
@@ -345,6 +382,7 @@ export class MainLayout implements OnInit {
 
   public async logout(): Promise<void> {
     this.closeUserDropdown();
+    this.mailService.resetState();
     await this.authService.logout();
   }
 }

@@ -6,9 +6,9 @@ import { createAppNotification } from './app-notifications';
 import { writeAuditLog } from './audit-log';
 import { getSupabaseAdmin } from './auth';
 import {
-  assertSafePublicMailHost,
   decryptMailSecret,
   isMailEncryptionConfigured,
+  resolveSafePublicMailHost,
 } from './mail-crypto';
 import { recordQuoteEvent } from './quotes';
 
@@ -16,9 +16,36 @@ const MAX_NEW_MESSAGES_PER_CYCLE = 25;
 const MAX_RAW_EMAIL_BYTES = 2 * 1024 * 1024; // 2 Mo max pour le parsing texte
 const WORKER_INTERVAL_MS = 60_000;
 
-const activeAccountSyncs = new Set<string>();
+const mailboxLockQueue = new Map<string, Promise<void>>();
 let isGlobalSweepRunning = false;
 let workerTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Sérialise les accès IMAP sur une même boîte (sync cotations + webmail)
+ * afin d'éviter les collisions de verrous et dépassements de connexions simultanées.
+ */
+export async function withMailboxLock<T>(
+  accountId: string,
+  task: () => Promise<T>
+): Promise<T> {
+  const previous = mailboxLockQueue.get(accountId) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const currentGate = new Promise<void>((resolve) => {
+    releaseCurrent = resolve;
+  });
+  const chained = previous.then(() => currentGate);
+  mailboxLockQueue.set(accountId, chained);
+
+  await previous;
+  try {
+    return await task();
+  } finally {
+    releaseCurrent();
+    if (mailboxLockQueue.get(accountId) === chained) {
+      mailboxLockQueue.delete(accountId);
+    }
+  }
+}
 
 export interface GlobalMailSettingsRow {
   id: number;
@@ -84,9 +111,9 @@ export async function verifyImapCredentials(params: {
   password: string;
   watchedFolder: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  let safeHost: string;
+  let resolvedHost: { host: string; resolvedIp: string };
   try {
-    safeHost = await assertSafePublicMailHost(params.host);
+    resolvedHost = await resolveSafePublicMailHost(params.host);
   } catch (err: unknown) {
     return {
       ok: false,
@@ -95,9 +122,15 @@ export async function verifyImapCredentials(params: {
   }
 
   const client = new ImapFlow({
-    host: safeHost,
+    host: resolvedHost.resolvedIp,
+    servername: resolvedHost.host,
     port: params.port,
     secure: params.secure,
+    tls: {
+      rejectUnauthorized: true,
+      servername: resolvedHost.host,
+    },
+    disableAutoIdle: true,
     auth: {
       user: params.email,
       pass: params.password,
@@ -240,7 +273,7 @@ export async function syncMailInboxAccount(
   accountId: string
 ): Promise<MailSyncSummary> {
   const nowIso = new Date().toISOString();
-  if (activeAccountSyncs.has(accountId)) {
+  if (mailboxLockQueue.has(accountId)) {
     return {
       accountId,
       ingestedCount: 0,
@@ -250,8 +283,7 @@ export async function syncMailInboxAccount(
     };
   }
 
-  activeAccountSyncs.add(accountId);
-  try {
+  return withMailboxLock(accountId, async () => {
     if (!isMailEncryptionConfigured()) {
       throw new Error('Service de chiffrement mail non configuré sur le serveur.');
     }
@@ -273,13 +305,19 @@ export async function syncMailInboxAccount(
       throw new Error('Le serveur IMAP global n’est pas encore configuré ou est désactivé.');
     }
 
-    const safeHost = await assertSafePublicMailHost(settings.imap_host);
+    const resolvedHost = await resolveSafePublicMailHost(settings.imap_host);
     const password = decryptMailSecret(String(account.encrypted_password));
 
     const client = new ImapFlow({
-      host: safeHost,
+      host: resolvedHost.resolvedIp,
+      servername: resolvedHost.host,
       port: settings.imap_port,
       secure: settings.imap_tls,
+      tls: {
+        rejectUnauthorized: true,
+        servername: resolvedHost.host,
+      },
+      disableAutoIdle: true,
       auth: {
         user: String(account.email_address),
         pass: password,
@@ -653,7 +691,7 @@ export async function syncMailInboxAccount(
               await createAppNotification(adminClient, {
                 recipientId: supId,
                 actorId: String(account.user_id),
-                notificationType: 'quote_email_received',
+                notificationType: 'assignment',
                 title: assignedTo
                   ? `Nouvelle demande reçue par ${ownerLabel}`
                   : `Nouvelle demande de cotation à attribuer`,
@@ -738,9 +776,7 @@ export async function syncMailInboxAccount(
     } finally {
       client.close();
     }
-  } finally {
-    activeAccountSyncs.delete(accountId);
-  }
+  });
 }
 
 export async function syncAllActiveMailAccounts(): Promise<void> {

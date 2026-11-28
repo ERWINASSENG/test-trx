@@ -120,6 +120,12 @@ import {
   syncMyMailAccountHandler,
   updateAdminMailSettingsHandler,
 } from './server/mail-accounts.handlers';
+import {
+  getMailMessageHandler,
+  getMailUnreadCountHandler,
+  listMailFoldersHandler,
+  listMailMessagesHandler,
+} from './server/mail-read.handlers';
 import { startMailSyncWorker } from './server/mail-sync';
 
 // Charger les variables d'environnement depuis le fichier `.env` (si présent)
@@ -1393,6 +1399,25 @@ app.delete('/api/profile/mail-account', requireAuth, mailConnectorRateLimiter, r
 app.get('/api/quotes/mailboxes-status', requireAuth, requirePermission('quotes.timing.read'), listTeamMailboxesStatusHandler);
 app.get('/api/configuration/mail-settings', requireAuth, requirePermission('configuration.read'), getAdminMailSettingsHandler);
 app.put('/api/configuration/mail-settings', requireAuth, mailConnectorRateLimiter, requirePermission('configuration.manage'), updateAdminMailSettingsHandler);
+
+// Module Messagerie (lecture IMAP directe) : rate-limiting dédié (120 req / min / utilisateur — S11).
+const mailReadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req: express.Request) => {
+    const u = (req as unknown as Record<string, unknown>)['user'] as { id?: string } | undefined;
+    return u?.id ? `mail-read-user:${u.id}` : `mail-read-ip:${req.ip || 'unknown'}`;
+  },
+  message: { error: 'Trop de requêtes sur votre messagerie. Patientez quelques instants.' },
+});
+
+app.get('/api/mail/folders', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailFoldersHandler);
+app.get('/api/mail/messages', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), listMailMessagesHandler);
+app.get('/api/mail/messages/:ref', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailMessageHandler);
+app.get('/api/mail/unread-count', requireAuth, mailReadRateLimiter, requirePermission('mail.read'), getMailUnreadCountHandler);
 
 // Garde-fou pour toute route /api ou /api/* non reconnue :
 // garantit une réponse JSON 404 explicite plutôt que le fallback HTML Angular SSR (<!doctype html>).
